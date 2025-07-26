@@ -1,0 +1,139 @@
+name: Frontend Deploy
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-deploy.yml'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'frontend/**'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+  WORKING_DIRECTORY: './frontend'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: ${{ env.WORKING_DIRECTORY }}/package-lock.json
+    
+    - name: Install dependencies
+      working-directory: ${{ env.WORKING_DIRECTORY }}
+      run: npm ci
+    
+    - name: Run linting
+      working-directory: ${{ env.WORKING_DIRECTORY }}
+      run: npm run lint
+      
+    - name: Run format check
+      working-directory: ${{ env.WORKING_DIRECTORY }}
+      run: npm run format:check
+    
+    - name: Run tests
+      working-directory: ${{ env.WORKING_DIRECTORY }}
+      run: npm run test:ci
+    
+    - name: Build application
+      working-directory: ${{ env.WORKING_DIRECTORY }}
+      run: npm run build:prod
+      env:
+        VITE_APP_VERSION: ${{ github.sha }}
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: frontend-build
+        path: ${{ env.WORKING_DIRECTORY }}/dist
+        retention-days: 7
+    
+    - name: Run bundle size check
+      working-directory: ${{ env.WORKING_DIRECTORY }}
+      run: |
+        npm run build:analyze
+        echo "Bundle size report generated"
+
+  deploy-preview:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: frontend-build
+        path: ./dist
+    
+    # Deploy to preview environment (e.g., Vercel, Netlify)
+    - name: Deploy to Preview
+      run: |
+        echo "Deploy to preview environment"
+        # Example: npx vercel --token=${{ secrets.VERCEL_TOKEN }}
+
+  deploy-production:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: frontend-build
+        path: ./dist
+    
+    # Deploy to production (e.g., AWS S3, Cloudflare Pages)
+    - name: Deploy to Production
+      run: |
+        echo "Deploy to production environment"
+        # Example deployment scripts:
+        
+        # AWS S3 + CloudFront
+        # aws s3 sync ./dist s3://${{ secrets.S3_BUCKET }} --delete
+        # aws cloudfront create-invalidation --distribution-id ${{ secrets.CF_DIST_ID }} --paths "/*"
+        
+        # Netlify
+        # npx netlify deploy --prod --dir=./dist --auth=${{ secrets.NETLIFY_AUTH_TOKEN }}
+        
+        # Vercel
+        # npx vercel --prod --token=${{ secrets.VERCEL_TOKEN }}
+    
+    - name: Create deployment notification
+      if: success()
+      run: |
+        echo "Deployment successful!"
+        echo "Version: ${{ github.sha }}"
+        echo "Time: $(date)"
+
+  lighthouse-audit:
+    needs: deploy-preview
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run Lighthouse CI
+      uses: treosh/lighthouse-ci-action@v12
+      with:
+        urls: |
+          https://preview-${{ github.event.pull_request.number }}.velocity.app
+        uploadArtifacts: true
+        temporaryPublicStorage: true

@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__taskmaster-ai__set_task_status",
+      "mcp__taskmaster-ai__update_subtask",
+      "mcp__taskmaster-ai__get_task",
+      "mcp__taskmaster-ai__next_task",
+      "Bash(node:*)",
+      "Bash(npm:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(npx tailwindcss init:*)",
+      "Bash(mv:*)",
+      "Bash(rm:*)",
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(npx tsc:*)",
+      "Bash(mkdir:*)",
+      "Bash(taskkill:*)",
+      "mcp__taskmaster-ai__get_tasks",
+      "Bash(npx supabase functions deploy:*)",
+      "Bash(npx supabase functions:*)",
+      "Bash(curl:*)",
+      "mcp__supabase__list_tables",
+      "mcp__supabase__list_extensions",
+      "mcp__supabase__execute_sql",
+      "mcp__supabase__get_logs",
+      "mcp__supabase__list_edge_functions",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "taskmaster-ai",
+    "supabase"
+  ]
+}
