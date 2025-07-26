@@ -26,7 +26,10 @@
       "mcp__supabase__get_logs",
       "mcp__supabase__list_edge_functions",
       "Bash(git init:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git remote add:*)",
+      "Bash(git push:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
