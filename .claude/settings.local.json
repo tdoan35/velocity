@@ -29,12 +29,15 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git remote add:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "mcp__taskmaster-ai__complexity_report",
+      "mcp__taskmaster-ai__analyze_project_complexity"
     ]
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "taskmaster-ai",
-    "supabase"
+    "supabase",
+    "github"
   ]
 }

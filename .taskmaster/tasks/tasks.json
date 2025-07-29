@@ -389,7 +389,7 @@
         "id": 4,
         "title": "Implement Real-Time Mobile Preview with Appetize.io",
         "description": "Integrate Appetize.io for browser-embedded device simulation with hot reload capability and session management to provide immediate visual feedback essential for mobile development.",
-        "status": "pending",
+        "status": "in-progress",
         "dependencies": [
           2,
           3
@@ -1293,7 +1293,7 @@
     ],
     "metadata": {
       "created": "2025-07-22T22:49:25.170Z",
-      "updated": "2025-07-26T04:30:41.883Z",
+      "updated": "2025-07-28T21:57:06.984Z",
       "description": "Tasks for master context"
     }
   }
