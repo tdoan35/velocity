@@ -31,7 +31,9 @@
       "Bash(git remote add:*)",
       "Bash(git push:*)",
       "mcp__taskmaster-ai__complexity_report",
-      "mcp__taskmaster-ai__analyze_project_complexity"
+      "mcp__taskmaster-ai__analyze_project_complexity",
+      "Bash(touch:*)",
+      "mcp__taskmaster-ai__move_task"
     ]
   },
   "enableAllProjectMcpServers": true,

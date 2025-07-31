@@ -1,0 +1,124 @@
+# Task ID: 11
+# Title: Implement User Onboarding and Dashboard
+# Status: pending
+# Dependencies: 1, 2
+# Priority: medium
+# Description: Develop persona-driven user onboarding flows, dashboard, and profile management to provide a complete user experience tailored to specific user types and their journeys.
+# Details:
+1. Implement persona-specific user onboarding flows:
+   - "Startup Sam" journey: Quick setup, AI-guided app creation, immediate deployment focus
+   - "Product Manager Paula" journey: Team setup, collaboration features, stakeholder sharing
+   - First-time user experience with conversational AI guidance
+   - Profile setup with persona-specific preferences and customization
+   - Plan selection and billing setup with persona-appropriate recommendations
+
+2. Develop AI-guided app creation wizard:
+   - Conversational interface for project setup
+   - Smart suggestions based on user persona and preferences
+   - Progressive disclosure of advanced features
+   - Context-aware guidance and tips
+
+3. Implement user dashboard with persona customization:
+   - Project listing and management tailored to user type
+   - Recent activity feed with relevant actions
+   - Resource usage metrics and insights
+   - Quick access to persona-specific common actions
+   - Customizable widgets based on user preferences
+
+4. Develop comprehensive profile management:
+   - User settings and persona-specific preferences
+   - Subscription management with plan comparisons
+   - API key management and team access controls
+   - Notification settings with persona defaults
+   - User preference tracking and learning system
+
+5. Add analytics dashboard with role-based insights:
+   - Project metrics tailored to user persona
+   - AI usage statistics and optimization suggestions
+   - Build and deployment history with filtering
+   - Performance monitoring with persona-relevant KPIs
+
+6. Implement stakeholder sharing and demo capabilities:
+   - Shareable project links with access controls
+   - Demo mode for stakeholder presentations
+   - Commenting and feedback collection
+   - Version comparison and change tracking
+
+7. Build progressive disclosure UX patterns:
+   - Feature revelation based on user expertise and persona
+   - Contextual help and onboarding tooltips
+   - Advanced feature gating with upgrade prompts
+   - User journey optimization based on behavior
+
+Technology recommendations:
+- React Router 6+ for navigation
+- Recharts/Nivo for dashboard visualizations
+- React Hook Form for form management
+- Stripe for subscription billing
+- Tailwind CSS with shadcn/ui for UI components
+- Zustand for state management
+- Framer Motion for progressive disclosure animations
+
+# Test Strategy:
+1. Test persona-specific onboarding flows with target user types
+2. Validate AI-guided app creation with various project scenarios
+3. Test dashboard customization and persona-based features
+4. Verify profile management and preference persistence across sessions
+5. Test subscription management and billing integration for different personas
+6. Validate analytics data collection and persona-specific visualizations
+7. Test stakeholder sharing and demo functionality
+8. Verify progressive disclosure logic and feature gating
+9. Test responsive design across device sizes for all personas
+10. Perform usability testing with actual "Startup Sam" and "Product Manager Paula" representatives
+11. Validate user preference tracking and learning algorithms
+12. Test conversational AI guidance accuracy and helpfulness
+
+# Subtasks:
+## 1. Implement persona detection and routing system [pending]
+### Dependencies: None
+### Description: Create system to identify user persona and route to appropriate onboarding flow
+### Details:
+
+
+## 2. Build "Startup Sam" onboarding flow [pending]
+### Dependencies: None
+### Description: Implement quick setup flow focused on rapid app creation and deployment
+### Details:
+
+
+## 3. Build "Product Manager Paula" onboarding flow [pending]
+### Dependencies: None
+### Description: Implement team-focused flow with collaboration and stakeholder sharing emphasis
+### Details:
+
+
+## 4. Develop conversational AI-guided app creation wizard [pending]
+### Dependencies: None
+### Description: Create intelligent wizard with natural language interaction for project setup
+### Details:
+
+
+## 5. Implement persona-customized dashboard [pending]
+### Dependencies: None
+### Description: Build dashboard with persona-specific widgets, actions, and insights
+### Details:
+
+
+## 6. Create user preference tracking system [pending]
+### Dependencies: None
+### Description: Implement system to track, learn from, and adapt to user preferences and behavior
+### Details:
+
+
+## 7. Build stakeholder sharing and demo capabilities [pending]
+### Dependencies: None
+### Description: Implement project sharing, demo mode, and feedback collection features
+### Details:
+
+
+## 8. Implement progressive disclosure UX patterns [pending]
+### Dependencies: None
+### Description: Create feature revelation system based on user expertise and persona
+### Details:
+
+

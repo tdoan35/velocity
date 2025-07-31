@@ -1,0 +1,251 @@
+name: Appetize
+
+on:
+  schedule:
+    - cron: '0 8 * * 1' # Run every week on Monday at 08:00 UTC
+  workflow_dispatch:
+    inputs:
+      appetizeQueue:
+        type: choice
+        description: Appetize queue to use
+        default: all
+        options:
+          - all
+          - main
+          - embed
+      sdkPlatform:
+        type: choice
+        description: Platform to use
+        default: all
+        options:
+          - all
+          - android
+          - ios
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.result }}
+      config: ${{ steps.config.outputs.result }}
+    steps:
+      - name: 🏗 Setup repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: 🏗 Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: 📋 Download SDK information
+        run: curl --silent -o ci_versions.json https://exp.host/--/api/v2/versions
+
+      - name: 🕵️ Read Appetize information
+        run: bun --eval "console.log(JSON.stringify(require('./website/src/client/configs/constants.tsx').default.appetize))" > ci_appetize.json
+
+      - name: 📋 Store Appetize config
+        uses: actions/github-script@v7
+        id: config
+        with:
+          script: return JSON.stringify(require('./ci_appetize.json'))
+
+      - name: 👷‍♀️ Prepare tasks
+        uses: actions/github-script@v7
+        id: matrix
+        with:
+          script: |
+            // Resolve the available SDK versions and configured Appetize instances
+            const { sdkVersions } = require('./ci_versions.json')
+            const appetizePerSdk = require('./ci_appetize.json')
+
+            // Prepare the Appetize information
+            const appetizeSdkVersions = Object.keys(appetizePerSdk)
+            const appetizeSelectedQueue = 'all'
+            const appetizeQueues = ['main', 'embed'].filter(
+              name => appetizeSelectedQueue === 'all' || appetizeSelectedQueue === name
+            )
+
+            // Create the matrix or tasks to execute
+            const matrix = appetizeQueues.map(queue => (
+              appetizeSdkVersions.map(sdkVersion => {
+                // Validate that the SDK version exists
+                const sdkInfo = sdkVersions[sdkVersion];
+                if (!sdkInfo) throw new Error(`Configured Appetize SDK "${sdkVersion}" does not exist in versions endpoint`);
+
+                // Validate that the Appetize configuration is correct
+                const appetizeInfo = appetizePerSdk[sdkVersion][queue]
+                if (!appetizeInfo) throw new Error(`Configured Appetize is missing queue "${queue}"`);
+                if (!appetizeInfo.android) throw new Error(`Configured Appetize queue "${queue}" is missing Android`);
+                if (!appetizeInfo.android.publicKey) throw new Error(`Configured Appetize queue "${queue}" is missing Android's public key`);
+                if (!appetizeInfo.ios) throw new Error(`Configured Appetize queue "${queue}" is missing iOS`);
+                if (!appetizeInfo.ios.publicKey) throw new Error(`Configured Appetize queue "${queue}" is missing iOS's public key`);
+
+                return {
+                  sdkVersion: sdkVersion,
+                  appetizeName: queue,
+                  appetizeTokenName: `SNACK_RUNTIME_APPETIZE_${queue.toUpperCase()}_TOKEN`,
+                  androidAppetizeId: appetizeInfo.android.publicKey,
+                  androidUrl: sdkInfo.androidClientUrl,
+                  androidVersion: sdkInfo.androidClientVersion,
+                  iosAppetizeId: appetizeInfo.ios.publicKey,
+                  iosUrl: sdkInfo.iosClientUrl,
+                  iosVersion: sdkInfo.iosClientVersion,
+                }
+              })
+            ))
+
+            // Return the custom matrix or tasks to execute
+            return { include: matrix.flat() };
+
+  android:
+    if: contains('all android', github.event.inputs.sdkPlatform)
+    needs: prepare
+    name: "android (sdk: ${{ matrix.sdkVersion }}, appetize: ${{ matrix.appetizeName }})"
+    runs-on: ubuntu-latest
+    environment:
+      name: appetize-${{ matrix.appetizeName }}-android-${{ matrix.sdkVersion }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: 📋 Download Appetize information
+        # This step MUST only output `appVersionName`, the endpoint returns the public and private app keys
+        run: curl --silent --fail -o appetize.json https://$TOKEN@api.appetize.io/v1/apps/$APP > /dev/null
+        env:
+          TOKEN: ${{ secrets[matrix.appetizeTokenName] }}
+          APP: ${{ matrix.androidAppetizeId }}
+
+      - name: 🔍 Resolve Appetize version
+        uses: actions/github-script@v7
+        id: appetize
+        with:
+          script: |
+            const latestAppVersionName = '${{ matrix.androidVersion }}';
+            const { appVersionName } = require('./appetize.json') || {};
+            if (!appVersionName) throw new Error('Invalid Appetize response')
+            if (appVersionName === latestAppVersionName) {
+              core.info(`Appetize (${{ matrix.appetizeName }}) is running Android ${appVersionName} (latest) for ${{ matrix.sdkVersion }}`)
+            } else {
+              core.info(`Appetize (${{ matrix.appetizeName }}) is running Android ${appVersionName} (-> ${latestAppVersionName}) for ${{ matrix.sdkVersion }}`)
+            }
+            core.setOutput('oldVersion', appVersionName)
+
+      - name: 📱 Download Android client (${{ matrix.androidVersion }})
+        if: ${{ steps.appetize.outputs.oldVersion != matrix.androidVersion }}
+        run: curl -o exponent-android.apk ${{ matrix.androidUrl }}
+
+      - name: 🚀 Upload to Appetize
+        if: ${{ steps.appetize.outputs.oldVersion != matrix.androidVersion }}
+        # This step MUST NOT output anything, the endpoint returns the public and private app keys
+        run: |
+          curl --silent --fail --http1.1 https://$TOKEN@api.appetize.io/v1/apps/$APP -F "file=@exponent-android.apk" -F "platform=android" > /dev/null
+          rm -rf exponent-android.apk appetize.json
+        env:
+          TOKEN: ${{ secrets[matrix.appetizeTokenName] }}
+          APP: ${{ matrix.androidAppetizeId }}
+
+  ios:
+    if: contains('all ios', github.event.inputs.sdkPlatform)
+    needs: prepare
+    name: "ios (sdk: ${{ matrix.sdkVersion }}, appetize: ${{ matrix.appetizeName }})"
+    runs-on: ubuntu-latest
+    environment:
+      name: appetize-${{ matrix.appetizeName }}-ios-${{ matrix.sdkVersion }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: 📋 Download Appetize information
+        # This step MUST only output `appVersionName`, the endpoint returns the public and private app keys
+        run: curl --silent --fail -o appetize.json https://$TOKEN@api.appetize.io/v1/apps/$APP > /dev/null
+        env:
+          TOKEN: ${{ secrets[matrix.appetizeTokenName] }}
+          APP: ${{ matrix.iosAppetizeId }}
+
+      - name: 🔍 Resolve Appetize version
+        uses: actions/github-script@v7
+        id: appetize
+        with:
+          script: |
+            const latestAppVersionName = '${{ matrix.androidVersion }}';
+            const { appVersionName } = require('./appetize.json') || {};
+            if (!appVersionName) throw new Error('Invalid Appetize response')
+            if (appVersionName === latestAppVersionName) {
+              core.info(`Appetize (${{ matrix.appetizeName }}) is running iOS ${appVersionName} (latest) for ${{ matrix.sdkVersion }}`)
+            } else {
+              core.info(`Appetize (${{ matrix.appetizeName }}) is running iOS ${appVersionName} (-> ${latestAppVersionName}) for ${{ matrix.sdkVersion }}`)
+            }
+            core.setOutput('oldVersion', appVersionName)
+
+      - name: 📱 Download iOS client (${{ matrix.iosVersion }})
+        if: ${{ steps.appetize.outputs.oldVersion != matrix.iosVersion }}
+        run: curl -o exponent-ios.tar.gz ${{ matrix.iosUrl }}
+
+      - name: 📦 Prepare iOS package
+        if: ${{ steps.appetize.outputs.oldVersion != matrix.iosVersion }}
+        run: |
+          mkdir exponent-ios.app
+          tar -xf exponent-ios.tar.gz -C exponent-ios.app
+          zip -q -r exponent-ios.zip exponent-ios.app
+          rm -rf exponent-ios.app exponent-ios.tar.gz
+
+      - name: 🚀 Upload to Appetize
+        if: ${{ steps.appetize.outputs.oldVersion != matrix.iosVersion }}
+        # This step MUST NOT output anything, the endpoint returns the public and private app keys
+        run: |
+          curl --silent --fail --http1.1 https://$TOKEN@api.appetize.io/v1/apps/$APP -F "file=@exponent-ios.zip" -F "platform=ios" > /dev/null
+          rm -rf exponent-ios.zip appetize.json
+        env:
+          TOKEN: ${{ secrets[matrix.appetizeTokenName] }}
+          APP: ${{ matrix.iosAppetizeId }}
+
+  config:
+    runs-on: ubuntu-latest
+    needs: prepare
+    steps:
+      - name: 📋 Download Appetize devices
+        run: curl -o appetize-devices.json https://api.appetize.io/v2/service/devices
+
+      - name: 🔍 Validate default devices
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Load the downloaded devices and resolved config
+            const devices = require('./appetize-devices.json');
+            const config = JSON.parse(${{ needs.prepare.outputs.config }});
+            
+            // Iterate over each configured Appetize instance
+            for (const [sdkVersion, sdkConfig] of Object.entries(config)) {
+              for (const [queueName, queueConfig] of Object.entries(sdkConfig)) {
+                for (const [platform, platformConfig] of Object.entries(queueConfig)) {
+                  // Ensure the default device is available on Appetize
+                  const defaultDevice = platformConfig.device;
+                  const foundDevice = devices.find(device => device.id === defaultDevice);
+            
+                  // Throw an error if the default device is not available
+                  if (!foundDevice) {
+                    throw new Error(`Default device "${defaultDevice}" for ${platform} on ${queueName} (${sdkVersion}) is not available on Appetize`);
+                  }
+                }
+              }
+            }
+
+  notify:
+    if: ${{ always() }}
+    needs: [prepare, android, ios, config]
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📢 Notify on Slack
+        uses: 8398a7/action-slack@v3
+        if: ${{ needs.prepare.result == 'failure' || needs.android.result == 'failure' || needs.ios.result == 'failure' || needs.config.result == 'failure' }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_SNACK }}
+        with:
+          channel: '#snack'
+          status: failure
+          author_name: Appetize deployment failed
+          fields: author,job
+
+

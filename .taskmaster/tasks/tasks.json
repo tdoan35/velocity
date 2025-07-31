@@ -403,8 +403,8 @@
             "title": "Set up Appetize.io API integration",
             "description": "Implement the core API integration with Appetize.io to enable browser-embedded device simulation with support for multiple device types and orientations.",
             "dependencies": [],
-            "details": "Create an Appetize.io developer account and obtain API keys. Implement API client for Appetize.io v1 API with authentication. Set up device configuration profiles for iOS devices (iPhone 12-15 series), Android devices (Pixel, Samsung Galaxy series), and tablets. Implement device orientation switching between portrait and landscape modes. Create a device selector UI component for users to choose simulation targets.",
-            "status": "pending",
+            "details": "Create an Appetize.io developer account and obtain API keys. Implement API client for Appetize.io v1 API with authentication. Set up device configuration profiles for iOS devices (iPhone 12-15 series), Android devices (Pixel, Samsung Galaxy series), and tablets. Implement device orientation switching between portrait and landscape modes. Create a device selector UI component for users to choose simulation targets.\n<info added on 2025-07-29T23:09:52.675Z>\nCOMPLETED: Successfully implemented comprehensive Appetize.io API integration with full device support, database infrastructure, and React components. Implementation includes:\n\nAPI Integration:\n- Created appetize-api Edge Function with 14 device configurations (iPhone 12-15, iPads, Android Pixels, Samsung Galaxy)\n- Implemented session creation, management, and device orientation switching\n- Added Supabase integration for session tracking and analytics\n\nDatabase Schema:\n- Deployed preview_sessions table for active session management\n- Created preview_session_metrics for usage analytics\n- Added preview_sharing for public preview links  \n- Implemented preview_session_pool for session optimization\n- Configured RLS policies and cleanup functions\n\nAdvanced Session Management:\n- Built preview-sessions Edge Function with session pool allocation\n- Implemented usage quota management per subscription tier\n- Added session metrics tracking and automatic cleanup\n\nReact Integration:\n- Developed useAppetizePreview hook for session lifecycle management\n- Created MobilePreview component with device frames and status indicators\n- Implemented hot reload support via WebSocket\n- Added device switching and rotation capabilities\n\nStatus: Implementation complete, pending Appetize.io API key configuration for testing.\n</info added on 2025-07-29T23:09:52.675Z>",
+            "status": "done",
             "testStrategy": "Test API authentication and connection. Verify all configured device types render correctly. Test orientation switching between portrait and landscape. Validate device selector UI functionality. Measure API response times and optimize if needed."
           },
           {
@@ -414,8 +414,8 @@
             "dependencies": [
               "4.1"
             ],
-            "details": "Configure Metro bundler for React Native packaging optimized for Appetize.io. Set up Expo SDK 50+ integration for preview environment. Implement asset bundling process for images, fonts, and other resources. Create build optimization strategies including code splitting and tree shaking. Implement build caching to improve subsequent build times. Set up error handling and reporting for build failures.",
-            "status": "pending",
+            "details": "Configure Metro bundler for React Native packaging optimized for Appetize.io. Set up Expo SDK 50+ integration for preview environment. Implement asset bundling process for images, fonts, and other resources. Create build optimization strategies including code splitting and tree shaking. Implement build caching to improve subsequent build times. Set up error handling and reporting for build failures.\n<info added on 2025-07-31T01:25:23.162Z>\nSuccessfully completed comprehensive build pipeline implementation for Appetize.io preview generation. Delivered full-stack solution including backend Edge Function with Metro bundler configuration, database schema for preview builds and caching, asset bundling system with platform-specific optimizations, and frontend React integration with real-time progress tracking. Build system now supports iOS/Android/Web platforms with tree shaking, minification, code splitting, and intelligent caching targeting 70-80% cache hit rates. Implemented usePreviewBuild hook and BuildProgressIndicator component for seamless frontend integration. System includes robust error handling, automatic dependency resolution, and Expo SDK 50+ compatibility. Ready to proceed with WebSocket implementation for hot reload functionality in subtask 4.3.\n</info added on 2025-07-31T01:25:23.162Z>",
+            "status": "done",
             "testStrategy": "Test build process with various React Native components and features. Verify asset loading in preview environment. Measure build times and validate optimizations. Test error recovery scenarios during build failures."
           },
           {
@@ -427,7 +427,7 @@
               "4.2"
             ],
             "details": "Configure Supabase Realtime channels for change notifications. Implement WebSocket connection management with reconnection logic. Create change detection system to identify when code or assets are modified. Develop hot reload triggering mechanism that sends updates to Appetize.io session. Implement status feedback UI during reload process. Add logging and telemetry for reload performance.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test WebSocket connection stability under various network conditions. Verify hot reload functionality with different types of code changes. Measure reload time performance. Test reconnection logic during network interruptions."
           },
           {
@@ -439,7 +439,7 @@
               "4.3"
             ],
             "details": "Create session lifecycle management for creating and destroying simulation instances. Implement session pooling to optimize resource usage and reduce costs. Develop intelligent session allocation based on user activity patterns. Add session timeout handling with graceful reconnection. Implement cost optimization strategies including idle session hibernation. Create admin dashboard for monitoring session usage and costs.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test session creation and destruction under various load conditions. Validate session pooling efficiency with multiple concurrent users. Test timeout handling and reconnection scenarios. Measure cost efficiency improvements from optimization strategies."
           },
           {
@@ -451,7 +451,7 @@
               "4.4"
             ],
             "details": "Implement secure public link generation for preview sharing. Create access control system with permission levels and expiration settings. Develop collaborative preview sessions with multiple concurrent viewers. Add viewer count and activity indicators. Implement preview session recording for asynchronous review. Create notification system for preview access events.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test secure link generation and validation. Verify access control restrictions work as expected. Test collaborative sessions with multiple users. Validate link expiration functionality. Test session recording and playback quality."
           },
           {
@@ -502,124 +502,140 @@
       },
       {
         "id": 5,
-        "title": "Develop Project Management and Collaboration Features",
-        "description": "Implement project CRUD operations, file management, and real-time collaboration features using Supabase Realtime with professional development capabilities for team coordination and version control.",
+        "title": "Integrate Expo Snack for Dynamic Code Bundling and Live Preview",
+        "description": "Implement Expo Snack integration into the Velocity platform to provide dynamic code bundling, real-time code execution, and live preview capabilities across web and mobile environments.",
+        "details": "1. Set up Expo Snack SDK integration:\n   - Install and configure `snack-sdk` package for server-side operations\n   - Implement Snack session management with proper authentication\n   - Configure Snack API endpoints for code bundling and execution\n   - Set up WebSocket connections for real-time code updates\n\n2. Implement web-based preview system:\n   - Integrate `react-native-web` for in-browser rendering of React Native components\n   - Create a responsive preview container with device simulation options\n   - Implement runtime error handling and display\n   - Add support for different React Native versions and Expo SDK versions\n   - Enable console output capture and display\n\n3. Develop mobile preview capabilities:\n   - Generate and display QR codes for Expo Go app scanning\n   - Implement deep linking for direct app opening\n   - Set up secure tunneling for device access to development server\n   - Support iOS and Android preview via Expo Go\n   - Handle device connection status and management\n\n4. Integrate Snackager for dependency management:\n   - Configure Snackager service for on-demand package bundling\n   - Implement dependency resolution and version management\n   - Create caching system for frequently used packages\n   - Support for npm, yarn, and Expo packages\n   - Handle native module dependencies appropriately\n\n5. Connect Monaco Editor with Snack runtime:\n   - Implement real-time code synchronization between editor and preview\n   - Set up debounced code execution to prevent excessive rebuilds\n   - Create file system abstraction compatible with Snack\n   - Support TypeScript, JavaScript, and JSX file types\n   - Implement syntax highlighting and error indication\n\n6. Optimize performance and user experience:\n   - Implement progressive loading for preview environments\n   - Add loading states and indicators during bundle generation\n   - Create fallback mechanisms for offline or error scenarios\n   - Optimize bundle size and loading times\n   - Implement session persistence for quick resumption\n\n7. Develop comprehensive error handling:\n   - Create detailed error reporting for bundling issues\n   - Implement runtime error capture and display\n   - Add dependency resolution error handling\n   - Provide actionable error messages and suggestions\n   - Support debugging tools integration",
+        "testStrategy": "1. Unit test Snack SDK integration:\n   - Verify proper session creation and management\n   - Test code bundling with various React Native components\n   - Validate WebSocket connections and real-time updates\n   - Test error handling for malformed code\n\n2. Test web-based preview functionality:\n   - Verify rendering of basic React Native components\n   - Test complex layouts and UI components\n   - Validate responsive design simulation\n   - Test console output capture and display\n   - Verify hot reloading functionality with code changes\n\n3. Validate mobile preview capabilities:\n   - Test QR code generation and scanning with Expo Go\n   - Verify preview loading on physical iOS and Android devices\n   - Test deep linking functionality\n   - Validate secure tunneling for device access\n   - Test preview across different network conditions\n\n4. Test Snackager dependency management:\n   - Verify resolution of various npm packages\n   - Test handling of native module dependencies\n   - Validate caching system for repeated package requests\n   - Test version compatibility management\n   - Verify handling of private and scoped packages\n\n5. Integration test with Monaco Editor:\n   - Validate real-time code synchronization\n   - Test debounced execution with rapid typing\n   - Verify file system abstraction with multiple file types\n   - Test syntax highlighting and error indication\n   - Validate TypeScript support and type checking\n\n6. Performance testing:\n   - Measure initial load time for preview environments\n   - Test bundle generation time for various project sizes\n   - Validate resource usage during preview sessions\n   - Test concurrent user scenarios\n   - Measure WebSocket performance under load\n\n7. End-to-end testing:\n   - Create complete app scenarios from editor to preview\n   - Test full workflow from code writing to device preview\n   - Validate user experience across different devices\n   - Test error recovery scenarios\n   - Verify session persistence and resumption",
         "status": "pending",
         "dependencies": [
-          1,
-          2
+          3,
+          4
         ],
         "priority": "medium",
-        "details": "1. Create advanced project management system:\n   - Project creation, reading, updating, and deletion\n   - Project metadata management (name, description, created_by, etc.)\n   - Project templates for common app patterns (React SPA, Next.js, Mobile App)\n   - Project export as ZIP file with full structure\n   - Project sharing with permission levels (view/edit/admin)\n2. Implement comprehensive file management system:\n   - File tree structure with folders and path-based navigation\n   - File creation, editing, deletion operations\n   - File versioning with rollback capabilities and history tracking\n   - File type detection and appropriate handling\n   - Path-based file organization with JSONB storage in Supabase\n3. Set up real-time collaboration using Supabase Realtime:\n   - Operational transformation for conflict resolution in simultaneous editing\n   - Live collaborative editing with conflict resolution\n   - User presence indicators with cursor position tracking\n   - Real-time file synchronization across all collaborators\n4. Add comprehensive commenting and code review system:\n   - Line-specific comments for code review\n   - Comment threads with replies and resolution tracking\n   - Comment persistence and real-time updates\n   - Feedback system integration\n5. Implement activity feeds tracking all project changes:\n   - File modifications, additions, deletions\n   - Comment additions and resolutions\n   - User join/leave events\n   - Permission changes and sharing events\n6. Add professional development coordination features:\n   - Version control integration preparation\n   - Team coordination tools\n   - Project access management\n\nTechnology requirements:\n- Supabase Realtime with Broadcast and Presence channels\n- Operational Transformation library (yjs or similar)\n- Path-based file system abstractions\n- JSONB storage for file organization\n- JSZip for project export functionality\n- Monaco Editor collaboration extensions\n- Real-time conflict resolution algorithms",
-        "testStrategy": "1. Test project CRUD operations with various project sizes and templates\n2. Validate file management across different file types with versioning\n3. Test real-time collaboration with multiple concurrent users (5-10 users)\n4. Verify operational transformation and conflict resolution in simultaneous editing\n5. Test comment system functionality, persistence, and real-time updates\n6. Validate activity feed accuracy and real-time performance\n7. Test project export and import functionality with large projects\n8. Verify performance with large projects (1000+ files)\n9. Test project sharing with different permission levels\n10. Validate user presence indicators and cursor tracking accuracy\n11. Test rollback capabilities and version history navigation\n12. Verify path-based file organization with JSONB queries",
         "subtasks": [
           {
             "id": 1,
-            "title": "Implement core project management CRUD operations",
-            "description": "",
-            "status": "pending",
+            "title": "Set up Snack SDK in Velocity Frontend",
+            "description": "Install and configure the Snack SDK package in the Velocity frontend to enable dynamic code bundling and execution.",
             "dependencies": [],
-            "details": "",
-            "testStrategy": ""
+            "details": "Install the snack-sdk package using npm or yarn. Configure SDK initialization with proper authentication tokens. Set up session management for persistent Snack instances. Create utility functions for Snack operations. Implement proper error handling for SDK initialization failures.",
+            "status": "pending",
+            "testStrategy": "Unit test SDK initialization with valid and invalid credentials. Verify session creation and persistence. Test error handling for network failures during initialization. Validate configuration with different Expo SDK versions."
           },
           {
             "id": 2,
-            "title": "Set up project templates system for common app patterns",
-            "description": "",
+            "title": "Implement WebPlayer Transport for Browser Preview",
+            "description": "Create a WebPlayer transport system that enables real-time rendering of React Native components in the browser using react-native-web.",
+            "dependencies": [
+              "5.1"
+            ],
+            "details": "Integrate react-native-web for in-browser component rendering. Create a responsive preview container with device simulation options. Implement iframe-based isolation for the preview environment. Set up message passing between editor and preview container. Configure WebPlayer to handle different device dimensions and orientations.",
             "status": "pending",
-            "dependencies": [],
-            "details": "",
-            "testStrategy": ""
+            "testStrategy": "Test rendering of basic and complex React Native components. Verify responsive behavior across different simulated device sizes. Test message passing between editor and preview. Validate error boundary functionality for runtime errors."
           },
           {
             "id": 3,
-            "title": "Implement path-based file organization with JSONB storage",
-            "description": "",
+            "title": "Configure Snackager for Dependency Bundling",
+            "description": "Set up Snackager service integration to handle on-demand package bundling and dependency resolution for Snack projects.",
+            "dependencies": [
+              "5.1"
+            ],
+            "details": "Configure Snackager service connection for package bundling. Implement dependency resolution and version management. Create caching system for frequently used packages to improve performance. Add support for npm, yarn, and Expo packages. Handle native module dependencies appropriately with fallbacks.",
             "status": "pending",
-            "dependencies": [],
-            "details": "",
-            "testStrategy": ""
+            "testStrategy": "Test package resolution with various dependency types. Verify caching mechanism effectiveness. Test handling of conflicting dependencies. Measure performance improvements with caching enabled vs. disabled."
           },
           {
             "id": 4,
-            "title": "Develop file versioning system with rollback capabilities",
-            "description": "",
+            "title": "Create Real-Time Code Synchronization with Monaco Editor",
+            "description": "Implement bidirectional synchronization between Monaco Editor and Snack runtime for instant code updates and preview.",
+            "dependencies": [
+              "5.1",
+              "5.2"
+            ],
+            "details": "Set up debounced code execution to prevent excessive rebuilds. Create file system abstraction compatible with Snack. Implement real-time code synchronization between editor and preview. Support TypeScript, JavaScript, and JSX file types with proper transpilation. Add syntax highlighting and error indication in the editor based on runtime feedback.",
             "status": "pending",
-            "dependencies": [],
-            "details": "",
-            "testStrategy": ""
+            "testStrategy": "Test synchronization with various file types and code changes. Measure latency between code changes and preview updates. Verify proper handling of syntax errors. Test concurrent editing scenarios."
           },
           {
             "id": 5,
-            "title": "Set up Supabase Realtime with Broadcast and Presence channels",
-            "description": "",
+            "title": "Implement Expo Go QR Code Generation",
+            "description": "Develop functionality to generate and display QR codes that allow previewing projects on physical devices using the Expo Go app.",
+            "dependencies": [
+              "5.1",
+              "5.3"
+            ],
+            "details": "Generate QR codes for Expo Go app scanning. Implement deep linking for direct app opening. Set up secure tunneling for device access to development server. Support iOS and Android preview via Expo Go. Handle device connection status and management with real-time updates.",
             "status": "pending",
-            "dependencies": [],
-            "details": "",
-            "testStrategy": ""
+            "testStrategy": "Test QR code generation with different project configurations. Verify scanning functionality on iOS and Android devices. Test connection status tracking. Validate secure tunneling for private networks."
           },
           {
             "id": 6,
-            "title": "Implement operational transformation for conflict resolution",
-            "description": "",
+            "title": "Develop File Upload and Asset Management",
+            "description": "Create a system for handling file uploads and managing assets within Snack projects, including images, fonts, and other static resources.",
+            "dependencies": [
+              "5.1",
+              "5.3"
+            ],
+            "details": "Implement drag-and-drop file upload functionality. Create asset management system for images, fonts, and other static files. Set up proper asset bundling and referencing in Snack projects. Handle asset optimization for different preview environments. Implement asset caching for improved performance.",
             "status": "pending",
-            "dependencies": [],
-            "details": "",
-            "testStrategy": ""
+            "testStrategy": "Test uploading various file types and sizes. Verify proper asset referencing in React Native code. Test asset optimization for web and mobile previews. Validate caching mechanism for frequently used assets."
           },
           {
             "id": 7,
-            "title": "Add user presence indicators with cursor position tracking",
-            "description": "",
+            "title": "Implement SDK Version Management",
+            "description": "Create a system to manage and switch between different Expo SDK versions for compatibility with various project requirements.",
+            "dependencies": [
+              "5.1",
+              "5.3"
+            ],
+            "details": "Implement SDK version selection interface. Configure Snack to use specific Expo SDK versions. Handle version-specific dependencies and polyfills. Create version compatibility checking for projects. Implement automatic suggestions for SDK updates based on used features.",
             "status": "pending",
-            "dependencies": [],
-            "details": "",
-            "testStrategy": ""
+            "testStrategy": "Test switching between different SDK versions. Verify compatibility checks with various feature sets. Test dependency resolution across SDK versions. Validate polyfill loading for older SDK versions."
           },
           {
             "id": 8,
-            "title": "Develop live collaborative editing with Monaco Editor extensions",
-            "description": "",
+            "title": "Develop Comprehensive Error Handling and Logging",
+            "description": "Implement robust error handling and logging for runtime errors, bundling issues, and dependency problems in the Snack environment.",
+            "dependencies": [
+              "5.1",
+              "5.2",
+              "5.4"
+            ],
+            "details": "Create detailed error reporting for bundling issues. Implement runtime error capture and display with source mapping. Add dependency resolution error handling with suggestions. Provide actionable error messages and fix recommendations. Support debugging tools integration for advanced troubleshooting.",
             "status": "pending",
-            "dependencies": [],
-            "details": "",
-            "testStrategy": ""
+            "testStrategy": "Test error reporting with various error types. Verify source mapping accuracy for runtime errors. Test error recovery mechanisms. Validate helpful suggestions for common errors."
           },
           {
             "id": 9,
-            "title": "Create comprehensive commenting and code review system",
-            "description": "",
+            "title": "Optimize Performance for Instant Preview",
+            "description": "Implement performance optimizations to ensure near-instant preview updates and smooth development experience.",
+            "dependencies": [
+              "5.2",
+              "5.3",
+              "5.4"
+            ],
+            "details": "Implement progressive loading for preview environments. Add loading states and indicators during bundle generation. Create fallback mechanisms for offline or error scenarios. Optimize bundle size and loading times through code splitting. Implement session persistence for quick resumption after page refresh.",
             "status": "pending",
-            "dependencies": [],
-            "details": "",
-            "testStrategy": ""
+            "testStrategy": "Measure and benchmark preview update times. Test performance with large projects and complex dependencies. Verify session persistence across page reloads. Test progressive loading with slow network conditions."
           },
           {
             "id": 10,
-            "title": "Implement activity feeds tracking all project changes",
-            "description": "",
+            "title": "Integrate with Existing Velocity Architecture",
+            "description": "Ensure seamless integration of Expo Snack functionality with the existing Velocity platform architecture and user workflows.",
+            "dependencies": [
+              "5.1",
+              "5.2",
+              "5.3",
+              "5.4",
+              "5.5",
+              "5.6",
+              "5.7",
+              "5.8",
+              "5.9"
+            ],
+            "details": "Connect Snack functionality with existing user authentication system. Integrate with project storage and version control. Implement project templates and starter kits using Snack. Create consistent UI/UX between Velocity and Snack components. Set up analytics and telemetry for Snack usage patterns.",
             "status": "pending",
-            "dependencies": [],
-            "details": "",
-            "testStrategy": ""
-          },
-          {
-            "id": 11,
-            "title": "Add project sharing with permission levels (view/edit/admin)",
-            "description": "",
-            "status": "pending",
-            "dependencies": [],
-            "details": "",
-            "testStrategy": ""
-          },
-          {
-            "id": 12,
-            "title": "Implement project export as ZIP with full structure",
-            "description": "",
-            "status": "pending",
-            "dependencies": [],
-            "details": "",
-            "testStrategy": ""
+            "testStrategy": "Test end-to-end workflows combining Velocity and Snack features. Verify authentication and permission handling. Test project import/export between systems. Validate UI consistency across the integrated platform."
           }
         ]
       },
@@ -630,7 +646,7 @@
         "status": "pending",
         "dependencies": [
           1,
-          5
+          14
         ],
         "priority": "medium",
         "details": "1. Create organization-level team management system:\n   - Organization creation and hierarchical team structure\n   - Team creation and configuration within organizations\n   - Organization-level billing and subscription management\n   - Subscription tier tracking and enforcement\n   - Team member invitation via email workflows\n   - Enterprise onboarding and setup wizards\n2. Implement advanced Role-Based Access Control (RBAC):\n   - Custom roles with granular permissions\n   - Organization admin, team admin, editor, viewer roles\n   - Permission inheritance and override capabilities\n   - Resource-level permission management\n   - Audit logging for permission changes\n3. Develop SSO integration for enterprise authentication:\n   - SAML 2.0 and OAuth 2.0 SSO support\n   - Active Directory and identity provider integration\n   - Just-in-time (JIT) user provisioning\n   - Multi-factor authentication (MFA) enforcement\n   - Session management and security policies\n4. Implement comprehensive project sharing functionality:\n   - Share with individuals, teams, or organizations\n   - Custom permission levels per user/team/organization\n   - Public sharing with view-only access\n   - Invitation acceptance and enterprise onboarding flow\n   - Guest user management and restrictions\n5. Set up advanced Row Level Security policies:\n   - Organization-based data isolation\n   - Team-based access control for projects\n   - Permission-based access to project resources\n   - Automatic data isolation between organizations\n   - Compliance and data residency controls\n6. Add enterprise team activity dashboard:\n   - Organization-wide activity monitoring\n   - Team performance metrics and analytics\n   - Resource usage tracking and billing insights\n   - Project status overview across teams\n   - Security event monitoring and alerts\n7. Implement enterprise notification and communication system:\n   - Team event notifications with customizable preferences\n   - Organization-wide announcements\n   - Integration with Slack, Microsoft Teams, email\n   - Escalation workflows for critical events\n\nTechnology stack:\n- Supabase Auth with custom JWT claims for RBAC\n- SendGrid/Postmark for enterprise email workflows\n- SAML/OAuth libraries for SSO integration\n- Zustand for organization and team state management\n- React Query for enterprise data fetching and caching\n- Audit logging with compliance tracking",
@@ -924,7 +940,7 @@
         "testStrategy": "1. Test GitHub repository creation and initialization\n2. Validate two-way synchronization with various change patterns\n3. Test branch creation, switching, and merging\n4. Verify conflict resolution during synchronization\n5. Test pull request creation and management\n6. Validate commit history visualization\n7. Test repository export functionality\n8. Verify performance with large repositories",
         "priority": "medium",
         "dependencies": [
-          5
+          14
         ],
         "status": "pending",
         "subtasks": [
@@ -1198,7 +1214,7 @@
           2,
           3,
           4,
-          5,
+          14,
           7,
           10
         ],
@@ -1289,11 +1305,134 @@
             "testStrategy": "Verify log capture across different application components. Test log search and filtering capabilities. Validate performance metric accuracy against manual measurements. Ensure proper PII handling in logs and analytics data."
           }
         ]
+      },
+      {
+        "id": 13,
+        "title": "Develop Project Management and Collaboration Features",
+        "description": "Implement project CRUD operations, file management, and real-time collaboration features using Supabase Realtime with professional development capabilities for team coordination and version control.",
+        "status": "pending",
+        "dependencies": [
+          1,
+          2
+        ],
+        "priority": "medium",
+        "details": "1. Create advanced project management system:\n   - Project creation, reading, updating, and deletion\n   - Project metadata management (name, description, created_by, etc.)\n   - Project templates for common app patterns (React SPA, Next.js, Mobile App)\n   - Project export as ZIP file with full structure\n   - Project sharing with permission levels (view/edit/admin)\n2. Implement comprehensive file management system:\n   - File tree structure with folders and path-based navigation\n   - File creation, editing, deletion operations\n   - File versioning with rollback capabilities and history tracking\n   - File type detection and appropriate handling\n   - Path-based file organization with JSONB storage in Supabase\n3. Set up real-time collaboration using Supabase Realtime:\n   - Operational transformation for conflict resolution in simultaneous editing\n   - Live collaborative editing with conflict resolution\n   - User presence indicators with cursor position tracking\n   - Real-time file synchronization across all collaborators\n4. Add comprehensive commenting and code review system:\n   - Line-specific comments for code review\n   - Comment threads with replies and resolution tracking\n   - Comment persistence and real-time updates\n   - Feedback system integration\n5. Implement activity feeds tracking all project changes:\n   - File modifications, additions, deletions\n   - Comment additions and resolutions\n   - User join/leave events\n   - Permission changes and sharing events\n6. Add professional development coordination features:\n   - Version control integration preparation\n   - Team coordination tools\n   - Project access management\n\nTechnology requirements:\n- Supabase Realtime with Broadcast and Presence channels\n- Operational Transformation library (yjs or similar)\n- Path-based file system abstractions\n- JSONB storage for file organization\n- JSZip for project export functionality\n- Monaco Editor collaboration extensions\n- Real-time conflict resolution algorithms",
+        "testStrategy": "1. Test project CRUD operations with various project sizes and templates\n2. Validate file management across different file types with versioning\n3. Test real-time collaboration with multiple concurrent users (5-10 users)\n4. Verify operational transformation and conflict resolution in simultaneous editing\n5. Test comment system functionality, persistence, and real-time updates\n6. Validate activity feed accuracy and real-time performance\n7. Test project export and import functionality with large projects\n8. Verify performance with large projects (1000+ files)\n9. Test project sharing with different permission levels\n10. Validate user presence indicators and cursor tracking accuracy\n11. Test rollback capabilities and version history navigation\n12. Verify path-based file organization with JSONB queries",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement core project management CRUD operations",
+            "description": "",
+            "status": "pending",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "Set up project templates system for common app patterns",
+            "description": "",
+            "status": "pending",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "Implement path-based file organization with JSONB storage",
+            "description": "",
+            "status": "pending",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "Develop file versioning system with rollback capabilities",
+            "description": "",
+            "status": "pending",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "Set up Supabase Realtime with Broadcast and Presence channels",
+            "description": "",
+            "status": "pending",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 6,
+            "title": "Implement operational transformation for conflict resolution",
+            "description": "",
+            "status": "pending",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 7,
+            "title": "Add user presence indicators with cursor position tracking",
+            "description": "",
+            "status": "pending",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 8,
+            "title": "Develop live collaborative editing with Monaco Editor extensions",
+            "description": "",
+            "status": "pending",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 9,
+            "title": "Create comprehensive commenting and code review system",
+            "description": "",
+            "status": "pending",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 10,
+            "title": "Implement activity feeds tracking all project changes",
+            "description": "",
+            "status": "pending",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 11,
+            "title": "Add project sharing with permission levels (view/edit/admin)",
+            "description": "",
+            "status": "pending",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 12,
+            "title": "Implement project export as ZIP with full structure",
+            "description": "",
+            "status": "pending",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          }
+        ]
       }
     ],
     "metadata": {
       "created": "2025-07-22T22:49:25.170Z",
-      "updated": "2025-07-28T21:57:06.984Z",
+      "updated": "2025-07-31T03:11:44.443Z",
       "description": "Tasks for master context"
     }
   }

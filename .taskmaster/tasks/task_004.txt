@@ -1,0 +1,133 @@
+# Task ID: 4
+# Title: Implement Real-Time Mobile Preview with Appetize.io
+# Status: in-progress
+# Dependencies: 2, 3
+# Priority: high
+# Description: Integrate Appetize.io for browser-embedded device simulation with hot reload capability and session management to provide immediate visual feedback essential for mobile development.
+# Details:
+1. Set up Appetize.io API integration for comprehensive device simulation:
+   - Browser-embedded device simulation with multiple device types
+   - iOS (iPhone 12, 13, 14, 15 series, various screen sizes)
+   - Android (Pixel, Samsung Galaxy series, various screen sizes)
+   - Tablet support for larger screen testing
+   - Multiple device orientations (portrait/landscape)
+2. Implement advanced session management system:
+   - Create/destroy simulation sessions based on user activity
+   - Session pooling to optimize preview resource usage and cost efficiency
+   - Handle session timeouts and reconnections gracefully
+   - Cost optimization strategies for resource management
+3. Develop comprehensive build process for preview generation:
+   - Bundle React Native code for Appetize.io compatibility
+   - Configure Expo SDK for preview environment
+   - Handle asset bundling and resource loading optimization
+   - Performance optimizations for preview resource usage
+4. Implement WebSocket connections for real-time hot reload:
+   - Set up Supabase Realtime channels for change notifications
+   - Real-time synchronization with editor changes
+   - Trigger hot reload when code changes are detected
+   - Provide status feedback during reload process
+5. Add preview sharing capabilities:
+   - Generate secure public links for preview sharing
+   - Access control and link expiration management
+   - Collaborative preview sessions
+6. Optimize preview system performance:
+   - Minimize startup time for preview generation
+   - Efficient resource usage monitoring
+   - Background session warming for instant access
+
+Technology recommendations:
+- Appetize.io API v1
+- Expo SDK 50+
+- Supabase Realtime for WebSocket connections
+- React Native 0.73+
+- Metro bundler for React Native packaging
+
+# Test Strategy:
+1. Test preview generation with various React Native components across device types
+2. Validate hot reload functionality with different types of changes and real-time synchronization
+3. Measure preview startup time and validate performance optimizations
+4. Test session management and pooling under various user activity patterns
+5. Verify device simulation across different iOS/Android device types and orientations
+6. Test preview sharing via secure public links and access control
+7. Validate error handling during preview generation and session management
+8. Benchmark resource usage and cost optimization strategies
+9. Test WebSocket connection stability and reconnection handling
+10. Validate real-time synchronization accuracy with editor changes
+
+# Subtasks:
+## 1. Set up Appetize.io API integration [done]
+### Dependencies: None
+### Description: Implement the core API integration with Appetize.io to enable browser-embedded device simulation with support for multiple device types and orientations.
+### Details:
+Create an Appetize.io developer account and obtain API keys. Implement API client for Appetize.io v1 API with authentication. Set up device configuration profiles for iOS devices (iPhone 12-15 series), Android devices (Pixel, Samsung Galaxy series), and tablets. Implement device orientation switching between portrait and landscape modes. Create a device selector UI component for users to choose simulation targets.
+<info added on 2025-07-29T23:09:52.675Z>
+COMPLETED: Successfully implemented comprehensive Appetize.io API integration with full device support, database infrastructure, and React components. Implementation includes:
+
+API Integration:
+- Created appetize-api Edge Function with 14 device configurations (iPhone 12-15, iPads, Android Pixels, Samsung Galaxy)
+- Implemented session creation, management, and device orientation switching
+- Added Supabase integration for session tracking and analytics
+
+Database Schema:
+- Deployed preview_sessions table for active session management
+- Created preview_session_metrics for usage analytics
+- Added preview_sharing for public preview links  
+- Implemented preview_session_pool for session optimization
+- Configured RLS policies and cleanup functions
+
+Advanced Session Management:
+- Built preview-sessions Edge Function with session pool allocation
+- Implemented usage quota management per subscription tier
+- Added session metrics tracking and automatic cleanup
+
+React Integration:
+- Developed useAppetizePreview hook for session lifecycle management
+- Created MobilePreview component with device frames and status indicators
+- Implemented hot reload support via WebSocket
+- Added device switching and rotation capabilities
+
+Status: Implementation complete, pending Appetize.io API key configuration for testing.
+</info added on 2025-07-29T23:09:52.675Z>
+
+## 2. Develop build process for preview generation [pending]
+### Dependencies: 4.1
+### Description: Create a comprehensive build pipeline that bundles React Native code for Appetize.io compatibility with proper asset handling and optimization.
+### Details:
+Configure Metro bundler for React Native packaging optimized for Appetize.io. Set up Expo SDK 50+ integration for preview environment. Implement asset bundling process for images, fonts, and other resources. Create build optimization strategies including code splitting and tree shaking. Implement build caching to improve subsequent build times. Set up error handling and reporting for build failures.
+
+## 3. Implement WebSocket connections for hot reload [pending]
+### Dependencies: 4.1, 4.2
+### Description: Set up real-time communication channels using Supabase Realtime to enable hot reload functionality when code changes are detected.
+### Details:
+Configure Supabase Realtime channels for change notifications. Implement WebSocket connection management with reconnection logic. Create change detection system to identify when code or assets are modified. Develop hot reload triggering mechanism that sends updates to Appetize.io session. Implement status feedback UI during reload process. Add logging and telemetry for reload performance.
+
+## 4. Implement advanced session management system [pending]
+### Dependencies: 4.1, 4.3
+### Description: Develop a sophisticated session management system that efficiently creates, pools, and destroys simulation sessions based on user activity.
+### Details:
+Create session lifecycle management for creating and destroying simulation instances. Implement session pooling to optimize resource usage and reduce costs. Develop intelligent session allocation based on user activity patterns. Add session timeout handling with graceful reconnection. Implement cost optimization strategies including idle session hibernation. Create admin dashboard for monitoring session usage and costs.
+
+## 5. Develop preview sharing capabilities [pending]
+### Dependencies: 4.1, 4.4
+### Description: Create functionality to generate secure public links for preview sharing with access control and collaborative features.
+### Details:
+Implement secure public link generation for preview sharing. Create access control system with permission levels and expiration settings. Develop collaborative preview sessions with multiple concurrent viewers. Add viewer count and activity indicators. Implement preview session recording for asynchronous review. Create notification system for preview access events.
+
+## 6. Optimize preview system performance [pending]
+### Dependencies: 4.2, 4.3, 4.4
+### Description: Implement performance optimizations to minimize startup time, improve resource usage, and provide instant access to previews.
+### Details:
+Analyze and optimize preview startup time through build optimizations. Implement background session warming for instant access. Create resource usage monitoring system with alerts for abnormal patterns. Develop adaptive quality settings based on network conditions. Implement preview caching strategies for frequently accessed projects. Create performance benchmarking tools for ongoing optimization.
+
+## 7. Implement error handling and diagnostics [pending]
+### Dependencies: 4.1, 4.2, 4.3, 4.4
+### Description: Develop comprehensive error handling, logging, and diagnostic tools for the preview system to ensure reliability and facilitate troubleshooting.
+### Details:
+Implement structured error handling throughout the preview system. Create detailed logging system with appropriate log levels. Develop diagnostic tools for troubleshooting preview issues. Implement automatic error reporting to monitoring systems. Create user-facing error messages with actionable recovery steps. Develop self-healing mechanisms for common failure scenarios.
+
+## 8. Create documentation and user guides [pending]
+### Dependencies: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7
+### Description: Develop comprehensive documentation, tutorials, and user guides for the preview system to ensure effective usage and adoption.
+### Details:
+Create technical documentation for the preview system architecture and API. Develop user guides for preview functionality with step-by-step instructions. Create tutorial videos demonstrating key features. Implement contextual help within the UI. Develop troubleshooting guides for common issues. Create developer documentation for extending the preview system.
+

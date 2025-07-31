@@ -1,0 +1,34 @@
+name: Setup Google Cloud SDK
+description: Prepare Google Cloud SDK in GitHub Actions
+
+inputs:
+  auth:
+    description: If it should authenticate with Google Cloud and the Kubernetes cluster
+    default: ''
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: 🏗 Authenticate to Google Cloud
+      if: ${{ inputs.auth != '' }}
+      uses: google-github-actions/auth@55bd3a7c6e2ae7cf1877fd1ccb9d54c0503c457c
+      with:
+        project_id: exponentjs
+        workload_identity_provider: projects/321830142373/locations/global/workloadIdentityPools/github/providers/expo
+
+    - name: 📦 Setup Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@98ddc00a17442e89a24bbf282954a3b65ce6d200
+      with:
+        install_components: kubectl,kustomize,skaffold
+
+    - name: ⚙️ Configure Google Cloud SDK
+      if: ${{ inputs.auth != '' }}
+      run: |
+        gcloud config set project exponentjs
+        gcloud config set compute/zone us-central1
+        gcloud config set run/region us-central1
+        gcloud config set container/cluster general-central
+        gcloud container clusters get-credentials general-central
+        gcloud auth configure-docker us-central1-docker.pkg.dev
+      shell: bash

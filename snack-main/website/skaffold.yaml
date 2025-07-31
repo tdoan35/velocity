@@ -1,0 +1,101 @@
+apiVersion: skaffold/v2beta1
+kind: Config
+metadata:
+  name: snack
+build:
+  artifacts:
+    - image: us-central1-docker.pkg.dev/exponentjs/snack/snack
+      sync:
+        manual:
+          - src: src/**/*
+            dest: /snack/app
+      docker:
+        dockerfile: website/Dockerfile
+        buildArgs:
+          node_version: 18.17.1
+          LEGACY_SERVER_URL: https://staging.expo.io
+          SERVER_URL: https://staging.expo.dev
+          API_SERVER_URL: https://staging.exp.host
+          SNACKPUB_URL: https://staging-snackpub.expo.dev
+          APP_VERSION: staging-{{.GITHUB_SHA}}
+          DEPLOY_ENVIRONMENT: staging
+          IMPORT_SERVER_URL: https://staging.snackager.expo.io
+          LEGACY_SNACK_SERVER_URL: https://staging.snack.expo.io
+          RUDDERSTACK_DATA_PLANE_URL: https://cdp.expo.dev
+          RUDDERSTACK_WRITE_KEY: 1weTbQObpRMmIsWrdwEITRabLA2
+          SNACK_SERVER_URL: https://staging-snack.expo.dev
+          SNACK_AMPLITUDE_KEY: 512bcbce69eae77fee77be53ec230088
+          SNACK_WEBPLAYER_URL: https://snack-web-player-staging.s3.us-west-1.amazonaws.com
+          SNACK_WEBPLAYER_CDN: https://d1qt8af2b3kxj0.cloudfront.net
+          SNACK_RUNTIME_ENDPOINT: staging-u.expo.dev/2dce2748-c51f-4865-bae0-392af794d60a
+  tagPolicy:
+    sha256: {}
+  local:
+    push: false
+deploy:
+  kustomize:
+    paths:
+      - website/deploy/staging
+profiles:
+  - name: prod
+    build:
+      artifacts:
+        - image: us-central1-docker.pkg.dev/exponentjs/snack/snack
+          docker:
+            dockerfile: website/Dockerfile
+            buildArgs:
+              node_version: 18.17.1
+              LEGACY_SERVER_URL: https://expo.io
+              SERVER_URL: https://expo.dev
+              API_SERVER_URL: https://exp.host
+              SNACKPUB_URL: https://snackpub.expo.dev
+              APP_VERSION: production-{{.GITHUB_SHA}}
+              DEPLOY_ENVIRONMENT: production
+              IMPORT_SERVER_URL: https://snackager.expo.io
+              LEGACY_SNACK_SERVER_URL: https://snack.expo.io
+              RUDDERSTACK_DATA_PLANE_URL: https://cdp.expo.dev
+              RUDDERSTACK_WRITE_KEY: 1weTlMb720s5AkBTYwgCGORCHHg
+              SNACK_SERVER_URL: https://snack.expo.dev
+              SNACK_AMPLITUDE_KEY: e91121c19a5bdcccd852cd032dc911fe
+              SNACK_WEBPLAYER_URL: https://snack-web-player.s3.us-west-1.amazonaws.com
+              SNACK_WEBPLAYER_CDN: https://dwmszb351h4q.cloudfront.net
+              SNACK_RUNTIME_ENDPOINT: u.expo.dev/933fd9c0-1666-11e7-afca-d980795c5824
+    deploy:
+      kustomize:
+        paths:
+          - website/deploy/production
+    activation:
+      - env: ENVIRONMENT=production
+  - name: main
+    build:
+      local:
+        push: true
+    activation:
+      - env: SKAFFOLD_PUSH_IMAGE=true
+  - name: local
+    deploy:
+      kustomize:
+        paths:
+          - website/deploy/development
+      statusCheckDeadlineSeconds: 10
+      kubeContext: minikube
+    patches:
+      - op: replace
+        path: /build/artifacts/0/docker/buildArgs/APP_VERSION
+        value: development
+      - op: replace
+        path: /build/artifacts/0/docker/buildArgs/DEPLOY_ENVIRONMENT
+        value: local
+      - op: replace
+        path: /build/artifacts/0/docker/buildArgs/RUDDERSTACK_WRITE_KEY
+        value: ''
+    activation:
+      - command: dev
+      - command: debug
+  - name: development
+    patches:
+      - op: add
+        path: /build/artifacts/0/docker/target
+        value: dev
+    activation:
+      - command: dev

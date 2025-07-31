@@ -1,0 +1,191 @@
+name: Website
+
+defaults:
+  run:
+    working-directory: website
+
+concurrency:
+  group: website-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: What environment should be deployed
+        type: choice
+        default: no-deploy
+        options:
+          - no-deploy
+          - staging
+          - production
+  pull_request:
+    paths:
+      - .github/actions/setup-google-cloud/**
+      - .github/actions/setup-website/**
+      - .github/workflows/website.yml
+      - website/**
+      - packages/snack-content/**
+      - packages/snack-sdk/**
+      - .eslint*
+      - .prettier*
+      - yarn.lock
+      - turbo.json
+  push:
+    branches: [main]
+    paths:
+      - .github/actions/setup-google-cloud/**
+      - .github/actions/setup-website/**
+      - .github/workflows/website.yml
+      - website/**
+      - packages/snack-content/**
+      - packages/snack-sdk/**
+      - .eslint*
+      - .prettier*
+      - yarn.lock
+      - turbo.json
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🏗 Setup repository
+        uses: actions/checkout@v3
+
+      - name: 🏗 Setup website
+        uses: ./.github/actions/setup-website
+
+      - name: 🚨 Lint website
+        run: yarn lint --max-warnings 0
+
+      - name: 🧪 Unit test website
+        run: yarn test --ci --maxWorkers 1
+
+  build:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: 🏗 Setup repository
+        uses: actions/checkout@v3
+
+      - name: 🏗 Setup Google Cloud SDK
+        uses: ./.github/actions/setup-google-cloud
+        with:
+          auth: true
+
+      - name: 🛠 Build website
+        run: skaffold build --filename website/skaffold.yaml --file-output website/build.json
+        working-directory: ./
+
+  check-config:
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'expo/snack' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🏗 Setup repository
+        uses: actions/checkout@v3
+
+      - name: 🏗 Setup Google Cloud SDK
+        uses: ./.github/actions/setup-google-cloud
+
+      - name: Check staging config
+        run: kustomize build deploy/staging
+
+      - name: Check production config
+        run: kustomize build deploy/production
+
+  deploy-staging:
+    if: ${{ (github.event.inputs.deploy == 'staging') || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+    needs: review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: website-staging
+      url: https://staging-snack.expo.dev
+    steps:
+      - name: 🏗 Setup repository
+        uses: actions/checkout@v3
+
+      - name: 🏗 Setup Google Cloud SDK
+        uses: ./.github/actions/setup-google-cloud
+        with:
+          auth: true
+
+      - name: 🛠 Build website
+        run: skaffold build --filename website/skaffold.yaml --file-output website/build.json
+        working-directory: ./
+        env:
+          SKAFFOLD_PUSH_IMAGE: 'true'
+
+      - name: 📋 Add change cause
+        run: kustomize edit add annotation kubernetes.io/change-cause:"Github Actions deploying $GITHUB_SHA at $(date)"
+        working-directory: website/deploy/staging
+
+      - name: 🚀 Deploy website
+        run: skaffold deploy --filename website/skaffold.yaml --status-check --build-artifacts website/build.json
+        working-directory: ./
+        env:
+          SKAFFOLD_PUSH_IMAGE: 'true'
+
+      - name: 💬 Notify Slack
+        uses: 8398a7/action-slack@v3
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_SNACK }}
+        with:
+          channel: '#snack'
+          status: ${{ job.status }}
+          author_name: Deploy Website to Staging
+          fields: message,commit,author,job,took
+
+  deploy-production:
+    if: ${{ github.event.inputs.deploy == 'production' && github.ref == 'refs/heads/main' }}
+    needs: review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: website-production
+      url: https://snack.expo.dev
+    steps:
+      - name: 🏗 Setup repository
+        uses: actions/checkout@v3
+
+      - name: 🏗 Setup Google Cloud SDK
+        uses: ./.github/actions/setup-google-cloud
+        with:
+          auth: true
+
+      - name: 🛠 Build website
+        run: skaffold build --filename website/skaffold.yaml --file-output website/build.json
+        working-directory: ./
+        env:
+          ENVIRONMENT: production
+          SKAFFOLD_PUSH_IMAGE: 'true'
+
+      - name: 📋 Add change cause
+        run: kustomize edit add annotation kubernetes.io/change-cause:"Github Actions deploying $GITHUB_SHA at $(date)"
+        working-directory: website/deploy/production
+
+      - name: 🚀 Deploy website
+        run: skaffold deploy --filename website/skaffold.yaml --status-check --build-artifacts website/build.json
+        working-directory: ./
+        env:
+          ENVIRONMENT: production
+          SKAFFOLD_PUSH_IMAGE: 'true'
+
+      - name: 💬 Notify Slack
+        uses: 8398a7/action-slack@v3
+        if: ${{ always() }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_SNACK }}
+        with:
+          channel: '#snack'
+          status: ${{ job.status }}
+          author_name: Deploy Website to Production
+          fields: message,commit,author,job,took

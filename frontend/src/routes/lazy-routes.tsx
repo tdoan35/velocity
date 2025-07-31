@@ -30,6 +30,10 @@ export const OptimisticUIDemo = lazy(() =>
   import('@/components/demos/optimistic-ui-demo').then(m => ({ default: m.OptimisticUIDemo }))
 )
 
+export const PreviewDemo = lazy(() => 
+  import('@/components/preview-demo').then(m => ({ default: m.PreviewDemo }))
+)
+
 // Loading fallback component
 export function PageLoader() {
   return (

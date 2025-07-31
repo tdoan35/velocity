@@ -1,0 +1,165 @@
+# Task ID: 5
+# Title: Integrate Expo Snack for Dynamic Code Bundling and Live Preview
+# Status: pending
+# Dependencies: 3, 4
+# Priority: medium
+# Description: Implement Expo Snack integration into the Velocity platform to provide dynamic code bundling, real-time code execution, and live preview capabilities across web and mobile environments.
+# Details:
+1. Set up Expo Snack SDK integration:
+   - Install and configure `snack-sdk` package for server-side operations
+   - Implement Snack session management with proper authentication
+   - Configure Snack API endpoints for code bundling and execution
+   - Set up WebSocket connections for real-time code updates
+
+2. Implement web-based preview system:
+   - Integrate `react-native-web` for in-browser rendering of React Native components
+   - Create a responsive preview container with device simulation options
+   - Implement runtime error handling and display
+   - Add support for different React Native versions and Expo SDK versions
+   - Enable console output capture and display
+
+3. Develop mobile preview capabilities:
+   - Generate and display QR codes for Expo Go app scanning
+   - Implement deep linking for direct app opening
+   - Set up secure tunneling for device access to development server
+   - Support iOS and Android preview via Expo Go
+   - Handle device connection status and management
+
+4. Integrate Snackager for dependency management:
+   - Configure Snackager service for on-demand package bundling
+   - Implement dependency resolution and version management
+   - Create caching system for frequently used packages
+   - Support for npm, yarn, and Expo packages
+   - Handle native module dependencies appropriately
+
+5. Connect Monaco Editor with Snack runtime:
+   - Implement real-time code synchronization between editor and preview
+   - Set up debounced code execution to prevent excessive rebuilds
+   - Create file system abstraction compatible with Snack
+   - Support TypeScript, JavaScript, and JSX file types
+   - Implement syntax highlighting and error indication
+
+6. Optimize performance and user experience:
+   - Implement progressive loading for preview environments
+   - Add loading states and indicators during bundle generation
+   - Create fallback mechanisms for offline or error scenarios
+   - Optimize bundle size and loading times
+   - Implement session persistence for quick resumption
+
+7. Develop comprehensive error handling:
+   - Create detailed error reporting for bundling issues
+   - Implement runtime error capture and display
+   - Add dependency resolution error handling
+   - Provide actionable error messages and suggestions
+   - Support debugging tools integration
+
+# Test Strategy:
+1. Unit test Snack SDK integration:
+   - Verify proper session creation and management
+   - Test code bundling with various React Native components
+   - Validate WebSocket connections and real-time updates
+   - Test error handling for malformed code
+
+2. Test web-based preview functionality:
+   - Verify rendering of basic React Native components
+   - Test complex layouts and UI components
+   - Validate responsive design simulation
+   - Test console output capture and display
+   - Verify hot reloading functionality with code changes
+
+3. Validate mobile preview capabilities:
+   - Test QR code generation and scanning with Expo Go
+   - Verify preview loading on physical iOS and Android devices
+   - Test deep linking functionality
+   - Validate secure tunneling for device access
+   - Test preview across different network conditions
+
+4. Test Snackager dependency management:
+   - Verify resolution of various npm packages
+   - Test handling of native module dependencies
+   - Validate caching system for repeated package requests
+   - Test version compatibility management
+   - Verify handling of private and scoped packages
+
+5. Integration test with Monaco Editor:
+   - Validate real-time code synchronization
+   - Test debounced execution with rapid typing
+   - Verify file system abstraction with multiple file types
+   - Test syntax highlighting and error indication
+   - Validate TypeScript support and type checking
+
+6. Performance testing:
+   - Measure initial load time for preview environments
+   - Test bundle generation time for various project sizes
+   - Validate resource usage during preview sessions
+   - Test concurrent user scenarios
+   - Measure WebSocket performance under load
+
+7. End-to-end testing:
+   - Create complete app scenarios from editor to preview
+   - Test full workflow from code writing to device preview
+   - Validate user experience across different devices
+   - Test error recovery scenarios
+   - Verify session persistence and resumption
+
+# Subtasks:
+## 1. Set up Snack SDK in Velocity Frontend [pending]
+### Dependencies: None
+### Description: Install and configure the Snack SDK package in the Velocity frontend to enable dynamic code bundling and execution.
+### Details:
+Install the snack-sdk package using npm or yarn. Configure SDK initialization with proper authentication tokens. Set up session management for persistent Snack instances. Create utility functions for Snack operations. Implement proper error handling for SDK initialization failures.
+
+## 2. Implement WebPlayer Transport for Browser Preview [pending]
+### Dependencies: 5.1
+### Description: Create a WebPlayer transport system that enables real-time rendering of React Native components in the browser using react-native-web.
+### Details:
+Integrate react-native-web for in-browser component rendering. Create a responsive preview container with device simulation options. Implement iframe-based isolation for the preview environment. Set up message passing between editor and preview container. Configure WebPlayer to handle different device dimensions and orientations.
+
+## 3. Configure Snackager for Dependency Bundling [pending]
+### Dependencies: 5.1
+### Description: Set up Snackager service integration to handle on-demand package bundling and dependency resolution for Snack projects.
+### Details:
+Configure Snackager service connection for package bundling. Implement dependency resolution and version management. Create caching system for frequently used packages to improve performance. Add support for npm, yarn, and Expo packages. Handle native module dependencies appropriately with fallbacks.
+
+## 4. Create Real-Time Code Synchronization with Monaco Editor [pending]
+### Dependencies: 5.1, 5.2
+### Description: Implement bidirectional synchronization between Monaco Editor and Snack runtime for instant code updates and preview.
+### Details:
+Set up debounced code execution to prevent excessive rebuilds. Create file system abstraction compatible with Snack. Implement real-time code synchronization between editor and preview. Support TypeScript, JavaScript, and JSX file types with proper transpilation. Add syntax highlighting and error indication in the editor based on runtime feedback.
+
+## 5. Implement Expo Go QR Code Generation [pending]
+### Dependencies: 5.1, 5.3
+### Description: Develop functionality to generate and display QR codes that allow previewing projects on physical devices using the Expo Go app.
+### Details:
+Generate QR codes for Expo Go app scanning. Implement deep linking for direct app opening. Set up secure tunneling for device access to development server. Support iOS and Android preview via Expo Go. Handle device connection status and management with real-time updates.
+
+## 6. Develop File Upload and Asset Management [pending]
+### Dependencies: 5.1, 5.3
+### Description: Create a system for handling file uploads and managing assets within Snack projects, including images, fonts, and other static resources.
+### Details:
+Implement drag-and-drop file upload functionality. Create asset management system for images, fonts, and other static files. Set up proper asset bundling and referencing in Snack projects. Handle asset optimization for different preview environments. Implement asset caching for improved performance.
+
+## 7. Implement SDK Version Management [pending]
+### Dependencies: 5.1, 5.3
+### Description: Create a system to manage and switch between different Expo SDK versions for compatibility with various project requirements.
+### Details:
+Implement SDK version selection interface. Configure Snack to use specific Expo SDK versions. Handle version-specific dependencies and polyfills. Create version compatibility checking for projects. Implement automatic suggestions for SDK updates based on used features.
+
+## 8. Develop Comprehensive Error Handling and Logging [pending]
+### Dependencies: 5.1, 5.2, 5.4
+### Description: Implement robust error handling and logging for runtime errors, bundling issues, and dependency problems in the Snack environment.
+### Details:
+Create detailed error reporting for bundling issues. Implement runtime error capture and display with source mapping. Add dependency resolution error handling with suggestions. Provide actionable error messages and fix recommendations. Support debugging tools integration for advanced troubleshooting.
+
+## 9. Optimize Performance for Instant Preview [pending]
+### Dependencies: 5.2, 5.3, 5.4
+### Description: Implement performance optimizations to ensure near-instant preview updates and smooth development experience.
+### Details:
+Implement progressive loading for preview environments. Add loading states and indicators during bundle generation. Create fallback mechanisms for offline or error scenarios. Optimize bundle size and loading times through code splitting. Implement session persistence for quick resumption after page refresh.
+
+## 10. Integrate with Existing Velocity Architecture [pending]
+### Dependencies: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9
+### Description: Ensure seamless integration of Expo Snack functionality with the existing Velocity platform architecture and user workflows.
+### Details:
+Connect Snack functionality with existing user authentication system. Integrate with project storage and version control. Implement project templates and starter kits using Snack. Create consistent UI/UX between Velocity and Snack components. Set up analytics and telemetry for Snack usage patterns.
+

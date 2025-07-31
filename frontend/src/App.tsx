@@ -10,9 +10,10 @@ import {
   FileExplorerDemo,
   ChatInterfaceDemo,
   OptimisticUIDemo,
+  PreviewDemo,
 } from '@/routes/lazy-routes'
 
-type DemoView = 'design' | 'store' | 'responsive' | 'editor' | 'explorer' | 'chat' | 'optimistic'
+type DemoView = 'design' | 'store' | 'responsive' | 'editor' | 'explorer' | 'chat' | 'optimistic' | 'preview'
 
 function App() {
   const [currentView, setCurrentView] = useState<DemoView>('design')
@@ -33,6 +34,7 @@ function App() {
         {currentView === 'explorer' && <FileExplorerDemo />}
         {currentView === 'chat' && <ChatInterfaceDemo />}
         {currentView === 'optimistic' && <OptimisticUIDemo />}
+        {currentView === 'preview' && <PreviewDemo />}
       </LazyBoundary>
     )
   }
@@ -88,6 +90,13 @@ function App() {
           size="sm"
         >
           Optimistic UI
+        </Button>
+        <Button
+          onClick={() => setCurrentView('preview')}
+          variant={currentView === 'preview' ? 'default' : 'outline'}
+          size="sm"
+        >
+          Mobile Preview
         </Button>
       </div>
       {renderView()}

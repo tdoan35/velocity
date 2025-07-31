@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: snackpub
+spec:
+  revisionHistoryLimit: 10
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 3
+  template:
+    spec:
+      restartPolicy: Always
+      containers:
+        - name: snackpub
+          image: us-central1-docker.pkg.dev/exponentjs/snack/snackpub:SetBySkaffold
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: snackpub-env
+          resources:
+            limits:
+              memory: 420Mi
+            requests:
+              memory: 420Mi
+              cpu: 130m
+          livenessProbe:
+            httpGet:
+              path: /status/live
+              port: 3013
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /status/ready
+              port: 3013
+            periodSeconds: 20

@@ -1,0 +1,5 @@
+{
+  "normalize": "https://cdn.jsdelivr.net/npm/normalize.css@8.0.1/normalize.min.css",
+  "babel-polyfill": "https://cdn.jsdelivr.net/npm/babel-polyfill@6.26.0/dist/polyfill.min.js",
+  "typescript": "https://cdn.jsdelivr.net/npm/typescript@2.4.2/lib/typescript.min.js"
+}

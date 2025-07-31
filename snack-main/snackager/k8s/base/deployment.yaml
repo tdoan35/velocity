@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: snackager
+spec:
+  minReadySeconds: 10
+  progressDeadlineSeconds: 500
+  revisionHistoryLimit: 10
+  strategy:
+    type: 'RollingUpdate'
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 5
+  template:
+    spec:
+      restartPolicy: Always
+      volumes:
+      - name: instance-credentials
+        secret:
+          secretName: git-account-credentials
+          defaultMode: 0600
+      containers:
+        - name: snackager
+          image: "us-central1-docker.pkg.dev/exponentjs/snack/snackager:SetInKustomizeYaml"
+          volumeMounts:
+          - mountPath: /var/secrets/github
+            name: instance-credentials
+          env:
+            - name: PORT
+              value: "3000"
+            - name: TMPDIR
+              value: /tmp
+          envFrom:
+          - configMapRef:
+              name: snackager-config
+          - secretRef:
+              name: snackager-config
+          ports:
+          - containerPort: 3000
+            name: http
+          resources:
+            limits:
+              memory: 5Gi
+            requests:
+              cpu: 105m
+              memory: 5Gi
+          livenessProbe:
+            failureThreshold: 1
+            httpGet:
+              path: /status
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 90
+          readinessProbe:
+            failureThreshold: 1
+            httpGet:
+              path: /status
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 1
+            timeoutSeconds: 90

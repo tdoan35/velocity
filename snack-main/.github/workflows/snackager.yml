@@ -1,0 +1,195 @@
+name: Snackager
+
+defaults:
+  run:
+    working-directory: snackager
+
+concurrency:
+  group: snackager-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: What environment should be deployed
+        type: choice
+        default: no-deploy
+        options:
+          - no-deploy
+          - staging
+          - production
+  pull_request:
+    paths:
+      - .github/actions/setup-google-cloud/**
+      - .github/actions/setup-snackager/**
+      - .github/workflows/snackager.yml
+      - snackager/**
+      - packages/snack-content/**
+      - packages/snack-require-context/**
+      - packages/snack-sdk/**
+      - .eslint*
+      - .prettier*
+      - yarn.lock
+      - turbo.json
+  push:
+    branches: [main]
+    paths:
+      - .github/actions/setup-google-cloud/**
+      - .github/actions/setup-snackager/**
+      - .github/workflows/snackager.yml
+      - snackager/**
+      - packages/snack-content/**
+      - packages/snack-require-context/**
+      - packages/snack-sdk/**
+      - .eslint*
+      - .prettier*
+      - yarn.lock
+      - turbo.json
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🏗 Setup repository
+        uses: actions/checkout@v3
+
+      - name: 🏗 Setup snackager
+        uses: ./.github/actions/setup-snackager
+
+      - name: 🚨 Lint snackager
+        run: yarn lint --max-warnings 0
+
+      - name: 🧪 Test snackager
+        run: yarn test --ci --maxWorkers 1
+
+  e2e:
+    # Takes a long time, best to only run this on PRs
+    if: ${{ github.event_name == 'pull_request' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5]
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🏗 Setup repository
+        uses: actions/checkout@v3
+
+      - name: 🏗 Setup snackager
+        uses: ./.github/actions/setup-snackager
+
+      - name: 🧪 Test snackager
+        run: yarn test:e2e --ci --shard=${{ matrix.shard }}/5
+
+  build:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: 🏗 Setup repository
+        uses: actions/checkout@v3
+
+      - name: 🏗 Setup Google Cloud SDK
+        uses: ./.github/actions/setup-google-cloud
+        with:
+          auth: true
+
+      - name: 🛠 Build snackager
+        run: skaffold build --filename snackager/skaffold.yaml --file-output snackager/build.json
+        working-directory: ./
+
+  deploy-staging:
+    if: ${{ (github.event.inputs.deploy == 'staging' && github.event_name != 'pull_request') || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+    needs: review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: snackager-staging
+      url: https://staging.snackager.expo.io/status
+    steps:
+      - name: 🏗 Setup repository
+        uses: actions/checkout@v3
+
+      - name: 🏗 Setup Google Cloud SDK
+        uses: ./.github/actions/setup-google-cloud
+        with:
+          auth: true
+
+      - name: 🛠 Build snackager
+        run: skaffold build --filename snackager/skaffold.yaml --file-output snackager/build.json
+        working-directory: ./
+        env:
+          SKAFFOLD_PUSH_IMAGE: 'true'
+
+      - name: 📋 Add change cause
+        run: kustomize edit add annotation kubernetes.io/change-cause:"Github Actions deploying $GITHUB_SHA at $(date)"
+        working-directory: snackager/k8s/staging
+
+      - name: 🚀 Deploy snackager
+        run: skaffold deploy --filename snackager/skaffold.yaml --status-check --build-artifacts snackager/build.json
+        working-directory: ./
+        env:
+          SKAFFOLD_PUSH_IMAGE: 'true'
+
+      - name: 💬 Notify Slack
+        uses: 8398a7/action-slack@v3
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_SNACK }}
+        with:
+          channel: '#snack'
+          status: ${{ job.status }}
+          author_name: Deploy Snackager to Staging
+          fields: message,commit,author,job,took
+
+  deploy-production:
+    if: ${{ github.event.inputs.deploy == 'production' && github.ref == 'refs/heads/main' }}
+    needs: review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: snackager-production
+      url: https://snackager.expo.io/status
+    steps:
+      - name: 🏗 Setup repository
+        uses: actions/checkout@v3
+
+      - name: 🏗 Setup Google Cloud SDK
+        uses: ./.github/actions/setup-google-cloud
+        with:
+          auth: true
+
+      - name: 🛠 Build snackager
+        run: skaffold build --filename snackager/skaffold.yaml --file-output snackager/build.json
+        working-directory: ./
+        env:
+          ENVIRONMENT: production
+          SKAFFOLD_PUSH_IMAGE: 'true'
+
+      - name: 📋 Add change cause
+        run: kustomize edit add annotation kubernetes.io/change-cause:"Github Actions deploying $GITHUB_SHA at $(date)"
+        working-directory: snackager/k8s/production
+
+      - name: 🚀 Deploy snackager
+        run: skaffold deploy --filename snackager/skaffold.yaml --status-check --build-artifacts snackager/build.json
+        working-directory: ./
+        env:
+          ENVIRONMENT: production
+          SKAFFOLD_PUSH_IMAGE: 'true'
+
+      - name: 💬 Notify Slack
+        if: ${{ always() }}
+        uses: 8398a7/action-slack@v3
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_SNACK }}
+        with:
+          channel: '#snack'
+          status: ${{ job.status }}
+          author_name: Deploy Snackager to Production
+          fields: message,commit,author,job,took
