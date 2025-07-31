@@ -27,6 +27,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { PreviewHelp } from './PreviewHelp';
 
 interface MobilePreviewProps {
   className?: string;
@@ -150,6 +151,11 @@ export function MobilePreview({ className, onShare }: MobilePreviewProps) {
                 <Maximize2 className="w-4 h-4" />
               }
             </Button>
+
+            <PreviewHelp 
+              context={session?.status === 'error' ? 'error' : 'controls'}
+              errorCode={session?.status === 'error' ? session.error : undefined}
+            />
 
             {onShare && (
               <Button
