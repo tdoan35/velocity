@@ -3,12 +3,12 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from '@/components/ui/popover'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Input } from '@/components/ui/input'
+} from '../ui/popover'
+import { Button } from '../ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs'
+import { ScrollArea } from '../ui/scroll-area'
+import { Input } from '../ui/input'
 import {
   HelpCircle,
   Book,
