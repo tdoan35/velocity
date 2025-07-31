@@ -506,7 +506,7 @@
         "description": "Implement Expo Snack integration into the Velocity platform to provide dynamic code bundling, real-time code execution, and live preview capabilities across web and mobile environments.",
         "details": "1. Set up Expo Snack SDK integration:\n   - Install and configure `snack-sdk` package for server-side operations\n   - Implement Snack session management with proper authentication\n   - Configure Snack API endpoints for code bundling and execution\n   - Set up WebSocket connections for real-time code updates\n\n2. Implement web-based preview system:\n   - Integrate `react-native-web` for in-browser rendering of React Native components\n   - Create a responsive preview container with device simulation options\n   - Implement runtime error handling and display\n   - Add support for different React Native versions and Expo SDK versions\n   - Enable console output capture and display\n\n3. Develop mobile preview capabilities:\n   - Generate and display QR codes for Expo Go app scanning\n   - Implement deep linking for direct app opening\n   - Set up secure tunneling for device access to development server\n   - Support iOS and Android preview via Expo Go\n   - Handle device connection status and management\n\n4. Integrate Snackager for dependency management:\n   - Configure Snackager service for on-demand package bundling\n   - Implement dependency resolution and version management\n   - Create caching system for frequently used packages\n   - Support for npm, yarn, and Expo packages\n   - Handle native module dependencies appropriately\n\n5. Connect Monaco Editor with Snack runtime:\n   - Implement real-time code synchronization between editor and preview\n   - Set up debounced code execution to prevent excessive rebuilds\n   - Create file system abstraction compatible with Snack\n   - Support TypeScript, JavaScript, and JSX file types\n   - Implement syntax highlighting and error indication\n\n6. Optimize performance and user experience:\n   - Implement progressive loading for preview environments\n   - Add loading states and indicators during bundle generation\n   - Create fallback mechanisms for offline or error scenarios\n   - Optimize bundle size and loading times\n   - Implement session persistence for quick resumption\n\n7. Develop comprehensive error handling:\n   - Create detailed error reporting for bundling issues\n   - Implement runtime error capture and display\n   - Add dependency resolution error handling\n   - Provide actionable error messages and suggestions\n   - Support debugging tools integration",
         "testStrategy": "1. Unit test Snack SDK integration:\n   - Verify proper session creation and management\n   - Test code bundling with various React Native components\n   - Validate WebSocket connections and real-time updates\n   - Test error handling for malformed code\n\n2. Test web-based preview functionality:\n   - Verify rendering of basic React Native components\n   - Test complex layouts and UI components\n   - Validate responsive design simulation\n   - Test console output capture and display\n   - Verify hot reloading functionality with code changes\n\n3. Validate mobile preview capabilities:\n   - Test QR code generation and scanning with Expo Go\n   - Verify preview loading on physical iOS and Android devices\n   - Test deep linking functionality\n   - Validate secure tunneling for device access\n   - Test preview across different network conditions\n\n4. Test Snackager dependency management:\n   - Verify resolution of various npm packages\n   - Test handling of native module dependencies\n   - Validate caching system for repeated package requests\n   - Test version compatibility management\n   - Verify handling of private and scoped packages\n\n5. Integration test with Monaco Editor:\n   - Validate real-time code synchronization\n   - Test debounced execution with rapid typing\n   - Verify file system abstraction with multiple file types\n   - Test syntax highlighting and error indication\n   - Validate TypeScript support and type checking\n\n6. Performance testing:\n   - Measure initial load time for preview environments\n   - Test bundle generation time for various project sizes\n   - Validate resource usage during preview sessions\n   - Test concurrent user scenarios\n   - Measure WebSocket performance under load\n\n7. End-to-end testing:\n   - Create complete app scenarios from editor to preview\n   - Test full workflow from code writing to device preview\n   - Validate user experience across different devices\n   - Test error recovery scenarios\n   - Verify session persistence and resumption",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           3,
           4
@@ -518,8 +518,8 @@
             "title": "Set up Snack SDK in Velocity Frontend",
             "description": "Install and configure the Snack SDK package in the Velocity frontend to enable dynamic code bundling and execution.",
             "dependencies": [],
-            "details": "Install the snack-sdk package using npm or yarn. Configure SDK initialization with proper authentication tokens. Set up session management for persistent Snack instances. Create utility functions for Snack operations. Implement proper error handling for SDK initialization failures.",
-            "status": "pending",
+            "details": "Install the snack-sdk package using npm or yarn. Configure SDK initialization with proper authentication tokens. Set up session management for persistent Snack instances. Create utility functions for Snack operations. Implement proper error handling for SDK initialization failures.\n<info added on 2025-07-31T07:58:14.427Z>\nPackage installed successfully. Core SnackService implementation completed with session creation, code updates, dependency management, and 30-second timeout handling. React hook useSnackSession created to provide easy component integration with loading states, error handling, and automatic session cleanup.\n</info added on 2025-07-31T07:58:14.427Z>",
+            "status": "done",
             "testStrategy": "Unit test SDK initialization with valid and invalid credentials. Verify session creation and persistence. Test error handling for network failures during initialization. Validate configuration with different Expo SDK versions."
           },
           {
@@ -529,8 +529,8 @@
             "dependencies": [
               "5.1"
             ],
-            "details": "Integrate react-native-web for in-browser component rendering. Create a responsive preview container with device simulation options. Implement iframe-based isolation for the preview environment. Set up message passing between editor and preview container. Configure WebPlayer to handle different device dimensions and orientations.",
-            "status": "pending",
+            "details": "Integrate react-native-web for in-browser component rendering. Create a responsive preview container with device simulation options. Implement iframe-based isolation for the preview environment. Set up message passing between editor and preview container. Configure WebPlayer to handle different device dimensions and orientations.\n<info added on 2025-07-31T08:01:07.262Z>\nImplementation completed with comprehensive WebPlayer transport system. Created three core components: SnackWebPlayer for device simulation and iframe-based rendering with fullscreen capabilities, SnackPreviewPanel for preview management interface, and SnackEditorIntegration for real-time bidirectional synchronization between Monaco Editor and Snack runtime. System now provides isolated preview environment with responsive container, multiple device dimension support, and seamless message passing architecture for live code execution.\n</info added on 2025-07-31T08:01:07.262Z>",
+            "status": "done",
             "testStrategy": "Test rendering of basic and complex React Native components. Verify responsive behavior across different simulated device sizes. Test message passing between editor and preview. Validate error boundary functionality for runtime errors."
           },
           {
@@ -540,8 +540,8 @@
             "dependencies": [
               "5.1"
             ],
-            "details": "Configure Snackager service connection for package bundling. Implement dependency resolution and version management. Create caching system for frequently used packages to improve performance. Add support for npm, yarn, and Expo packages. Handle native module dependencies appropriately with fallbacks.",
-            "status": "pending",
+            "details": "Configure Snackager service connection for package bundling. Implement dependency resolution and version management. Create caching system for frequently used packages to improve performance. Add support for npm, yarn, and Expo packages. Handle native module dependencies appropriately with fallbacks.\n<info added on 2025-07-31T08:03:11.133Z>\nSuccessfully implemented comprehensive Snackager integration with full dependency management capabilities. Created SnackagerService featuring advanced dependency resolution, semantic version constraint checking, conflict detection system, and intelligent caching for performance optimization. Developed DependencyManager React component providing intuitive UI for npm package management including real-time search, add/remove functionality, version constraint visualization, and conflict indicators. Integration supports npm, yarn, and Expo packages with proper native module fallback handling as specified in requirements.\n</info added on 2025-07-31T08:03:11.133Z>",
+            "status": "done",
             "testStrategy": "Test package resolution with various dependency types. Verify caching mechanism effectiveness. Test handling of conflicting dependencies. Measure performance improvements with caching enabled vs. disabled."
           },
           {
@@ -552,8 +552,8 @@
               "5.1",
               "5.2"
             ],
-            "details": "Set up debounced code execution to prevent excessive rebuilds. Create file system abstraction compatible with Snack. Implement real-time code synchronization between editor and preview. Support TypeScript, JavaScript, and JSX file types with proper transpilation. Add syntax highlighting and error indication in the editor based on runtime feedback.",
-            "status": "pending",
+            "details": "Set up debounced code execution to prevent excessive rebuilds. Create file system abstraction compatible with Snack. Implement real-time code synchronization between editor and preview. Support TypeScript, JavaScript, and JSX file types with proper transpilation. Add syntax highlighting and error indication in the editor based on runtime feedback.\n<info added on 2025-07-31T08:04:07.295Z>\nSuccessfully implemented SnackEditorIntegration component with bidirectional synchronization between Monaco Editor and Snack runtime. Component features debounced code updates to prevent excessive rebuilds, automatic dependency detection from import statements, and comprehensive error handling for runtime issues. Real-time code synchronization is now fully operational with proper TypeScript and JSX transpilation support.\n</info added on 2025-07-31T08:04:07.295Z>",
+            "status": "done",
             "testStrategy": "Test synchronization with various file types and code changes. Measure latency between code changes and preview updates. Verify proper handling of syntax errors. Test concurrent editing scenarios."
           },
           {
@@ -564,8 +564,8 @@
               "5.1",
               "5.3"
             ],
-            "details": "Generate QR codes for Expo Go app scanning. Implement deep linking for direct app opening. Set up secure tunneling for device access to development server. Support iOS and Android preview via Expo Go. Handle device connection status and management with real-time updates.",
-            "status": "pending",
+            "details": "Generate QR codes for Expo Go app scanning. Implement deep linking for direct app opening. Set up secure tunneling for device access to development server. Support iOS and Android preview via Expo Go. Handle device connection status and management with real-time updates.\n<info added on 2025-07-31T08:04:35.788Z>\nSuccessfully implemented QR code generation for Expo Go device preview. Created a reusable QRCode component with canvas-based QR code rendering and fallback to external QR service API for reliability. The component includes proper error handling, loading states, and responsive sizing. Integrated QR code display into SnackPreviewPanel with correctly formatted Expo Go URLs and clear user instructions for scanning with mobile devices. The implementation supports both iOS and Android Expo Go apps and provides visual feedback for connection status.\n</info added on 2025-07-31T08:04:35.788Z>",
+            "status": "done",
             "testStrategy": "Test QR code generation with different project configurations. Verify scanning functionality on iOS and Android devices. Test connection status tracking. Validate secure tunneling for private networks."
           },
           {
@@ -577,7 +577,7 @@
               "5.3"
             ],
             "details": "Implement drag-and-drop file upload functionality. Create asset management system for images, fonts, and other static files. Set up proper asset bundling and referencing in Snack projects. Handle asset optimization for different preview environments. Implement asset caching for improved performance.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test uploading various file types and sizes. Verify proper asset referencing in React Native code. Test asset optimization for web and mobile previews. Validate caching mechanism for frequently used assets."
           },
           {
@@ -589,7 +589,7 @@
               "5.3"
             ],
             "details": "Implement SDK version selection interface. Configure Snack to use specific Expo SDK versions. Handle version-specific dependencies and polyfills. Create version compatibility checking for projects. Implement automatic suggestions for SDK updates based on used features.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test switching between different SDK versions. Verify compatibility checks with various feature sets. Test dependency resolution across SDK versions. Validate polyfill loading for older SDK versions."
           },
           {
@@ -602,7 +602,7 @@
               "5.4"
             ],
             "details": "Create detailed error reporting for bundling issues. Implement runtime error capture and display with source mapping. Add dependency resolution error handling with suggestions. Provide actionable error messages and fix recommendations. Support debugging tools integration for advanced troubleshooting.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test error reporting with various error types. Verify source mapping accuracy for runtime errors. Test error recovery mechanisms. Validate helpful suggestions for common errors."
           },
           {
@@ -615,7 +615,7 @@
               "5.4"
             ],
             "details": "Implement progressive loading for preview environments. Add loading states and indicators during bundle generation. Create fallback mechanisms for offline or error scenarios. Optimize bundle size and loading times through code splitting. Implement session persistence for quick resumption after page refresh.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Measure and benchmark preview update times. Test performance with large projects and complex dependencies. Verify session persistence across page reloads. Test progressive loading with slow network conditions."
           },
           {
@@ -634,7 +634,7 @@
               "5.9"
             ],
             "details": "Connect Snack functionality with existing user authentication system. Integrate with project storage and version control. Implement project templates and starter kits using Snack. Create consistent UI/UX between Velocity and Snack components. Set up analytics and telemetry for Snack usage patterns.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test end-to-end workflows combining Velocity and Snack features. Verify authentication and permission handling. Test project import/export between systems. Validate UI consistency across the integrated platform."
           }
         ]
@@ -645,8 +645,7 @@
         "description": "Develop enterprise-grade team creation, invitation, and permission management features with organization-level billing and SSO integration to enable professional collaborative development.",
         "status": "pending",
         "dependencies": [
-          1,
-          14
+          1
         ],
         "priority": "medium",
         "details": "1. Create organization-level team management system:\n   - Organization creation and hierarchical team structure\n   - Team creation and configuration within organizations\n   - Organization-level billing and subscription management\n   - Subscription tier tracking and enforcement\n   - Team member invitation via email workflows\n   - Enterprise onboarding and setup wizards\n2. Implement advanced Role-Based Access Control (RBAC):\n   - Custom roles with granular permissions\n   - Organization admin, team admin, editor, viewer roles\n   - Permission inheritance and override capabilities\n   - Resource-level permission management\n   - Audit logging for permission changes\n3. Develop SSO integration for enterprise authentication:\n   - SAML 2.0 and OAuth 2.0 SSO support\n   - Active Directory and identity provider integration\n   - Just-in-time (JIT) user provisioning\n   - Multi-factor authentication (MFA) enforcement\n   - Session management and security policies\n4. Implement comprehensive project sharing functionality:\n   - Share with individuals, teams, or organizations\n   - Custom permission levels per user/team/organization\n   - Public sharing with view-only access\n   - Invitation acceptance and enterprise onboarding flow\n   - Guest user management and restrictions\n5. Set up advanced Row Level Security policies:\n   - Organization-based data isolation\n   - Team-based access control for projects\n   - Permission-based access to project resources\n   - Automatic data isolation between organizations\n   - Compliance and data residency controls\n6. Add enterprise team activity dashboard:\n   - Organization-wide activity monitoring\n   - Team performance metrics and analytics\n   - Resource usage tracking and billing insights\n   - Project status overview across teams\n   - Security event monitoring and alerts\n7. Implement enterprise notification and communication system:\n   - Team event notifications with customizable preferences\n   - Organization-wide announcements\n   - Integration with Slack, Microsoft Teams, email\n   - Escalation workflows for critical events\n\nTechnology stack:\n- Supabase Auth with custom JWT claims for RBAC\n- SendGrid/Postmark for enterprise email workflows\n- SAML/OAuth libraries for SSO integration\n- Zustand for organization and team state management\n- React Query for enterprise data fetching and caching\n- Audit logging with compliance tracking",
@@ -656,118 +655,118 @@
             "id": 1,
             "title": "Design and Implement Organization Data Model",
             "description": "Create the database schema and API endpoints for organization-level structures including hierarchical team management and organization settings.",
+            "status": "pending",
             "dependencies": [],
             "details": "Implement Supabase tables for organizations, teams, and team members with proper relationships and constraints. Create API endpoints for CRUD operations on organizations and teams. Implement hierarchical team structure with parent-child relationships. Set up organization settings schema including billing information, subscription tiers, and customization options. Add database triggers for maintaining data integrity across the organization hierarchy.",
-            "status": "pending",
             "testStrategy": "Test organization and team creation with various hierarchical structures. Validate data integrity constraints and relationships. Test API endpoints for proper authorization and data validation. Verify organization settings persistence and retrieval."
           },
           {
             "id": 2,
             "title": "Implement Organization-Level Billing and Subscription Management",
             "description": "Develop the billing infrastructure for organization-level subscriptions, including tier management, payment processing, and usage tracking.",
+            "status": "pending",
             "dependencies": [
-              "6.1"
+              1
             ],
             "details": "Integrate with Stripe API for organization billing. Implement subscription tier models with feature flags and limits. Create billing admin dashboard for organization owners. Set up automated billing cycles and invoice generation. Implement usage tracking and quota enforcement based on subscription tier. Add billing history and payment method management. Create subscription upgrade/downgrade workflows with prorated billing.",
-            "status": "pending",
             "testStrategy": "Test subscription creation, modification, and cancellation flows. Validate feature access based on subscription tiers. Test payment processing with various payment methods. Verify usage tracking and quota enforcement. Test billing cycle transitions and invoice generation."
           },
           {
             "id": 3,
             "title": "Develop Role-Based Access Control (RBAC) System",
             "description": "Implement a comprehensive RBAC system with custom roles, granular permissions, and inheritance capabilities.",
+            "status": "pending",
             "dependencies": [
-              "6.1"
+              1
             ],
             "details": "Design and implement role definitions with granular permission attributes. Create predefined roles (organization admin, team admin, editor, viewer). Implement custom role creation and management. Set up permission inheritance hierarchy across organization levels. Add permission override capabilities for specific resources. Implement permission checking middleware for all API endpoints. Create role assignment UI for organization and team administrators.",
-            "status": "pending",
             "testStrategy": "Test role creation and permission assignment. Validate permission inheritance across organization hierarchy. Test permission overrides for specific resources. Verify permission enforcement on all protected endpoints. Test role assignment and removal for various user types."
           },
           {
             "id": 4,
             "title": "Implement SSO Integration for Enterprise Authentication",
             "description": "Develop Single Sign-On integration with major identity providers using SAML 2.0 and OAuth 2.0 protocols.",
+            "status": "pending",
             "dependencies": [
-              "6.1",
-              "6.3"
+              1,
+              3
             ],
             "details": "Implement SAML 2.0 authentication flow with identity provider configuration. Add OAuth 2.0 support for major providers (Google, Microsoft, Okta). Create identity provider configuration UI for organization administrators. Implement Just-in-Time (JIT) user provisioning based on SSO attributes. Add role mapping from identity provider groups to application roles. Implement session management with configurable timeout policies. Set up multi-factor authentication (MFA) enforcement options.",
-            "status": "pending",
             "testStrategy": "Test SSO authentication flows with multiple identity providers. Validate JIT user provisioning with various attribute mappings. Test role mapping from identity provider groups. Verify session management policies including timeout and renewal. Test MFA enforcement and fallback mechanisms."
           },
           {
             "id": 5,
             "title": "Develop Project Sharing and Collaboration Features",
             "description": "Implement comprehensive project sharing functionality with customizable permission levels for individuals, teams, and organizations.",
+            "status": "pending",
             "dependencies": [
-              "6.1",
-              "6.3"
+              1,
+              3
             ],
             "details": "Create project sharing UI with recipient search across users, teams, and organizations. Implement permission selection for shared resources (view, edit, admin). Add public sharing with view-only access and optional password protection. Implement sharing invitation workflows with email notifications. Create acceptance flows for new and existing users. Develop guest user management with limited permissions. Add sharing audit logs for compliance tracking.",
-            "status": "pending",
             "testStrategy": "Test project sharing with various recipient types and permission levels. Validate invitation workflows and acceptance processes. Test public sharing with and without password protection. Verify permission enforcement for shared projects. Test guest user access limitations and restrictions."
           },
           {
             "id": 6,
             "title": "Implement Row Level Security Policies",
             "description": "Set up advanced Row Level Security (RLS) policies in Supabase for organization-based data isolation and team-based access control.",
+            "status": "pending",
             "dependencies": [
-              "6.1",
-              "6.3"
+              1,
+              3
             ],
             "details": "Design and implement RLS policies for all data tables to enforce organization isolation. Create team-based access control policies for projects and resources. Implement permission-based RLS for fine-grained access control. Set up automatic data isolation between organizations. Add compliance controls for data residency and regulatory requirements. Create testing framework for RLS policy validation. Implement audit logging for security-relevant operations.",
-            "status": "pending",
             "testStrategy": "Test data isolation between organizations with various access patterns. Validate team-based access control for projects and resources. Test permission-based access with different user roles. Verify compliance with data residency requirements. Test audit logging for security events."
           },
           {
             "id": 7,
             "title": "Create Team Invitation and Onboarding Workflows",
             "description": "Develop comprehensive team invitation, acceptance, and onboarding workflows with email integration and enterprise onboarding features.",
+            "status": "pending",
             "dependencies": [
-              "6.1",
-              "6.3",
-              "6.5"
+              1,
+              3,
+              5
             ],
             "details": "Implement team member invitation system with email delivery via SendGrid/Postmark. Create invitation acceptance flows for new and existing users. Develop enterprise onboarding wizards for bulk user provisioning. Add team join request workflows with approval processes. Implement role assignment during invitation process. Create welcome experiences for new team members. Add invitation management UI for team administrators.",
-            "status": "pending",
             "testStrategy": "Test invitation creation and email delivery. Validate acceptance flows for various user states. Test enterprise onboarding with bulk user provisioning. Verify role assignment during invitation process. Test invitation management including revocation and resending."
           },
           {
             "id": 8,
             "title": "Develop Enterprise Team Activity Dashboard",
             "description": "Create an organization-wide activity monitoring dashboard with team performance metrics, resource usage tracking, and security event monitoring.",
+            "status": "pending",
             "dependencies": [
-              "6.1",
-              "6.3",
-              "6.6"
+              1,
+              3,
+              6
             ],
             "details": "Implement activity logging for all user actions across the platform. Create organization-wide activity dashboard with filtering and search. Develop team performance metrics and analytics visualizations. Add resource usage tracking with billing insights and quota monitoring. Implement project status overview across teams. Create security event monitoring with configurable alerts. Add export functionality for compliance reporting.",
-            "status": "pending",
             "testStrategy": "Test activity logging for various user actions. Validate dashboard metrics and visualizations. Test filtering and search functionality. Verify resource usage tracking accuracy. Test security event detection and alerting. Validate export functionality for compliance reports."
           },
           {
             "id": 9,
             "title": "Implement Enterprise Notification System",
             "description": "Develop a comprehensive notification system with customizable preferences, organization-wide announcements, and third-party integrations.",
+            "status": "pending",
             "dependencies": [
-              "6.1",
-              "6.8"
+              1,
+              8
             ],
             "details": "Create notification infrastructure for system and user-generated events. Implement notification preferences with granular control. Add organization-wide announcement functionality for administrators. Develop integration with Slack, Microsoft Teams, and email delivery. Implement notification center UI with read/unread status. Create escalation workflows for critical events. Add notification batching and digests for high-volume scenarios.",
-            "status": "pending",
             "testStrategy": "Test notification generation for various event types. Validate preference settings and enforcement. Test third-party integrations with Slack and Microsoft Teams. Verify email delivery for notifications. Test notification center UI and read/unread functionality. Validate escalation workflows for critical events."
           },
           {
             "id": 10,
             "title": "Implement Audit Logging and Compliance Features",
             "description": "Develop comprehensive audit logging with compliance tracking, retention policies, and export capabilities for enterprise requirements.",
+            "status": "pending",
             "dependencies": [
-              "6.1",
-              "6.3",
-              "6.6"
+              1,
+              3,
+              6
             ],
             "details": "Implement detailed audit logging for all security-relevant operations. Create audit log viewer with advanced filtering and search. Add compliance tracking for regulatory requirements (GDPR, HIPAA, SOC2). Implement log retention policies with configurable timeframes. Add tamper-evident logging with cryptographic verification. Create export functionality for compliance reporting. Implement real-time security alerting based on audit events.",
-            "status": "pending",
             "testStrategy": "Test audit logging for all security-relevant operations. Validate log viewer functionality with filtering and search. Test compliance tracking for various regulatory frameworks. Verify log retention policy enforcement. Test export functionality for compliance reporting. Validate security alerting based on audit events."
           }
         ]
@@ -936,80 +935,80 @@
         "id": 9,
         "title": "Implement GitHub Synchronization",
         "description": "Develop two-way synchronization between Velocity projects and GitHub repositories with commit management and branch support.",
+        "status": "pending",
+        "dependencies": [
+          1
+        ],
+        "priority": "medium",
         "details": "1. Set up GitHub API integration:\n   - OAuth authentication for repository access\n   - Repository creation and configuration\n   - Webhook setup for change notifications\n   - Permission management and scopes\n2. Implement repository synchronization:\n   - Initial repository creation from project\n   - File synchronization with conflict resolution\n   - Commit generation for project changes\n   - Pull latest changes from GitHub\n3. Develop branch management:\n   - Branch creation and switching\n   - Merge operations with conflict resolution\n   - Branch protection rules configuration\n   - Pull request creation and tracking\n4. Add commit history visualization:\n   - Commit timeline with author information\n   - Diff viewer for code changes\n   - Commit message generation and editing\n   - Blame view for file history\n5. Implement repository export for migration\n\nTechnology recommendations:\n- GitHub REST API v3 and GraphQL API v4\n- Octokit.js for GitHub API interaction\n- Simple Git for local git operations\n- Diff visualization libraries (e.g., diff2html)\n- Monaco Editor diff extension",
         "testStrategy": "1. Test GitHub repository creation and initialization\n2. Validate two-way synchronization with various change patterns\n3. Test branch creation, switching, and merging\n4. Verify conflict resolution during synchronization\n5. Test pull request creation and management\n6. Validate commit history visualization\n7. Test repository export functionality\n8. Verify performance with large repositories",
-        "priority": "medium",
-        "dependencies": [
-          14
-        ],
-        "status": "pending",
         "subtasks": [
           {
             "id": 1,
             "title": "Set up GitHub API Integration with OAuth Authentication",
             "description": "Implement OAuth authentication flow for GitHub API access, repository permissions management, and webhook configuration for real-time synchronization.",
+            "status": "pending",
             "dependencies": [],
             "details": "- Implement OAuth 2.0 authentication flow with GitHub\n- Configure required scopes (repo, user, admin:repo_hook)\n- Store and manage access tokens securely\n- Set up webhook listeners for repository events\n- Implement permission validation and error handling\n- Create API client using Octokit.js for GitHub API interactions\n- Add token refresh mechanism for long-term access",
-            "status": "pending",
             "testStrategy": "- Test OAuth authentication flow with valid and invalid credentials\n- Verify correct permission scopes are requested\n- Test webhook event reception and processing\n- Validate error handling for expired tokens\n- Test permission checks for various repository operations"
           },
           {
             "id": 2,
             "title": "Implement Repository Creation and Initial Synchronization",
             "description": "Develop functionality to create GitHub repositories from Velocity projects and perform initial synchronization of files and project structure.",
+            "status": "pending",
             "dependencies": [
-              "9.1"
+              1
             ],
             "details": "- Create new GitHub repositories with appropriate settings\n- Initialize repository with README and .gitignore\n- Implement initial project file upload to GitHub\n- Set up branch protection rules for main branch\n- Configure repository settings (visibility, collaborators)\n- Implement repository linking to Velocity projects\n- Add repository metadata storage in Velocity database",
-            "status": "pending",
             "testStrategy": "- Test repository creation with various project structures\n- Verify correct initialization of repository settings\n- Test file synchronization accuracy during initial upload\n- Validate branch protection rule application\n- Test repository linking and unlinking functionality"
           },
           {
             "id": 3,
             "title": "Develop Two-Way File Synchronization with Conflict Resolution",
             "description": "Implement bidirectional synchronization between Velocity projects and GitHub repositories with intelligent conflict detection and resolution.",
+            "status": "pending",
             "dependencies": [
-              "9.1",
-              "9.2"
+              1,
+              2
             ],
             "details": "- Implement file change detection in Velocity projects\n- Create commit generation for project changes\n- Develop pull mechanism for GitHub repository changes\n- Implement conflict detection algorithm\n- Create UI for conflict resolution with diff view\n- Add automatic conflict resolution for non-conflicting changes\n- Implement file locking during synchronization\n- Add synchronization status indicators",
-            "status": "pending",
             "testStrategy": "- Test file change detection accuracy\n- Verify commit generation with proper messages\n- Test pull operations with various change scenarios\n- Validate conflict detection for simultaneous changes\n- Test conflict resolution UI and functionality\n- Verify synchronization with large files and projects"
           },
           {
             "id": 4,
             "title": "Implement Branch Management and Pull Request Functionality",
             "description": "Develop branch creation, switching, merging capabilities and pull request management for collaborative development workflows.",
+            "status": "pending",
             "dependencies": [
-              "9.2",
-              "9.3"
+              2,
+              3
             ],
             "details": "- Implement branch creation from Velocity interface\n- Add branch switching functionality\n- Develop branch merging with conflict resolution\n- Implement pull request creation and tracking\n- Add pull request review functionality\n- Create branch protection rule configuration\n- Implement branch visualization in project explorer\n- Add branch metadata and status indicators",
-            "status": "pending",
             "testStrategy": "- Test branch creation with various naming conventions\n- Verify branch switching updates working files correctly\n- Test merge operations with and without conflicts\n- Validate pull request creation, updating, and closing\n- Test branch protection rule enforcement\n- Verify branch visualization accuracy"
           },
           {
             "id": 5,
             "title": "Develop Commit History Visualization and Diff Viewer",
             "description": "Create a visual commit history timeline with author information, commit messages, and an interactive diff viewer for code changes.",
+            "status": "pending",
             "dependencies": [
-              "9.3"
+              3
             ],
             "details": "- Implement commit history fetching from GitHub API\n- Create visual timeline component for commit history\n- Add author information and avatars to commits\n- Implement diff viewer using diff2html library\n- Add blame view for file history tracking\n- Create commit message generation and editing\n- Implement commit filtering and search functionality\n- Add commit grouping by date and author",
-            "status": "pending",
             "testStrategy": "- Test commit history retrieval with various repository sizes\n- Verify timeline visualization accuracy\n- Test diff viewer with various file types and change patterns\n- Validate blame view information accuracy\n- Test commit filtering and search functionality\n- Verify performance with large commit histories"
           },
           {
             "id": 6,
             "title": "Implement Repository Export and Migration Tools",
             "description": "Develop functionality to export repositories for migration, backup purposes, and implement tools for repository management and maintenance.",
+            "status": "pending",
             "dependencies": [
-              "9.2",
-              "9.3",
-              "9.4"
+              2,
+              3,
+              4
             ],
             "details": "- Implement repository export to ZIP/TAR formats\n- Add repository cloning functionality\n- Create repository migration tools between GitHub accounts\n- Implement repository backup scheduling\n- Add repository health check and maintenance tools\n- Create repository statistics and analytics\n- Implement repository archiving functionality\n- Add repository template creation from existing projects",
-            "status": "pending",
             "testStrategy": "- Test repository export with various project sizes\n- Verify export format integrity and completeness\n- Test repository cloning functionality\n- Validate migration between GitHub accounts\n- Test backup scheduling and execution\n- Verify repository health checks and maintenance tools"
           }
         ]
@@ -1211,12 +1210,10 @@
         "description": "Apply performance optimizations, monitoring, and production readiness improvements across the platform with specific PRD requirements including optimistic UI updates, incremental file updates, session pooling, and comprehensive production infrastructure.",
         "status": "pending",
         "dependencies": [
+          1,
           2,
           3,
-          4,
-          14,
-          7,
-          10
+          4
         ],
         "priority": "medium",
         "details": "1. Implement frontend performance optimizations:\n   - Code splitting and lazy loading for faster initial load times\n   - Memoization of expensive components and React.memo optimization\n   - Optimistic UI updates for immediate user feedback\n   - Asset optimization and caching strategies\n   - Bundle size reduction techniques and tree shaking\n   - Incremental file updates for efficient data synchronization\n2. Optimize backend performance:\n   - Database query optimization and indexing strategies\n   - Session pooling for efficient resource management\n   - Edge Function caching strategies with Vercel\n   - Rate limiting and request throttling implementation\n   - Connection pooling configuration for database efficiency\n   - Load balancing and auto-scaling considerations for high availability\n3. Set up comprehensive monitoring and observability:\n   - Error tracking with Sentry for production error monitoring\n   - Performance monitoring with Vercel Analytics\n   - Database performance tracking with Supabase Metrics\n   - API endpoint monitoring and alerting\n   - Real-time performance dashboards and metrics\n4. Implement production security enhancements:\n   - Content Security Policy (CSP) configuration and enforcement\n   - Input validation and sanitization across all endpoints\n   - CORS policy refinement for secure cross-origin requests\n   - Security auditing and compliance measures\n   - Regular automated security scanning and vulnerability assessments\n5. Configure Vercel hosting and deployment infrastructure:\n   - Automatic deployments with CI/CD pipeline\n   - Global CDN configuration for worldwide performance\n   - Environment-specific deployments (staging, production)\n   - Edge function optimization and caching strategies\n6. Add comprehensive logging and diagnostics:\n   - Structured logging across frontend and backend\n   - Performance metrics collection and analysis\n   - User interaction tracking for optimization insights\n   - Error reporting and crash analytics\n\nTechnology stack:\n- Sentry for error tracking and performance monitoring\n- Vercel Analytics for frontend performance insights\n- Supabase Metrics for backend and database monitoring\n- Lighthouse CI for automated performance testing\n- Security scanning tools (OWASP ZAP, Snyk)\n- React Profiler for component optimization\n- Vercel Edge Functions for global performance",
@@ -1226,82 +1223,82 @@
             "id": 1,
             "title": "Implement Frontend Code Splitting and Lazy Loading",
             "description": "Optimize initial load times by implementing code splitting and lazy loading for React components across the application.",
+            "status": "pending",
             "dependencies": [],
             "details": "Configure dynamic imports for route-based code splitting using React.lazy() and Suspense. Implement lazy loading for heavy components like Monaco Editor and AI chat interface. Set up route-based chunking in Vite configuration. Create loading states and fallbacks for lazy-loaded components. Measure and document performance improvements using Lighthouse and Web Vitals.",
-            "status": "pending",
             "testStrategy": "Benchmark application load times before and after implementation. Verify correct loading of components under various network conditions. Test fallback UI during component loading. Validate bundle size reduction using build analytics."
           },
           {
             "id": 2,
             "title": "Implement Optimistic UI Updates and Memoization",
             "description": "Enhance user experience with optimistic UI updates for immediate feedback and optimize component rendering with memoization techniques.",
+            "status": "pending",
             "dependencies": [
-              "12.1"
+              1
             ],
             "details": "Implement optimistic updates for critical user actions (file saving, project creation, settings changes). Add rollback mechanisms for failed operations. Apply React.memo to expensive components with proper dependency arrays. Implement useMemo and useCallback hooks for performance-critical sections. Create custom hooks for optimized state management. Configure proper key usage in list rendering for reconciliation optimization.",
-            "status": "pending",
             "testStrategy": "Test optimistic updates under various network conditions including failures. Measure and compare render times before and after memoization. Verify correct rollback behavior when server operations fail. Use React Profiler to validate rendering optimization effectiveness."
           },
           {
             "id": 3,
             "title": "Optimize Database Queries and Implement Connection Pooling",
             "description": "Enhance backend performance through database query optimization, indexing strategies, and connection pooling configuration.",
+            "status": "pending",
             "dependencies": [],
             "details": "Analyze and optimize critical database queries with proper indexing. Implement database connection pooling with optimal configuration for Supabase. Set up query caching for frequently accessed data. Create database monitoring and slow query logging. Implement pagination and cursor-based approaches for large data sets. Configure proper transaction management for critical operations.",
-            "status": "pending",
             "testStrategy": "Benchmark query performance before and after optimization. Test connection pool behavior under various load conditions. Validate query cache effectiveness with high-traffic scenarios. Verify proper connection handling during peak loads and server restarts."
           },
           {
             "id": 4,
             "title": "Implement Edge Function Caching and Rate Limiting",
             "description": "Optimize API performance with Vercel Edge Function caching strategies and implement rate limiting for API protection.",
+            "status": "pending",
             "dependencies": [
-              "12.3"
+              3
             ],
             "details": "Configure Vercel Edge Function caching for appropriate endpoints. Implement stale-while-revalidate caching strategy for dynamic content. Set up rate limiting middleware with appropriate thresholds based on user tiers. Create request throttling for resource-intensive operations. Implement cache invalidation strategies for data updates. Configure proper cache headers for browser and CDN caching.",
-            "status": "pending",
             "testStrategy": "Test cache hit rates under various traffic patterns. Verify rate limiting behavior with simulated high-frequency requests. Validate cache invalidation during data updates. Measure API response times with and without caching enabled."
           },
           {
             "id": 5,
             "title": "Set Up Comprehensive Error Tracking and Monitoring",
             "description": "Implement Sentry for error tracking and set up comprehensive monitoring with Vercel Analytics and Supabase Metrics.",
+            "status": "pending",
             "dependencies": [],
             "details": "Configure Sentry SDK for both frontend and backend error tracking. Set up performance monitoring with Sentry transactions. Implement Vercel Analytics for frontend performance insights. Configure Supabase Metrics for database monitoring. Create custom error boundaries for React components. Implement structured logging with appropriate log levels. Set up alerting thresholds and notification channels for critical issues.",
-            "status": "pending",
             "testStrategy": "Verify error capturing and reporting across different error types. Test performance monitoring accuracy with controlled scenarios. Validate alert triggering for threshold violations. Ensure proper context is captured with errors for debugging."
           },
           {
             "id": 6,
             "title": "Implement Content Security Policy and Security Enhancements",
             "description": "Enhance application security with Content Security Policy configuration, input validation, and CORS policy refinement.",
+            "status": "pending",
             "dependencies": [],
             "details": "Configure strict Content Security Policy headers with appropriate directives. Implement input validation and sanitization across all user inputs. Refine CORS policy for secure cross-origin requests. Set up security headers (X-Content-Type-Options, X-Frame-Options, etc.). Implement regular security scanning with OWASP ZAP and Snyk. Create security audit logging for sensitive operations. Configure proper authentication token handling and refresh mechanisms.",
-            "status": "pending",
             "testStrategy": "Validate CSP effectiveness against XSS attacks. Test input validation with malicious payloads. Verify CORS policy blocks unauthorized cross-origin requests. Run automated security scans and address identified vulnerabilities."
           },
           {
             "id": 7,
             "title": "Configure Vercel Deployment Infrastructure and CI/CD",
             "description": "Set up Vercel hosting with global CDN configuration, environment-specific deployments, and automated CI/CD pipeline.",
+            "status": "pending",
             "dependencies": [
-              "12.5",
-              "12.6"
+              5,
+              6
             ],
             "details": "Configure Vercel project settings for optimal performance. Set up environment-specific deployments (development, staging, production). Implement CI/CD pipeline with GitHub Actions integration. Configure global CDN settings for worldwide performance. Set up preview deployments for pull requests. Implement deployment protection rules and approval workflows. Configure domain settings and SSL certificates. Set up build caching for faster deployments.",
-            "status": "pending",
             "testStrategy": "Verify automatic deployments trigger correctly on code changes. Test environment variable handling across different environments. Validate CDN caching behavior for static assets. Measure deployment times and optimize build process."
           },
           {
             "id": 8,
             "title": "Implement Structured Logging and Performance Analytics",
             "description": "Set up comprehensive logging infrastructure and performance analytics for ongoing optimization insights.",
+            "status": "pending",
             "dependencies": [
-              "12.5",
-              "12.7"
+              5,
+              7
             ],
             "details": "Implement structured logging with consistent format across services. Set up log aggregation and search capabilities. Configure performance metrics collection for critical user journeys. Implement user interaction tracking for optimization insights. Create performance dashboards for key metrics. Set up automated performance regression testing with Lighthouse CI. Configure custom event tracking for business-critical actions. Implement log rotation and retention policies.",
-            "status": "pending",
             "testStrategy": "Verify log capture across different application components. Test log search and filtering capabilities. Validate performance metric accuracy against manual measurements. Ensure proper PII handling in logs and analytics data."
           }
         ]
@@ -1432,7 +1429,7 @@
     ],
     "metadata": {
       "created": "2025-07-22T22:49:25.170Z",
-      "updated": "2025-07-31T06:38:39.642Z",
+      "updated": "2025-07-31T08:06:15.756Z",
       "description": "Tasks for master context"
     }
   }

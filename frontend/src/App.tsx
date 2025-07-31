@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
+import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom'
 import { initializeStoreSubscriptions } from '@/stores'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,95 +13,172 @@ import {
   OptimisticUIDemo,
   PreviewDemo,
 } from '@/routes/lazy-routes'
+import { SnackProjects } from '@/pages/SnackProjects'
+import { SnackEditor } from '@/pages/SnackEditor'
+import { 
+  Home, 
+  Palette, 
+  Database, 
+  Layout, 
+  Code2, 
+  FolderOpen, 
+  MessageSquare, 
+  Zap, 
+  Smartphone,
+  Sparkles
+} from 'lucide-react'
 
-type DemoView = 'design' | 'store' | 'responsive' | 'editor' | 'explorer' | 'chat' | 'optimistic' | 'preview'
+function Navigation() {
+  const navItems = [
+    { path: '/', label: 'Home', icon: Home },
+    { path: '/design', label: 'Design System', icon: Palette },
+    { path: '/store', label: 'Store Demo', icon: Database },
+    { path: '/responsive', label: 'Responsive', icon: Layout },
+    { path: '/editor', label: 'Editor', icon: Code2 },
+    { path: '/explorer', label: 'File Explorer', icon: FolderOpen },
+    { path: '/chat', label: 'AI Chat', icon: MessageSquare },
+    { path: '/optimistic', label: 'Optimistic UI', icon: Zap },
+    { path: '/preview', label: 'Mobile Preview', icon: Smartphone },
+    { path: '/snack', label: 'Snack Projects', icon: Sparkles },
+  ]
+
+  return (
+    <div className="fixed top-4 left-4 z-50 flex gap-2 flex-wrap max-w-5xl bg-background/80 backdrop-blur-sm p-2 rounded-lg border shadow-sm">
+      {navItems.map(({ path, label, icon: Icon }) => (
+        <Link key={path} to={path}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-2"
+          >
+            <Icon className="w-4 h-4" />
+            {label}
+          </Button>
+        </Link>
+      ))}
+    </div>
+  )
+}
+
+function HomePage() {
+  return (
+    <div className="min-h-screen flex items-center justify-center p-8">
+      <div className="max-w-4xl text-center">
+        <h1 className="text-4xl font-bold mb-4">Velocity Development Platform</h1>
+        <p className="text-xl text-muted-foreground mb-8">
+          AI-powered mobile app development with live preview
+        </p>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-12">
+          <Link to="/snack">
+            <Button variant="outline" className="w-full h-24 flex flex-col gap-2">
+              <Sparkles className="w-6 h-6" />
+              <span>Snack Projects</span>
+            </Button>
+          </Link>
+          <Link to="/editor">
+            <Button variant="outline" className="w-full h-24 flex flex-col gap-2">
+              <Code2 className="w-6 h-6" />
+              <span>Code Editor</span>
+            </Button>
+          </Link>
+          <Link to="/preview">
+            <Button variant="outline" className="w-full h-24 flex flex-col gap-2">
+              <Smartphone className="w-6 h-6" />
+              <span>Mobile Preview</span>
+            </Button>
+          </Link>
+          <Link to="/chat">
+            <Button variant="outline" className="w-full h-24 flex flex-col gap-2">
+              <MessageSquare className="w-6 h-6" />
+              <span>AI Assistant</span>
+            </Button>
+          </Link>
+          <Link to="/design">
+            <Button variant="outline" className="w-full h-24 flex flex-col gap-2">
+              <Palette className="w-6 h-6" />
+              <span>Design System</span>
+            </Button>
+          </Link>
+          <Link to="/explorer">
+            <Button variant="outline" className="w-full h-24 flex flex-col gap-2">
+              <FolderOpen className="w-6 h-6" />
+              <span>File Explorer</span>
+            </Button>
+          </Link>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function App() {
-  const [currentView, setCurrentView] = useState<DemoView>('design')
-
   useEffect(() => {
     // Initialize store subscriptions
     const cleanup = initializeStoreSubscriptions()
     return cleanup
   }, [])
 
-  const renderView = () => {
-    return (
-      <LazyBoundary>
-        {currentView === 'design' && <DesignSystemDemo />}
-        {currentView === 'store' && <StoreDemo />}
-        {currentView === 'responsive' && <ResponsiveDemo />}
-        {currentView === 'editor' && <EditorDemo />}
-        {currentView === 'explorer' && <FileExplorerDemo />}
-        {currentView === 'chat' && <ChatInterfaceDemo />}
-        {currentView === 'optimistic' && <OptimisticUIDemo />}
-        {currentView === 'preview' && <PreviewDemo />}
-      </LazyBoundary>
-    )
-  }
-
   return (
-    <div>
-      <div className="fixed top-4 left-4 z-50 flex gap-2 flex-wrap max-w-4xl">
-        <Button
-          onClick={() => setCurrentView('design')}
-          variant={currentView === 'design' ? 'default' : 'outline'}
-          size="sm"
-        >
-          Design System
-        </Button>
-        <Button
-          onClick={() => setCurrentView('store')}
-          variant={currentView === 'store' ? 'default' : 'outline'}
-          size="sm"
-        >
-          Store Demo
-        </Button>
-        <Button
-          onClick={() => setCurrentView('responsive')}
-          variant={currentView === 'responsive' ? 'default' : 'outline'}
-          size="sm"
-        >
-          Responsive
-        </Button>
-        <Button
-          onClick={() => setCurrentView('editor')}
-          variant={currentView === 'editor' ? 'default' : 'outline'}
-          size="sm"
-        >
-          Editor
-        </Button>
-        <Button
-          onClick={() => setCurrentView('explorer')}
-          variant={currentView === 'explorer' ? 'default' : 'outline'}
-          size="sm"
-        >
-          Explorer
-        </Button>
-        <Button
-          onClick={() => setCurrentView('chat')}
-          variant={currentView === 'chat' ? 'default' : 'outline'}
-          size="sm"
-        >
-          AI Chat
-        </Button>
-        <Button
-          onClick={() => setCurrentView('optimistic')}
-          variant={currentView === 'optimistic' ? 'default' : 'outline'}
-          size="sm"
-        >
-          Optimistic UI
-        </Button>
-        <Button
-          onClick={() => setCurrentView('preview')}
-          variant={currentView === 'preview' ? 'default' : 'outline'}
-          size="sm"
-        >
-          Mobile Preview
-        </Button>
+    <Router>
+      <div>
+        <Routes>
+          {/* Main routes without navigation */}
+          <Route path="/snack/:projectId" element={<SnackEditor />} />
+          
+          {/* Routes with navigation */}
+          <Route path="*" element={
+            <>
+              <Navigation />
+              <Routes>
+                <Route path="/" element={<HomePage />} />
+                <Route path="/design" element={
+                  <LazyBoundary>
+                    <DesignSystemDemo />
+                  </LazyBoundary>
+                } />
+                <Route path="/store" element={
+                  <LazyBoundary>
+                    <StoreDemo />
+                  </LazyBoundary>
+                } />
+                <Route path="/responsive" element={
+                  <LazyBoundary>
+                    <ResponsiveDemo />
+                  </LazyBoundary>
+                } />
+                <Route path="/editor" element={
+                  <LazyBoundary>
+                    <EditorDemo />
+                  </LazyBoundary>
+                } />
+                <Route path="/explorer" element={
+                  <LazyBoundary>
+                    <FileExplorerDemo />
+                  </LazyBoundary>
+                } />
+                <Route path="/chat" element={
+                  <LazyBoundary>
+                    <ChatInterfaceDemo />
+                  </LazyBoundary>
+                } />
+                <Route path="/optimistic" element={
+                  <LazyBoundary>
+                    <OptimisticUIDemo />
+                  </LazyBoundary>
+                } />
+                <Route path="/preview" element={
+                  <LazyBoundary>
+                    <PreviewDemo />
+                  </LazyBoundary>
+                } />
+                <Route path="/snack" element={<SnackProjects />} />
+              </Routes>
+            </>
+          } />
+        </Routes>
       </div>
-      {renderView()}
-    </div>
+    </Router>
   )
 }
 

@@ -1,7 +1,0 @@
-/build/
-/node_modules/
-/dist/
-
-/src/client/utils/lintCode.tsx
-/src/client/vendor/eslint.js
-/typings/prettier.d.ts

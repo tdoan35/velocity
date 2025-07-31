@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { MobilePreview } from '@/components/preview/MobilePreview';
+import { SnackIntegrationDemo } from '@/components/preview/SnackIntegrationDemo';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,10 +14,11 @@ import {
   Users,
   AlertCircle,
   CheckCircle,
+  Code2,
 } from 'lucide-react';
 
 export function PreviewDemo() {
-  const [activeTab, setActiveTab] = useState<'preview' | 'features'>('preview');
+  const [activeTab, setActiveTab] = useState<'preview' | 'features' | 'snack'>('preview');
 
   const features = [
     {
@@ -75,7 +77,15 @@ export function PreviewDemo() {
             size="sm"
             onClick={() => setActiveTab('preview')}
           >
-            Live Preview
+            Appetize Preview
+          </Button>
+          <Button
+            variant={activeTab === 'snack' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setActiveTab('snack')}
+          >
+            <Code2 className="w-4 h-4 mr-2" />
+            Snack Preview
           </Button>
           <Button
             variant={activeTab === 'features' ? 'default' : 'ghost'}
@@ -150,6 +160,10 @@ export function PreviewDemo() {
                 </Card>
               </div>
             </div>
+          </div>
+        ) : activeTab === 'snack' ? (
+          <div className="h-[800px]">
+            <SnackIntegrationDemo />
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

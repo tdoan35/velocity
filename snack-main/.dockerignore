@@ -1,8 +1,0 @@
-# npm dependencies
-**/node_modules/
-
-# Compiled JavaScript
-packages/**/build
-
-# git-crypt keys
-.git/

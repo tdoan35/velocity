@@ -2,9 +2,9 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
-import { ThemeProvider } from '@/components/theme-provider'
-import { config, validateConfig } from '@/config/env'
-import { performanceMonitor, markPerformance, reportWebVitals } from '@/utils/performance'
+import { ThemeProvider } from './components/theme-provider'
+import { config, validateConfig } from './config/env'
+import { performanceMonitor, markPerformance, reportWebVitals } from './utils/performance'
 
 // Validate configuration
 validateConfig()

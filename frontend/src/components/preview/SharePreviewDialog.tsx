@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
-import { previewSharingService, CreateShareOptions } from '@/services/previewSharingService'
+import { previewSharingService } from '../../services/previewSharingService'
+import type { CreateShareOptions } from '../../services/previewSharingService'
 import {
   Dialog,
   DialogContent,
@@ -7,22 +8,22 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Switch } from '@/components/ui/switch'
+} from '../ui/dialog'
+import { Button } from '../ui/button'
+import { Input } from '../ui/input'
+import { Label } from '../ui/label'
+import { Textarea } from '../ui/textarea'
+import { Switch } from '../ui/switch'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Badge } from '@/components/ui/badge'
-import { useToast } from '@/hooks/use-toast'
+} from '../ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs'
+import { Badge } from '../ui/badge'
+import { useToast } from '../../hooks/use-toast'
 import { 
   Copy, 
   Link, 
