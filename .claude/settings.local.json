@@ -33,13 +33,20 @@
       "mcp__taskmaster-ai__complexity_report",
       "mcp__taskmaster-ai__analyze_project_complexity",
       "Bash(touch:*)",
-      "mcp__taskmaster-ai__move_task"
+      "mcp__taskmaster-ai__move_task",
+      "Bash(npx:*)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__playwright__browser_click",
+      "mcp__playwright__browser_console_messages"
     ]
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "taskmaster-ai",
     "supabase",
-    "github"
+    "github",
+    "playwright",
+    "github.com/upstash/context7-mcp"
   ]
 }

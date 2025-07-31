@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef, useState } from 'react'
-import { RealtimeChannel, RealtimePresenceState } from '@supabase/supabase-js'
+import { RealtimeChannel } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/stores/useAppStore'
