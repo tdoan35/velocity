@@ -5,6 +5,7 @@ import { Button } from './components/ui/button'
 import { Textarea } from './components/ui/textarea'
 import { AuroraBackground } from './components/ui/aurora-background'
 import { MovingBorderWrapper } from './components/ui/moving-border'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,7 +41,11 @@ import {
   Menu,
   X,
   Moon,
-  Sun
+  Sun,
+  Lightbulb,
+  Layers,
+  Play,
+  Paperclip
 } from 'lucide-react'
 import { useTheme } from './components/theme-provider'
 
@@ -77,8 +82,54 @@ function NavigationContent() {
             <span className="text-foreground">Velocity</span>
           </Link>
           
+          {/* Center Navigation Links */}
+          <div className="hidden md:flex items-center gap-8">
+            <span className="text-sm font-medium text-foreground/40 cursor-not-allowed">
+              Features
+            </span>
+            <span className="text-sm font-medium text-foreground/40 cursor-not-allowed">
+              Learn
+            </span>
+            <span className="text-sm font-medium text-foreground/40 cursor-not-allowed">
+              Pricing
+            </span>
+            <span className="text-sm font-medium text-foreground/40 cursor-not-allowed">
+              Enterprise
+            </span>
+          </div>
+          
           {/* Right side controls */}
           <div className="flex items-center gap-2">
+            {/* Hamburger Menu */}
+            <DropdownMenu open={isOpen} onOpenChange={setIsOpen} modal={false}>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="relative hover:bg-background/20 [&_svg]:drop-shadow-sm"
+                  aria-label="Open navigation menu"
+                >
+                  <Menu className={`h-5 w-5 transition-all ${isOpen ? 'rotate-90 opacity-0' : ''}`} />
+                  <X className={`h-5 w-5 absolute transition-all ${isOpen ? 'rotate-0 opacity-100' : 'rotate-90 opacity-0'}`} />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56 bg-background/95 backdrop-blur-md border-border/50">
+                {navItems.map(({ path, label, icon: Icon }, index) => (
+                  <React.Fragment key={path}>
+                    <DropdownMenuItem asChild>
+                      <Link 
+                        to={path} 
+                        className="flex items-center gap-3 cursor-pointer"
+                      >
+                        <Icon className="w-4 h-4" />
+                        <span>{label}</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    {(index === 0 || index === 3 || index === 7) && <DropdownMenuSeparator />}
+                  </React.Fragment>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             {/* Theme Toggle */}
             <Button
               variant="ghost"
@@ -90,37 +141,26 @@ function NavigationContent() {
               <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
               <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
             </Button>
+
+            {/* Login Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="hidden md:flex"
+              onClick={() => console.log('Login clicked')}
+            >
+              Log in
+            </Button>
             
-            {/* Hamburger Menu */}
-            <DropdownMenu open={isOpen} onOpenChange={setIsOpen} modal={false}>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="relative hover:bg-background/20 [&_svg]:drop-shadow-sm"
-                aria-label="Open navigation menu"
-              >
-                <Menu className={`h-5 w-5 transition-all ${isOpen ? 'rotate-90 opacity-0' : ''}`} />
-                <X className={`h-5 w-5 absolute transition-all ${isOpen ? 'rotate-0 opacity-100' : 'rotate-90 opacity-0'}`} />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 bg-background/95 backdrop-blur-md border-border/50">
-              {navItems.map(({ path, label, icon: Icon }, index) => (
-                <React.Fragment key={path}>
-                  <DropdownMenuItem asChild>
-                    <Link 
-                      to={path} 
-                      className="flex items-center gap-3 cursor-pointer"
-                    >
-                      <Icon className="w-4 h-4" />
-                      <span>{label}</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  {(index === 0 || index === 3 || index === 7) && <DropdownMenuSeparator />}
-                </React.Fragment>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+            {/* Get Started Button */}
+            <Button
+              size="sm"
+              className="hidden md:flex bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={() => console.log('Get started clicked')}
+            >
+              Get Started
+            </Button>
+            
           </div>
         </div>
       </nav>
@@ -175,6 +215,15 @@ function HomePage() {
                   className="min-h-[120px] p-4 pr-24 resize-none border-0 bg-background/50 backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:ring-offset-0"
                 />
                 <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute bottom-3 left-3 h-8 w-8 text-muted-foreground hover:text-foreground"
+                  onClick={() => console.log('Attach image clicked')}
+                  aria-label="Attach image"
+                >
+                  <Paperclip className="w-4 h-4" />
+                </Button>
+                <Button
                   onClick={handleSubmit}
                   disabled={!prompt.trim()}
                   className="absolute bottom-3 right-3 h-10 px-4 bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed z-20"
@@ -186,43 +235,48 @@ function HomePage() {
             </MovingBorderWrapper>
           </div>
           
-          {/* <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-12">
-            <Link to="/snack">
-              <Button variant="outline" className="w-full h-24 flex flex-col gap-2">
-                <Sparkles className="w-6 h-6" />
-                <span>Snack Projects</span>
-              </Button>
-            </Link>
-            <Link to="/editor">
-              <Button variant="outline" className="w-full h-24 flex flex-col gap-2">
-                <Code2 className="w-6 h-6" />
-                <span>Code Editor</span>
-              </Button>
-            </Link>
-            <Link to="/preview">
-              <Button variant="outline" className="w-full h-24 flex flex-col gap-2">
-                <Smartphone className="w-6 h-6" />
-                <span>Mobile Preview</span>
-              </Button>
-            </Link>
-            <Link to="/chat">
-              <Button variant="outline" className="w-full h-24 flex flex-col gap-2">
-                <MessageSquare className="w-6 h-6" />
-                <span>AI Assistant</span>
-              </Button>
-            </Link>
-            <Link to="/design">
-              <Button variant="outline" className="w-full h-24 flex flex-col gap-2">
-                <Palette className="w-6 h-6" />
-                <span>Design System</span>
-              </Button>
-            </Link>
-            <Link to="/explorer">
-              <Button variant="outline" className="w-full h-24 flex flex-col gap-2">
-                <FolderOpen className="w-6 h-6" />
-                <span>File Explorer</span>
-              </Button>
-            </Link>
+          {/* <div className="grid grid-cols-1 md:grid-cols-3 gap-16 mt-16 max-w-3xl mx-auto">
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer bg-background/60 backdrop-blur-sm border-border/50">
+              <CardHeader className="text-center pb-3">
+                <div className="mx-auto mb-3 w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center">
+                  <Lightbulb className="w-6 h-6 text-blue-500" />
+                </div>
+                <CardTitle className="text-xl">Ideate</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CardDescription className="text-center">
+                  Input your ideas to get started.
+                </CardDescription>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer bg-background/60 backdrop-blur-sm border-border/50">
+              <CardHeader className="text-center pb-3">
+                <div className="mx-auto mb-3 w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center">
+                  <Layers className="w-6 h-6 text-purple-500" />
+                </div>
+                <CardTitle className="text-xl">Architect</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CardDescription className="text-center">
+                  Work with your AI team to design your app.
+                </CardDescription>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer bg-background/60 backdrop-blur-sm border-border/50">
+              <CardHeader className="text-center pb-3">
+                <div className="mx-auto mb-3 w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center">
+                  <Play className="w-6 h-6 text-green-500" />
+                </div>
+                <CardTitle className="text-xl">Execute</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CardDescription className="text-center">
+                  Build, test, and deploy your app with instantly.
+                </CardDescription>
+              </CardContent>
+            </Card>
           </div> */}
         </div>
       </div>

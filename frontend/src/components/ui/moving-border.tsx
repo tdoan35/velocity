@@ -61,7 +61,6 @@ export function MovingBorderWrapper({
       ref={containerRef}
       className={cn(
         "relative overflow-hidden bg-transparent p-[4px] transition-all duration-200",
-        isFocused && "p-[6px]",
         containerClassName,
       )}
       style={{
