@@ -72,6 +72,9 @@
   * {
     @apply border-border;
   }
+  html {
+    overflow-y: scroll;
+  }
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-geist-sans);
@@ -82,5 +85,14 @@
   
   code, pre, kbd, samp {
     font-family: var(--font-geist-mono);
+  }
+}
+
+@layer utilities {
+  .animation-delay-2000 {
+    animation-delay: 2s;
+  }
+  .animation-delay-4000 {
+    animation-delay: 4s;
   }
 }

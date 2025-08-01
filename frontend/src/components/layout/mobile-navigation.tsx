@@ -16,7 +16,7 @@ const tabs = [
 
 export function MobileNavigation({ activeTab, onTabChange }: MobileNavigationProps) {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background md:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/50 bg-background/80 backdrop-blur-md md:hidden">
       <div className="flex h-16">
         {tabs.map((tab) => {
           const Icon = tab.icon

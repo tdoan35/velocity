@@ -53,7 +53,7 @@ export function AppLayout({ children, sidebar, header }: AppLayoutProps) {
       <div className="flex flex-1 flex-col">
         {/* Header */}
         {header && (
-          <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:px-6">
+          <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b border-border/50 bg-background/80 backdrop-blur-md px-4 sm:px-6">
             {sidebar && (
               <Button
                 variant="ghost"
