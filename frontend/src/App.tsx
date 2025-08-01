@@ -6,6 +6,7 @@ import { Textarea } from './components/ui/textarea'
 import { AuroraBackground } from './components/ui/aurora-background'
 import { MovingBorderWrapper } from './components/ui/moving-border'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card'
+import { AnimatedTooltip } from './components/ui/animated-tooltip'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -235,49 +236,31 @@ function HomePage() {
             </MovingBorderWrapper>
           </div>
           
-          {/* <div className="grid grid-cols-1 md:grid-cols-3 gap-16 mt-16 max-w-3xl mx-auto">
-            <Card className="hover:shadow-lg transition-shadow cursor-pointer bg-background/60 backdrop-blur-sm border-border/50">
-              <CardHeader className="text-center pb-3">
-                <div className="mx-auto mb-3 w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center">
+          <div className="relative mt-16">
+            {/* Icons grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-16 max-w-3xl mx-auto relative">
+              {/* Horizontal line - positioned to align with icon centers */}
+              <div className="absolute top-6 left-0 right-0 h-px bg-gradient-to-r from-transparent via-muted-foreground/20 to-transparent" />
+              
+              <AnimatedTooltip items={{ id: 1, name: "Ideate", designation: "Transform your ideas into reality" }}>
+                <div className="mx-auto w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center cursor-pointer transition-transform hover:scale-110 relative z-10 backdrop-blur-sm">
                   <Lightbulb className="w-6 h-6 text-blue-500" />
                 </div>
-                <CardTitle className="text-xl">Ideate</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <CardDescription className="text-center">
-                  Input your ideas to get started.
-                </CardDescription>
-              </CardContent>
-            </Card>
+              </AnimatedTooltip>
 
-            <Card className="hover:shadow-lg transition-shadow cursor-pointer bg-background/60 backdrop-blur-sm border-border/50">
-              <CardHeader className="text-center pb-3">
-                <div className="mx-auto mb-3 w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center">
+              <AnimatedTooltip items={{ id: 2, name: "Architect", designation: "Design your app ideas" }}>
+                <div className="mx-auto w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center cursor-pointer transition-transform hover:scale-110 relative z-10 backdrop-blur-sm">
                   <Layers className="w-6 h-6 text-purple-500" />
                 </div>
-                <CardTitle className="text-xl">Architect</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <CardDescription className="text-center">
-                  Work with your AI team to design your app.
-                </CardDescription>
-              </CardContent>
-            </Card>
+              </AnimatedTooltip>
 
-            <Card className="hover:shadow-lg transition-shadow cursor-pointer bg-background/60 backdrop-blur-sm border-border/50">
-              <CardHeader className="text-center pb-3">
-                <div className="mx-auto mb-3 w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center">
+              <AnimatedTooltip items={{ id: 3, name: "Execute", designation: "Build and deploy instantly" }}>
+                <div className="mx-auto w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center cursor-pointer transition-transform hover:scale-110 relative z-10 backdrop-blur-sm">
                   <Play className="w-6 h-6 text-green-500" />
                 </div>
-                <CardTitle className="text-xl">Execute</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <CardDescription className="text-center">
-                  Build, test, and deploy your app with instantly.
-                </CardDescription>
-              </CardContent>
-            </Card>
-          </div> */}
+              </AnimatedTooltip>
+            </div>
+          </div>
         </div>
       </div>
     </AuroraBackground>
