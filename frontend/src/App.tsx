@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom'
-import { initializeStoreSubscriptions } from '@/stores'
-import { Button } from '@/components/ui/button'
+import { initializeStoreSubscriptions } from './stores'
+import { Button } from './components/ui/button'
 import {
   LazyBoundary,
   DesignSystemDemo,
@@ -12,9 +12,9 @@ import {
   ChatInterfaceDemo,
   OptimisticUIDemo,
   PreviewDemo,
-} from '@/routes/lazy-routes'
-import { SnackProjects } from '@/pages/SnackProjects'
-import { SnackEditor } from '@/pages/SnackEditor'
+} from './routes/lazy-routes'
+import { SnackProjects } from './pages/SnackProjects'
+import { SnackEditor } from './pages/SnackEditor'
 import { 
   Home, 
   Palette, 
@@ -43,20 +43,33 @@ function Navigation() {
   ]
 
   return (
-    <div className="fixed top-4 left-4 z-50 flex gap-2 flex-wrap max-w-5xl bg-background/80 backdrop-blur-sm p-2 rounded-lg border shadow-sm">
-      {navItems.map(({ path, label, icon: Icon }) => (
-        <Link key={path} to={path}>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-2"
-          >
-            <Icon className="w-4 h-4" />
-            {label}
-          </Button>
-        </Link>
-      ))}
-    </div>
+    <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+      <nav className="container mx-auto px-4">
+        <div className="flex h-16 items-center justify-between">
+          {/* Logo/Brand */}
+          <Link to="/" className="flex items-center gap-2 font-semibold text-lg">
+            <Sparkles className="w-5 h-5 text-primary" />
+            Velocity
+          </Link>
+          
+          {/* Navigation Items */}
+          <div className="flex items-center gap-1">
+            {navItems.map(({ path, label, icon: Icon }) => (
+              <Link key={path} to={path}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-2 hover:bg-accent"
+                >
+                  <Icon className="w-4 h-4" />
+                  <span className="hidden md:inline">{label}</span>
+                </Button>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </nav>
+    </header>
   )
 }
 
@@ -130,50 +143,52 @@ function App() {
           <Route path="*" element={
             <>
               <Navigation />
-              <Routes>
-                <Route path="/" element={<HomePage />} />
-                <Route path="/design" element={
-                  <LazyBoundary>
-                    <DesignSystemDemo />
-                  </LazyBoundary>
-                } />
-                <Route path="/store" element={
-                  <LazyBoundary>
-                    <StoreDemo />
-                  </LazyBoundary>
-                } />
-                <Route path="/responsive" element={
-                  <LazyBoundary>
-                    <ResponsiveDemo />
-                  </LazyBoundary>
-                } />
-                <Route path="/editor" element={
-                  <LazyBoundary>
-                    <EditorDemo />
-                  </LazyBoundary>
-                } />
-                <Route path="/explorer" element={
-                  <LazyBoundary>
-                    <FileExplorerDemo />
-                  </LazyBoundary>
-                } />
-                <Route path="/chat" element={
-                  <LazyBoundary>
-                    <ChatInterfaceDemo />
-                  </LazyBoundary>
-                } />
-                <Route path="/optimistic" element={
-                  <LazyBoundary>
-                    <OptimisticUIDemo />
-                  </LazyBoundary>
-                } />
-                <Route path="/preview" element={
-                  <LazyBoundary>
-                    <PreviewDemo />
-                  </LazyBoundary>
-                } />
-                <Route path="/snack" element={<SnackProjects />} />
-              </Routes>
+              <div className="pt-16">
+                <Routes>
+                  <Route path="/" element={<HomePage />} />
+                  <Route path="/design" element={
+                    <LazyBoundary>
+                      <DesignSystemDemo />
+                    </LazyBoundary>
+                  } />
+                  <Route path="/store" element={
+                    <LazyBoundary>
+                      <StoreDemo />
+                    </LazyBoundary>
+                  } />
+                  <Route path="/responsive" element={
+                    <LazyBoundary>
+                      <ResponsiveDemo />
+                    </LazyBoundary>
+                  } />
+                  <Route path="/editor" element={
+                    <LazyBoundary>
+                      <EditorDemo />
+                    </LazyBoundary>
+                  } />
+                  <Route path="/explorer" element={
+                    <LazyBoundary>
+                      <FileExplorerDemo />
+                    </LazyBoundary>
+                  } />
+                  <Route path="/chat" element={
+                    <LazyBoundary>
+                      <ChatInterfaceDemo />
+                    </LazyBoundary>
+                  } />
+                  <Route path="/optimistic" element={
+                    <LazyBoundary>
+                      <OptimisticUIDemo />
+                    </LazyBoundary>
+                  } />
+                  <Route path="/preview" element={
+                    <LazyBoundary>
+                      <PreviewDemo />
+                    </LazyBoundary>
+                  } />
+                  <Route path="/snack" element={<SnackProjects />} />
+                </Routes>
+              </div>
             </>
           } />
         </Routes>
