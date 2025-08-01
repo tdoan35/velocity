@@ -28,6 +28,8 @@ import {
 } from './routes/lazy-routes'
 import { SnackProjects } from './pages/SnackProjects'
 import { SnackEditor } from './pages/SnackEditor'
+import { Modal } from './components/ui/modal'
+import { SignupForm } from './components/ui/signup-form'
 import { 
   Home, 
   Palette, 
@@ -52,6 +54,8 @@ import { useTheme } from './components/theme-provider'
 
 function NavigationContent() {
   const [isOpen, setIsOpen] = useState(false)
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
+  const [authMode, setAuthMode] = useState<'signup' | 'login'>('signup')
   const location = useLocation()
   const { theme, setTheme } = useTheme()
   
@@ -74,98 +78,114 @@ function NavigationContent() {
   }, [location])
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50">
-      <nav className="container mx-auto px-4">
-        <div className="flex h-16 items-center justify-between">
-          {/* Logo/Brand */}
-          <Link to="/" className="flex items-center gap-2 font-semibold text-lg [text-shadow:_0_1px_2px_rgb(0_0_0_/_20%)]">
-            <Sparkles className="w-5 h-5 text-primary drop-shadow-sm" />
-            <span className="text-foreground">Velocity</span>
-          </Link>
-          
-          {/* Center Navigation Links */}
-          <div className="hidden md:flex items-center gap-8">
-            <span className="text-sm font-medium text-foreground/40 cursor-not-allowed">
-              Features
-            </span>
-            <span className="text-sm font-medium text-foreground/40 cursor-not-allowed">
-              Learn
-            </span>
-            <span className="text-sm font-medium text-foreground/40 cursor-not-allowed">
-              Pricing
-            </span>
-            <span className="text-sm font-medium text-foreground/40 cursor-not-allowed">
-              Enterprise
-            </span>
-          </div>
-          
-          {/* Right side controls */}
-          <div className="flex items-center gap-2">
-            {/* Hamburger Menu */}
-            <DropdownMenu open={isOpen} onOpenChange={setIsOpen} modal={false}>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="relative hover:bg-background/20 [&_svg]:drop-shadow-sm"
-                  aria-label="Open navigation menu"
-                >
-                  <Menu className={`h-5 w-5 transition-all ${isOpen ? 'rotate-90 opacity-0' : ''}`} />
-                  <X className={`h-5 w-5 absolute transition-all ${isOpen ? 'rotate-0 opacity-100' : 'rotate-90 opacity-0'}`} />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56 bg-background/95 backdrop-blur-md border-border/50">
-                {navItems.map(({ path, label, icon: Icon }, index) => (
-                  <React.Fragment key={path}>
-                    <DropdownMenuItem asChild>
-                      <Link 
-                        to={path} 
-                        className="flex items-center gap-3 cursor-pointer"
-                      >
-                        <Icon className="w-4 h-4" />
-                        <span>{label}</span>
-                      </Link>
-                    </DropdownMenuItem>
-                    {(index === 0 || index === 3 || index === 7) && <DropdownMenuSeparator />}
-                  </React.Fragment>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {/* Theme Toggle */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-              className="relative hover:bg-background/20 [&_svg]:drop-shadow-sm"
-              aria-label="Toggle theme"
-            >
-              <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-              <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-            </Button>
+    <>
+      <header className="fixed top-0 left-0 right-0 z-50">
+        <nav className="container mx-auto px-4">
+          <div className="flex h-16 items-center relative">
+            {/* Logo/Brand - absolutely positioned */}
+            <Link to="/" className="absolute left-0 flex items-center gap-2 font-semibold text-lg [text-shadow:_0_1px_2px_rgb(0_0_0_/_20%)]">
+              <span className="text-xl drop-shadow-sm">✨</span>
+              <span className="text-foreground">Velocity</span>
+            </Link>
+            
+            {/* Center Navigation Links - centered in the full width */}
+            <div className="hidden md:flex items-center gap-8 mx-auto">
+              <span className="text-sm font-medium text-foreground/40 cursor-not-allowed">
+                Features
+              </span>
+              <span className="text-sm font-medium text-foreground/40 cursor-not-allowed">
+                Learn
+              </span>
+              <span className="text-sm font-medium text-foreground/40 cursor-not-allowed">
+                Pricing
+              </span>
+              <span className="text-sm font-medium text-foreground/40 cursor-not-allowed">
+                Enterprise
+              </span>
+            </div>
+            
+            {/* Right side controls - absolutely positioned */}
+            <div className="absolute right-0 flex items-center gap-2">
+              {/* Hamburger Menu */}
+              <DropdownMenu open={isOpen} onOpenChange={setIsOpen} modal={false}>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="relative hover:bg-background/20 [&_svg]:drop-shadow-sm"
+                    aria-label="Open navigation menu"
+                  >
+                    <Menu className={`h-5 w-5 transition-all ${isOpen ? 'rotate-90 opacity-0' : ''}`} />
+                    <X className={`h-5 w-5 absolute transition-all ${isOpen ? 'rotate-0 opacity-100' : 'rotate-90 opacity-0'}`} />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56 bg-background/95 backdrop-blur-md border-border/50">
+                  {navItems.map(({ path, label, icon: Icon }, index) => (
+                    <React.Fragment key={path}>
+                      <DropdownMenuItem asChild>
+                        <Link 
+                          to={path} 
+                          className="flex items-center gap-3 cursor-pointer"
+                        >
+                          <Icon className="w-4 h-4" />
+                          <span>{label}</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      {(index === 0 || index === 3 || index === 7) && <DropdownMenuSeparator />}
+                    </React.Fragment>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {/* Theme Toggle */}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+                className="relative hover:bg-background/20 [&_svg]:drop-shadow-sm"
+                aria-label="Toggle theme"
+              >
+                <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+              </Button>
 
-            {/* Login Button */}
-            <Button
-              variant="outline"
-              size="sm"
-              className="hidden md:flex"
-              onClick={() => console.log('Login clicked')}
-            >
-              Log in
-            </Button>
-            
-            {/* Get Started Button */}
-            <Button
-              size="sm"
-              className="hidden md:flex bg-blue-600 hover:bg-blue-700 text-white"
-              onClick={() => console.log('Get started clicked')}
-            >
-              Get Started
-            </Button>
-            
+              {/* Login Button */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="hidden md:flex"
+                onClick={() => {
+                  setAuthMode('login');
+                  setIsAuthModalOpen(true);
+                }}
+              >
+                Log in
+              </Button>
+              
+              {/* Get Started Button */}
+              <Button
+                size="sm"
+                className="hidden md:flex bg-blue-600 hover:bg-blue-700 text-white"
+                onClick={() => {
+                  setAuthMode('signup');
+                  setIsAuthModalOpen(true);
+                }}
+              >
+                Get Started
+              </Button>
+              
+            </div>
           </div>
-        </div>
-      </nav>
-    </header>
+        </nav>
+      </header>
+      
+      <Modal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)}>
+        <SignupForm 
+          mode={authMode} 
+          onClose={() => setIsAuthModalOpen(false)}
+          onModeSwitch={(newMode) => setAuthMode(newMode)}
+        />
+      </Modal>
+    </>
   )
 }
 
@@ -176,12 +196,21 @@ function Navigation() {
 
 function HomePage() {
   const [prompt, setPrompt] = useState('')
+  const [mouseX, setMouseX] = useState(50) // percentage
+  const [isHovering, setIsHovering] = useState(false)
 
   const handleSubmit = () => {
     if (prompt.trim()) {
       // TODO: Handle submission
       console.log('Submitting prompt:', prompt)
     }
+  }
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const percentage = (x / rect.width) * 100
+    setMouseX(Math.max(0, Math.min(100, percentage)))
   }
 
   return (
@@ -238,9 +267,43 @@ function HomePage() {
           
           <div className="relative mt-16">
             {/* Icons grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-16 max-w-3xl mx-auto relative">
+            <div 
+              className="grid grid-cols-1 md:grid-cols-3 gap-16 max-w-3xl mx-auto relative"
+              onMouseMove={handleMouseMove}
+              onMouseEnter={() => setIsHovering(true)}
+              onMouseLeave={() => setIsHovering(false)}
+            >
               {/* Horizontal line - positioned to align with icon centers */}
-              <div className="absolute top-6 left-0 right-0 h-px bg-gradient-to-r from-transparent via-muted-foreground/20 to-transparent" />
+              <div className="absolute top-6 left-[16.67%] right-[16.67%] h-px overflow-hidden">
+                <div 
+                  className="h-full w-full transition-opacity duration-300"
+                  style={{
+                    background: isHovering 
+                      ? `linear-gradient(90deg, 
+                          transparent 0%, 
+                          transparent ${Math.max(0, mouseX - 15)}%, 
+                          rgba(59, 130, 246, 0.1) ${Math.max(0, mouseX - 10)}%, 
+                          rgba(59, 130, 246, 0.3) ${Math.max(0, mouseX - 5)}%, 
+                          rgba(59, 130, 246, 0.8) ${mouseX}%, 
+                          rgba(59, 130, 246, 0.3) ${Math.min(100, mouseX + 5)}%, 
+                          rgba(59, 130, 246, 0.1) ${Math.min(100, mouseX + 10)}%, 
+                          transparent ${Math.min(100, mouseX + 15)}%, 
+                          transparent 100%)`
+                      : 'linear-gradient(90deg, transparent 0%, rgba(148, 163, 184, 0.2) 50%, transparent 100%)',
+                    opacity: isHovering ? 1 : 0.5,
+                  }}
+                />
+                {/* Glow effect */}
+                {isHovering && (
+                  <div 
+                    className="absolute -top-1 h-3 w-20 -translate-x-1/2 blur-md transition-all duration-75"
+                    style={{
+                      left: `${mouseX}%`,
+                      background: 'radial-gradient(ellipse at center, rgba(59, 130, 246, 0.6) 0%, transparent 70%)',
+                    }}
+                  />
+                )}
+              </div>
               
               <AnimatedTooltip items={{ id: 1, name: "Ideate", designation: "Transform your ideas into reality" }}>
                 <div className="mx-auto w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center cursor-pointer transition-transform hover:scale-110 relative z-10 backdrop-blur-sm">

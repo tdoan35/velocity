@@ -80,8 +80,8 @@ export function MovingBorderWrapper({
             className={cn(
               "h-60 w-60 transition-all duration-200",
               isFocused 
-                ? "bg-[radial-gradient(#3b82f6_40%,transparent_60%)] opacity-[1] scale-110" 
-                : "bg-[radial-gradient(#0ea5e9_40%,transparent_60%)] opacity-[0.8] scale-100",
+                ? "bg-[radial-gradient(circle_at_center,#3b82f6_30%,transparent_70%)] opacity-[1] scale-110" 
+                : "bg-[radial-gradient(circle_at_center,#0ea5e9_30%,transparent_70%)] opacity-[0.8] scale-100",
               borderClassName,
             )}
           />

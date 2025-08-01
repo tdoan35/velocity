@@ -91,7 +91,7 @@ export const AuroraBackground = ({
             `,
             backgroundSize: '200% 200%',
             backgroundPosition: '100% 100%',
-            animationDuration: '12.5s',
+            animationDuration: '7.5s',
           }}
         />
         
@@ -105,7 +105,7 @@ export const AuroraBackground = ({
             `,
             backgroundSize: '200% 200%',
             backgroundPosition: '100% 100%',
-            animationDuration: '12.5s',
+            animationDuration: '7.5s',
           }}
         />
         

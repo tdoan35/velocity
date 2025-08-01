@@ -78,8 +78,8 @@ module.exports = {
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        aurora: "aurora 10s ease-in-out infinite",
-        "aurora-reverse": "aurora 10s ease-in-out infinite reverse",
+        aurora: "aurora 6s ease-in-out infinite",
+        "aurora-reverse": "aurora 6s ease-in-out infinite reverse",
       },
     },
   },
