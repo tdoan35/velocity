@@ -1,7 +1,14 @@
-import { useEffect } from 'react'
-import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom'
+import React, { useEffect, useState } from 'react'
+import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom'
 import { initializeStoreSubscriptions } from './stores'
 import { Button } from './components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from './components/ui/dropdown-menu'
 import {
   LazyBoundary,
   DesignSystemDemo,
@@ -25,10 +32,15 @@ import {
   MessageSquare, 
   Zap, 
   Smartphone,
-  Sparkles
+  Sparkles,
+  Menu,
+  X
 } from 'lucide-react'
 
-function Navigation() {
+function NavigationContent() {
+  const [isOpen, setIsOpen] = useState(false)
+  const location = useLocation()
+  
   const navItems = [
     { path: '/', label: 'Home', icon: Home },
     { path: '/design', label: 'Design System', icon: Palette },
@@ -42,6 +54,11 @@ function Navigation() {
     { path: '/snack', label: 'Snack Projects', icon: Sparkles },
   ]
 
+  // Close menu when route changes
+  useEffect(() => {
+    setIsOpen(false)
+  }, [location])
+
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
       <nav className="container mx-auto px-4">
@@ -52,32 +69,52 @@ function Navigation() {
             Velocity
           </Link>
           
-          {/* Navigation Items */}
-          <div className="flex items-center gap-1">
-            {navItems.map(({ path, label, icon: Icon }) => (
-              <Link key={path} to={path}>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-2 hover:bg-accent"
-                >
-                  <Icon className="w-4 h-4" />
-                  <span className="hidden md:inline">{label}</span>
-                </Button>
-              </Link>
-            ))}
-          </div>
+          {/* Hamburger Menu */}
+          <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="relative"
+                aria-label="Open navigation menu"
+              >
+                <Menu className={`h-5 w-5 transition-all ${isOpen ? 'rotate-90 opacity-0' : ''}`} />
+                <X className={`h-5 w-5 absolute transition-all ${isOpen ? 'rotate-0 opacity-100' : 'rotate-90 opacity-0'}`} />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              {navItems.map(({ path, label, icon: Icon }, index) => (
+                <React.Fragment key={path}>
+                  <DropdownMenuItem asChild>
+                    <Link 
+                      to={path} 
+                      className="flex items-center gap-3 cursor-pointer"
+                    >
+                      <Icon className="w-4 h-4" />
+                      <span>{label}</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  {(index === 0 || index === 3 || index === 7) && <DropdownMenuSeparator />}
+                </React.Fragment>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </nav>
     </header>
   )
 }
 
+// Wrapper component to provide Router context
+function Navigation() {
+  return <NavigationContent />
+}
+
 function HomePage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-8">
       <div className="max-w-4xl text-center">
-        <h1 className="text-4xl font-bold mb-4">Velocity Development Platform</h1>
+        <h1 className="text-4xl font-bold mb-4">What are we building today?</h1>
         <p className="text-xl text-muted-foreground mb-8">
           AI-powered mobile app development with live preview
         </p>
