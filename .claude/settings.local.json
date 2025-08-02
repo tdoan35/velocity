@@ -50,7 +50,8 @@
       "mcp__github_com_upstash_context7-mcp__get-library-docs",
       "WebFetch(domain:ui.aceternity.com)",
       "mcp__playwright__browser_close",
-      "mcp__github_com_upstash_context7-mcp__resolve-library-id"
+      "mcp__github_com_upstash_context7-mcp__resolve-library-id",
+      "mcp__playwright__browser_hover"
     ]
   },
   "enableAllProjectMcpServers": true,

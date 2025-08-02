@@ -3,12 +3,16 @@ import React from "react";
 import { Label } from "./label";
 import { Input } from "./input";
 import { cn } from "../../lib/utils";
-import { X, Mail } from "lucide-react";
+import { X, Mail, Loader2 } from "lucide-react";
 import {
   IconBrandGithub,
   IconBrandGoogle,
 } from "@tabler/icons-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useToast } from "../../hooks/use-toast";
+import { authService } from "../../services/auth";
+import { useAuthStore } from "../../stores/useAuthStore";
+import { useNavigate } from "react-router-dom";
 
 interface SignupFormProps {
   mode?: 'signup' | 'login';
@@ -19,10 +23,153 @@ interface SignupFormProps {
 export function SignupForm({ mode = 'signup', onClose, onModeSwitch }: SignupFormProps) {
   const [showEmailForm, setShowEmailForm] = React.useState(false);
   const [agreedToTerms, setAgreedToTerms] = React.useState(true);
+  const [isLoading, setIsLoading] = React.useState(false);
   
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  // Form state
+  const [firstName, setFirstName] = React.useState('');
+  const [lastName, setLastName] = React.useState('');
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [confirmPassword, setConfirmPassword] = React.useState('');
+  
+  const { toast } = useToast();
+  const navigate = useNavigate();
+  const { setUser } = useAuthStore();
+  
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    console.log("Form submitted");
+    
+    // Validation
+    if (mode === 'signup') {
+      if (password !== confirmPassword) {
+        toast({
+          title: "Passwords don't match",
+          description: "Please make sure your passwords match.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (!agreedToTerms) {
+        toast({
+          title: "Terms not accepted",
+          description: "Please accept the terms of service to continue.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (password.length < 6) {
+        toast({
+          title: "Password too short",
+          description: "Password must be at least 6 characters long.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    
+    setIsLoading(true);
+    
+    try {
+      if (mode === 'signup') {
+        const { user, error } = await authService.signUp({
+          email,
+          password,
+          firstName,
+          lastName,
+        });
+        
+        if (error) {
+          toast({
+            title: "Sign up failed",
+            description: error.message,
+            variant: "destructive",
+          });
+        } else if (user) {
+          setUser(user);
+          toast({
+            title: "Account created!",
+            description: "Please check your email to verify your account.",
+          });
+          onClose?.();
+          navigate('/');
+        }
+      } else {
+        const { user, error } = await authService.login({
+          email,
+          password,
+        });
+        
+        if (error) {
+          toast({
+            title: "Login failed",
+            description: error.message,
+            variant: "destructive",
+          });
+        } else if (user) {
+          setUser(user);
+          toast({
+            title: "Welcome back!",
+            description: "You have successfully logged in.",
+          });
+          onClose?.();
+          navigate('/');
+        }
+      }
+    } catch (error) {
+      toast({
+        title: mode === 'signup' ? "Sign up failed" : "Login failed",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const handleGoogleAuth = async () => {
+    setIsLoading(true);
+    try {
+      const { error } = await authService.loginWithGoogle();
+      if (error) {
+        toast({
+          title: "Authentication failed",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Authentication failed",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const handleGitHubAuth = async () => {
+    setIsLoading(true);
+    try {
+      const { error } = await authService.loginWithGitHub();
+      if (error) {
+        toast({
+          title: "Authentication failed",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Authentication failed",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   const handleBackToOptions = () => {
@@ -61,10 +208,16 @@ export function SignupForm({ mode = 'signup', onClose, onModeSwitch }: SignupFor
             className="mt-8 flex flex-col space-y-4"
           >
           <button
-            className="group/btn shadow-input relative flex h-10 w-full items-center justify-start space-x-2 rounded-md bg-gray-50 px-4 font-medium text-black dark:bg-zinc-900 dark:shadow-[0px_0px_1px_1px_#262626]"
+            className="group/btn shadow-input relative flex h-10 w-full items-center justify-start space-x-2 rounded-md bg-gray-50 px-4 font-medium text-black dark:bg-zinc-900 dark:shadow-[0px_0px_1px_1px_#262626] disabled:opacity-50 disabled:cursor-not-allowed"
             type="button"
+            onClick={handleGoogleAuth}
+            disabled={isLoading}
           >
-            <IconBrandGoogle className="h-4 w-4 text-neutral-800 dark:text-neutral-300" />
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin text-neutral-800 dark:text-neutral-300" />
+            ) : (
+              <IconBrandGoogle className="h-4 w-4 text-neutral-800 dark:text-neutral-300" />
+            )}
             <span className="text-sm text-neutral-700 dark:text-neutral-300">
               Continue with Google
             </span>
@@ -72,10 +225,16 @@ export function SignupForm({ mode = 'signup', onClose, onModeSwitch }: SignupFor
           </button>
           
           <button
-            className="group/btn shadow-input relative flex h-10 w-full items-center justify-start space-x-2 rounded-md bg-gray-50 px-4 font-medium text-black dark:bg-zinc-900 dark:shadow-[0px_0px_1px_1px_#262626]"
+            className="group/btn shadow-input relative flex h-10 w-full items-center justify-start space-x-2 rounded-md bg-gray-50 px-4 font-medium text-black dark:bg-zinc-900 dark:shadow-[0px_0px_1px_1px_#262626] disabled:opacity-50 disabled:cursor-not-allowed"
             type="button"
+            onClick={handleGitHubAuth}
+            disabled={isLoading}
           >
-            <IconBrandGithub className="h-4 w-4 text-neutral-800 dark:text-neutral-300" />
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin text-neutral-800 dark:text-neutral-300" />
+            ) : (
+              <IconBrandGithub className="h-4 w-4 text-neutral-800 dark:text-neutral-300" />
+            )}
             <span className="text-sm text-neutral-700 dark:text-neutral-300">
               Continue with GitHub
             </span>
@@ -120,21 +279,51 @@ export function SignupForm({ mode = 'signup', onClose, onModeSwitch }: SignupFor
             <div className="mb-4 flex flex-col space-y-2 md:flex-row md:space-y-0 md:space-x-2">
               <LabelInputContainer>
                 <Label htmlFor="firstname">First name</Label>
-                <Input id="firstname" placeholder="John" type="text" />
+                <Input 
+                  id="firstname" 
+                  placeholder="John" 
+                  type="text"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  disabled={isLoading}
+                />
               </LabelInputContainer>
               <LabelInputContainer>
                 <Label htmlFor="lastname">Last name</Label>
-                <Input id="lastname" placeholder="Doe" type="text" />
+                <Input 
+                  id="lastname" 
+                  placeholder="Doe" 
+                  type="text"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  disabled={isLoading}
+                />
               </LabelInputContainer>
             </div>
           )}
           <LabelInputContainer className="mb-4">
             <Label htmlFor="email">Email Address</Label>
-            <Input id="email" placeholder="john@example.com" type="email" />
+            <Input 
+              id="email" 
+              placeholder="john@example.com" 
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={isLoading}
+              required
+            />
           </LabelInputContainer>
           <LabelInputContainer className={mode === 'signup' ? "mb-4" : "mb-8"}>
             <Label htmlFor="password">Password</Label>
-            <Input id="password" placeholder="••••••••" type="password" />
+            <Input 
+              id="password" 
+              placeholder="••••••••" 
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={isLoading}
+              required
+            />
           </LabelInputContainer>
           {mode === 'signup' && (
             <>
@@ -144,6 +333,10 @@ export function SignupForm({ mode = 'signup', onClose, onModeSwitch }: SignupFor
                   id="confirmpassword"
                   placeholder="••••••••"
                   type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  disabled={isLoading}
+                  required
                 />
               </LabelInputContainer>
 
@@ -170,10 +363,18 @@ export function SignupForm({ mode = 'signup', onClose, onModeSwitch }: SignupFor
           )}
 
           <button
-            className="group/btn relative block h-10 w-full rounded-md bg-gradient-to-br from-black to-neutral-600 font-medium text-white shadow-[0px_1px_0px_0px_#ffffff40_inset,0px_-1px_0px_0px_#ffffff40_inset] dark:bg-zinc-800 dark:from-zinc-900 dark:to-zinc-900 dark:shadow-[0px_1px_0px_0px_#27272a_inset,0px_-1px_0px_0px_#27272a_inset]"
+            className="group/btn relative block h-10 w-full rounded-md bg-gradient-to-br from-black to-neutral-600 font-medium text-white shadow-[0px_1px_0px_0px_#ffffff40_inset,0px_-1px_0px_0px_#ffffff40_inset] dark:bg-zinc-800 dark:from-zinc-900 dark:to-zinc-900 dark:shadow-[0px_1px_0px_0px_#27272a_inset,0px_-1px_0px_0px_#27272a_inset] disabled:opacity-50 disabled:cursor-not-allowed"
             type="submit"
+            disabled={isLoading}
           >
-            {mode === 'signup' ? 'Sign up' : 'Log in'} &rarr;
+            {isLoading ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {mode === 'signup' ? 'Signing up...' : 'Logging in...'}
+              </span>
+            ) : (
+              <>{mode === 'signup' ? 'Sign up' : 'Log in'} &rarr;</>
+            )}
             <BottomGradient />
           </button>
           

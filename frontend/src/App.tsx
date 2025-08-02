@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom'
 import { initializeStoreSubscriptions } from './stores'
+import { useAuthStore } from './stores/useAuthStore'
+import { authService } from './services/auth'
 import { Button } from './components/ui/button'
 import { Textarea } from './components/ui/textarea'
 import { AuroraBackground } from './components/ui/aurora-background'
@@ -28,8 +30,11 @@ import {
 } from './routes/lazy-routes'
 import { SnackProjects } from './pages/SnackProjects'
 import { SnackEditor } from './pages/SnackEditor'
+import { AuthCallback } from './pages/AuthCallback'
 import { Modal } from './components/ui/modal'
 import { SignupForm } from './components/ui/signup-form'
+import { AuthenticatedLayout } from './components/AuthenticatedLayout'
+import { Dashboard } from './pages/Dashboard'
 import { 
   Home, 
   Palette, 
@@ -58,18 +63,22 @@ function NavigationContent() {
   const [authMode, setAuthMode] = useState<'signup' | 'login'>('signup')
   const location = useLocation()
   const { theme, setTheme } = useTheme()
+  const { user, isAuthenticated, logout } = useAuthStore()
+  
+  const handleLogout = async () => {
+    await logout()
+  }
   
   const navItems = [
     { path: '/', label: 'Home', icon: Home },
-    { path: '/design', label: 'Design System', icon: Palette },
-    { path: '/store', label: 'Store Demo', icon: Database },
-    { path: '/responsive', label: 'Responsive', icon: Layout },
-    { path: '/editor', label: 'Editor', icon: Code2 },
-    { path: '/explorer', label: 'File Explorer', icon: FolderOpen },
-    { path: '/chat', label: 'AI Chat', icon: MessageSquare },
-    { path: '/optimistic', label: 'Optimistic UI', icon: Zap },
-    { path: '/preview', label: 'Mobile Preview', icon: Smartphone },
-    { path: '/snack', label: 'Snack Projects', icon: Sparkles },
+    { path: '/demo/design', label: 'Design System', icon: Palette },
+    { path: '/demo/store', label: 'Store Demo', icon: Database },
+    { path: '/demo/responsive', label: 'Responsive', icon: Layout },
+    { path: '/demo/editor', label: 'Editor', icon: Code2 },
+    { path: '/demo/explorer', label: 'File Explorer', icon: FolderOpen },
+    { path: '/demo/chat', label: 'AI Chat', icon: MessageSquare },
+    { path: '/demo/optimistic', label: 'Optimistic UI', icon: Zap },
+    { path: '/demo/preview', label: 'Mobile Preview', icon: Smartphone },
   ]
 
   // Close menu when route changes
@@ -80,7 +89,7 @@ function NavigationContent() {
   return (
     <>
       <header className="fixed top-0 left-0 right-0 z-50">
-        <nav className="container mx-auto px-4">
+        <nav className="w-full px-4">
           <div className="flex h-16 items-center relative">
             {/* Logo/Brand - absolutely positioned */}
             <Link to="/" className="absolute left-0 flex items-center gap-2 font-semibold text-lg [text-shadow:_0_1px_2px_rgb(0_0_0_/_20%)]">
@@ -148,30 +157,50 @@ function NavigationContent() {
                 <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
               </Button>
 
-              {/* Login Button */}
-              <Button
-                variant="outline"
-                size="sm"
-                className="hidden md:flex"
-                onClick={() => {
-                  setAuthMode('login');
-                  setIsAuthModalOpen(true);
-                }}
-              >
-                Log in
-              </Button>
-              
-              {/* Get Started Button */}
-              <Button
-                size="sm"
-                className="hidden md:flex bg-blue-600 hover:bg-blue-700 text-white"
-                onClick={() => {
-                  setAuthMode('signup');
-                  setIsAuthModalOpen(true);
-                }}
-              >
-                Get Started
-              </Button>
+              {/* Auth Buttons */}
+              {isAuthenticated ? (
+                <>
+                  <div className="hidden md:flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">
+                      {user?.email}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleLogout}
+                    >
+                      Log out
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Login Button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="hidden md:flex"
+                    onClick={() => {
+                      setAuthMode('login');
+                      setIsAuthModalOpen(true);
+                    }}
+                  >
+                    Log in
+                  </Button>
+                  
+                  {/* Get Started Button */}
+                  <Button
+                    size="sm"
+                    className="hidden md:flex bg-blue-600 hover:bg-blue-700 text-white"
+                    onClick={() => {
+                      setAuthMode('signup');
+                      setIsAuthModalOpen(true);
+                    }}
+                  >
+                    Get Started
+                  </Button>
+                </>
+              )}
               
             </div>
           </div>
@@ -198,6 +227,7 @@ function HomePage() {
   const [prompt, setPrompt] = useState('')
   const [mouseX, setMouseX] = useState(50) // percentage
   const [isHovering, setIsHovering] = useState(false)
+  const { isAuthenticated } = useAuthStore()
 
   const handleSubmit = () => {
     if (prompt.trim()) {
@@ -213,9 +243,8 @@ function HomePage() {
     setMouseX(Math.max(0, Math.min(100, percentage)))
   }
 
-  return (
-    <AuroraBackground showRadialGradient={false}>
-      <div className="flex items-center justify-center p-8 min-h-screen">
+  const content = (
+    <div className="flex items-center justify-center p-8 min-h-screen">
         <div className="max-w-4xl text-center relative z-10">
           <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
             What are we building today?
@@ -227,8 +256,8 @@ function HomePage() {
           <div className="w-full mb-8 relative">
             <MovingBorderWrapper
               borderRadius="0.5rem"
-              duration={5000}
-              borderClassName="bg-gradient-to-r from-transparent via-blue-500 to-transparent dark:from-transparent dark:via-blue-400 dark:to-transparent"
+              duration={3000}
+              borderClassName="bg-gradient-to-r from-blue-500 via-blue-500 to-blue-500 dark:from-blue-400 dark:via-blue-400 dark:to-blue-400"
               containerClassName="relative"
             >
               <div className="relative">
@@ -326,72 +355,138 @@ function HomePage() {
           </div>
         </div>
       </div>
+  )
+
+  // Only wrap with AuroraBackground if not authenticated (since AuthenticatedLayout already has it)
+  return isAuthenticated ? content : (
+    <AuroraBackground showRadialGradient={false}>
+      {content}
     </AuroraBackground>
   )
 }
 
 function App() {
+  const { setUser, checkAuth, isAuthenticated } = useAuthStore()
+  
   useEffect(() => {
     // Initialize store subscriptions
     const cleanup = initializeStoreSubscriptions()
-    return cleanup
-  }, [])
+    
+    // Check initial auth state
+    checkAuth()
+    
+    // Set up auth state listener
+    const authSubscription = authService.onAuthStateChange((user) => {
+      setUser(user)
+    })
+    
+    return () => {
+      cleanup()
+      authSubscription.unsubscribe()
+    }
+  }, [setUser, checkAuth])
 
   return (
     <Router>
       <div>
         <Routes>
+          {/* Auth callback route */}
+          <Route path="/auth/callback" element={<AuthCallback />} />
+          
           {/* Main routes without navigation */}
           <Route path="/snack/:projectId" element={<SnackEditor />} />
           
-          {/* Routes with navigation */}
-          <Route path="*" element={
+          {/* Authenticated routes with sidebar */}
+          <Route path="/" element={
+            isAuthenticated ? (
+              <AuroraBackground showRadialGradient={false}>
+                <AuthenticatedLayout />
+              </AuroraBackground>
+            ) : (
+              <>
+                <Navigation />
+                <HomePage />
+              </>
+            )
+          }>
+            {isAuthenticated && (
+              <>
+                <Route index element={<HomePage />} />
+                <Route path="dashboard" element={<Dashboard />} />
+                <Route path="apps" element={<SnackProjects />} />
+                <Route path="editor" element={
+                  <LazyBoundary>
+                    <EditorDemo />
+                  </LazyBoundary>
+                } />
+                <Route path="history" element={
+                  <div className="p-10">
+                    <h1 className="text-2xl font-bold">History</h1>
+                    <p className="text-muted-foreground mt-2">Your project history will appear here.</p>
+                  </div>
+                } />
+                <Route path="profile" element={
+                  <div className="p-10">
+                    <h1 className="text-2xl font-bold">Profile</h1>
+                    <p className="text-muted-foreground mt-2">Manage your profile settings.</p>
+                  </div>
+                } />
+                <Route path="settings" element={
+                  <div className="p-10">
+                    <h1 className="text-2xl font-bold">Settings</h1>
+                    <p className="text-muted-foreground mt-2">Configure your app preferences.</p>
+                  </div>
+                } />
+              </>
+            )}
+          </Route>
+          
+          {/* Public demo routes */}
+          <Route path="/demo/*" element={
             <>
               <Navigation />
               <div>
                 <Routes>
-                  <Route path="/" element={<HomePage />} />
-                  <Route path="/design" element={
+                  <Route path="design" element={
                     <LazyBoundary>
                       <DesignSystemDemo />
                     </LazyBoundary>
                   } />
-                  <Route path="/store" element={
+                  <Route path="store" element={
                     <LazyBoundary>
                       <StoreDemo />
                     </LazyBoundary>
                   } />
-                  <Route path="/responsive" element={
+                  <Route path="responsive" element={
                     <LazyBoundary>
                       <ResponsiveDemo />
                     </LazyBoundary>
                   } />
-                  <Route path="/editor" element={
+                  <Route path="editor" element={
                     <LazyBoundary>
                       <EditorDemo />
                     </LazyBoundary>
                   } />
-                  <Route path="/explorer" element={
+                  <Route path="explorer" element={
                     <LazyBoundary>
                       <FileExplorerDemo />
                     </LazyBoundary>
                   } />
-                  <Route path="/chat" element={
+                  <Route path="chat" element={
                     <LazyBoundary>
                       <ChatInterfaceDemo />
                     </LazyBoundary>
                   } />
-                  <Route path="/optimistic" element={
+                  <Route path="optimistic" element={
                     <LazyBoundary>
                       <OptimisticUIDemo />
                     </LazyBoundary>
                   } />
-                  <Route path="/preview" element={
+                  <Route path="preview" element={
                     <LazyBoundary>
                       <PreviewDemo />
                     </LazyBoundary>
                   } />
-                  <Route path="/snack" element={<SnackProjects />} />
                 </Routes>
               </div>
             </>

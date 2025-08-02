@@ -75,15 +75,18 @@ export function MovingBorderWrapper({
         )}
         style={{ borderRadius: `calc(${borderRadius} * 0.96)` }}
       >
-        <MovingBorder duration={duration} rx="30%" ry="30%">
+        <MovingBorder duration={duration} rx="8" ry="8">
           <div
             className={cn(
               "h-60 w-60 transition-all duration-200",
               isFocused 
-                ? "bg-[radial-gradient(circle_at_center,#3b82f6_30%,transparent_70%)] opacity-[1] scale-110" 
-                : "bg-[radial-gradient(circle_at_center,#0ea5e9_30%,transparent_70%)] opacity-[0.8] scale-100",
+                ? "bg-[radial-gradient(ellipse_at_center,#3b82f6_0%,transparent_50%)] opacity-[1]" 
+                : "bg-[radial-gradient(ellipse_at_center,#0ea5e9_0%,transparent_50%)] opacity-[0.8]",
               borderClassName,
             )}
+            style={{
+              transform: 'rotate(-45deg)',
+            }}
           />
         </MovingBorder>
       </div>

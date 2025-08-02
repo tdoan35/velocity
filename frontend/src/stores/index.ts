@@ -3,6 +3,7 @@ export { useAppStore } from './useAppStore'
 export { useEditorStore } from './useEditorStore'
 export { useFileSystemStore } from './useFileSystemStore'
 export { usePreferencesStore, usePreferences } from './usePreferencesStore'
+export { useAuthStore } from './useAuthStore'
 
 // Re-export types
 export type { 
@@ -21,6 +22,7 @@ import { useAppStore } from './useAppStore'
 import { useEditorStore } from './useEditorStore'
 import { useFileSystemStore } from './useFileSystemStore'
 import { usePreferencesStore } from './usePreferencesStore'
+import { useAuthStore } from './useAuthStore'
 
 // Helper to reset all stores (useful for testing or logout)
 export const resetAllStores = () => {
@@ -58,6 +60,7 @@ if (import.meta.env.DEV) {
     editor: useEditorStore,
     fileSystem: useFileSystemStore,
     preferences: usePreferencesStore,
+    auth: useAuthStore,
   }
   
   console.log('🔧 Zustand stores exposed to window.__stores for debugging')
