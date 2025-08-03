@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Outlet, useNavigate, useLocation, Link } from "react-router-dom";
 import { Sidebar, SidebarBody, SidebarLink } from "./ui/sidebar";
 import { projectService } from "@/services/projectService";
@@ -27,8 +27,10 @@ import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useAppStore } from "@/stores/useAppStore";
 import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 import { useTheme } from "./theme-provider";
-import { Sun, Moon, Menu, X, Edit, ChevronDown, ChevronRight, FolderOpen } from "lucide-react";
+import { Sun, Moon, Menu, X, Edit, ChevronDown, ChevronRight, FolderOpen, Check } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,12 +38,17 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "./ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "./ui/popover";
 
 export function AuthenticatedLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuthStore();
-  const { currentProject } = useAppStore();
+  const { currentProject, setCurrentProject } = useAppStore();
   const { theme, setTheme } = useTheme();
   const [pinned, setPinned] = useState(false);
   const [open, setOpen] = useState(pinned);
@@ -49,6 +56,10 @@ export function AuthenticatedLayout() {
   const [mounted, setMounted] = useState(false);
   const [userProjects, setUserProjects] = useState<any[]>([]);
   const [projectsExpanded, setProjectsExpanded] = useState(false);
+  const [isEditingProjectName, setIsEditingProjectName] = useState(false);
+  const [projectNameInput, setProjectNameInput] = useState("");
+  const [isSavingProjectName, setIsSavingProjectName] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   
   // Check if we're on a project page
   const isProjectPage = location.pathname.startsWith('/project/');
@@ -56,6 +67,49 @@ export function AuthenticatedLayout() {
   const handleLogout = async () => {
     await logout();
     navigate("/");
+  };
+
+  const handleProjectNameSave = async () => {
+    if (!currentProject || !projectNameInput.trim() || projectNameInput === currentProject.name) {
+      setIsEditingProjectName(false);
+      return;
+    }
+
+    setIsSavingProjectName(true);
+    try {
+      const { project, error } = await projectService.updateProject(currentProject.id, {
+        name: projectNameInput.trim()
+      });
+
+      if (!error && project) {
+        setCurrentProject(project);
+        // Update the project in userProjects list
+        setUserProjects(prev => 
+          prev.map(p => p.id === project.id ? project : p)
+        );
+      }
+    } catch (error) {
+      console.error('Error updating project name:', error);
+    } finally {
+      setIsSavingProjectName(false);
+      setIsEditingProjectName(false);
+    }
+  };
+
+  const handleProjectNameEdit = () => {
+    if (currentProject) {
+      setProjectNameInput(currentProject.name);
+      setIsEditingProjectName(true);
+      // Focus input and set cursor at end after popover opens
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+          // Set cursor position at the end of the text
+          const length = inputRef.current.value.length;
+          inputRef.current.setSelectionRange(length, length);
+        }
+      }, 100);
+    }
   };
 
   // Keep sidebar open when pinned
@@ -142,9 +196,49 @@ export function AuthenticatedLayout() {
           {/* Center Content - Show project title on project pages, navigation links otherwise */}
           <div className="hidden md:flex items-center gap-8 mx-auto">
             {isProjectPage && currentProject ? (
-              <div className="text-center">
-                <h1 className="text-lg font-semibold text-foreground">{currentProject.name}</h1>
-              </div>
+              <Popover open={isEditingProjectName} onOpenChange={setIsEditingProjectName}>
+                <PopoverTrigger asChild>
+                  <button 
+                    onClick={handleProjectNameEdit}
+                    className="group text-center cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg px-3 py-1 transition-colors flex items-center gap-2"
+                  >
+                    <h1 className="text-lg font-semibold text-foreground">{currentProject.name}</h1>
+                    <Edit className="w-4 h-4 opacity-0 group-hover:opacity-60 transition-opacity" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 px-3 pt-1">
+                  <div className="space-y-1">
+                    <Label htmlFor="project-name" className="text-xs text-muted-foreground">Project title</Label>
+                    <div className="flex gap-1.5 items-center">
+                      <Input
+                        id="project-name"
+                        ref={inputRef}
+                        value={projectNameInput}
+                        onChange={(e) => setProjectNameInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleProjectNameSave();
+                          } else if (e.key === 'Escape') {
+                            setIsEditingProjectName(false);
+                          }
+                        }}
+                        placeholder="Enter project name"
+                        className="flex-1 bg-background h-8 text-sm"
+                        disabled={isSavingProjectName}
+                      />
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={handleProjectNameSave}
+                        disabled={isSavingProjectName || !projectNameInput.trim() || projectNameInput === currentProject.name}
+                        className="h-8 w-8"
+                      >
+                        <Check className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
             ) : (
               <>
                 <span className="text-sm font-medium text-foreground/40 cursor-not-allowed transition-all duration-200 hover:text-foreground/60">

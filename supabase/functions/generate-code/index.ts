@@ -1,469 +1,179 @@
-// Supabase Edge Function for AI code generation with streaming and performance optimizations
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
-import { corsHeaders } from '../_shared/cors.ts'
-import { requireAuth } from '../_shared/auth.ts'
-import { rateLimiter } from '../_shared/rate-limiter.ts'
-import { createLogger } from '../_shared/logger.ts'
-import { historyTracker } from '../_shared/history-tracker.ts'
-import { getContextBuilder } from '../_shared/parallel-context-builder.ts'
-import { streamingHandler } from '../_shared/streaming-handler.ts'
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { corsHeaders } from "../_shared/cors.ts"
 
-interface GenerateCodeRequest {
-  prompt: string
-  projectId?: string
-  context?: {
-    projectStructure?: string[]
-    currentFile?: string
-    userHistory?: string[]
-    preferences?: Record<string, any>
-  }
-  options?: {
-    temperature?: number
-    maxTokens?: number
-    stream?: boolean
-    analyzeQuality?: boolean
-    autoEnhance?: boolean
-    targetQualityScore?: number
-  }
-}
+const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY')
 
-Deno.serve(async (req) => {
-  // Handle CORS preflight
+serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response(null, { headers: corsHeaders })
   }
 
   try {
-    // Authentication check
-    const authResult = await requireAuth(req)
-    if (!authResult.authorized) {
-      return new Response(JSON.stringify({ error: authResult.error }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
-    }
-
-    // Rate limiting
-    const rateLimitCheck = await rateLimiter.check(authResult.userId, 'ai-generation')
-    if (!rateLimitCheck.allowed) {
-      return new Response(JSON.stringify({ 
-        error: 'Rate limit exceeded',
-        retryAfter: rateLimitCheck.retryAfter 
-      }), {
-        status: 429,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
+    // Verify authentication
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return new Response(
+        JSON.stringify({ code: 401, message: 'Missing authorization header' }), 
+        {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
     }
 
     // Parse request body
-    const body: GenerateCodeRequest = await req.json()
-    const { prompt, projectId, context, options = {} } = body
+    const { prompt, projectId, context, options } = await req.json()
 
     if (!prompt) {
-      return new Response(JSON.stringify({ error: 'Prompt is required' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
+      return new Response(
+        JSON.stringify({ error: 'Prompt is required' }), 
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
     }
 
-    // Create logger with context
-    const logger = createLogger({ 
-      userId: authResult.userId,
-      requestId: crypto.randomUUID(),
-      projectId
-    })
-
-    // Log request
-    await logger.info('Code generation request', {
-      promptLength: prompt.length,
-      hasContext: !!context,
-      stream: options.stream
-    })
-
-    // Initialize Claude API client
-    const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY')
     if (!ANTHROPIC_API_KEY) {
       throw new Error('Anthropic API key not configured')
     }
 
-    // Track interaction start
-    const interactionStart = Date.now()
-    
-    // Get intelligent context assembly if projectId provided using parallel builder
-    let assembledContext = null
-    if (projectId) {
-      try {
-        const contextBuilder = getContextBuilder()
-        const contextResult = await contextBuilder.buildContext({
-          projectId,
-          userId: authResult.userId,
-          targetComponent: context?.currentFile?.includes('.tsx') ? 'component' : 'screen',
-          includePatterns: true,
-          includeHistory: true,
-          includeStructure: true,
-          includeDependencies: true,
-          maxItems: 10,
-          cacheKey: `${projectId}:${prompt.substring(0, 50)}`
-        })
+    // Prepare the system prompt
+    const systemPrompt = `You are an AI assistant helping to build a mobile app with React Native and Expo. 
+Your responses should be focused on mobile app development, UI/UX design, and React Native best practices.
+${context?.preferences?.conversationType === 'design_assistant' ? 
+  'You are acting as a design assistant, providing helpful suggestions and explanations about app design and implementation.' : 
+  'Generate clean, modern React Native code following best practices.'}`
 
-        assembledContext = {
-          patterns: contextResult.patterns,
-          relevantFiles: contextResult.history,
-          userHistory: contextResult.history,
-          projectStructure: contextResult.structure,
-          dependencies: contextResult.dependencies,
-          metadata: contextResult.metadata
-        }
-
-        await logger.info('Context built', {
-          buildTime: contextResult.metadata.buildTime,
-          cacheHit: contextResult.metadata.cacheHit,
-          itemCounts: contextResult.metadata.itemCounts
-        })
-      } catch (error) {
-        await logger.error('Context assembly error', { error: error.message })
+    // Build messages array
+    const messages = [
+      { 
+        role: 'system' as const, 
+        content: systemPrompt 
       }
+    ]
+
+    // Add conversation history if provided
+    if (context?.userHistory && context.userHistory.length > 0) {
+      // Add previous user messages as context (last 3 messages for context)
+      context.userHistory.slice(-3).forEach((msg: string, index: number) => {
+        messages.push({ role: 'user' as const, content: msg })
+        if (index < context.userHistory.length - 1) {
+          messages.push({ role: 'assistant' as const, content: 'I understand and will help you with that.' })
+        }
+      })
     }
 
-    // Prepare context-enhanced prompt
-    const enhancedPrompt = await buildEnhancedPrompt(prompt, context, assembledContext)
+    // Add current prompt
+    messages.push({ role: 'user' as const, content: prompt })
 
-    // Set up Claude API request
-    const claudeOptions = {
-      model: 'claude-3-5-sonnet-20241022',
-      messages: [{
-        role: 'user',
-        content: enhancedPrompt
-      }],
-      temperature: options.temperature ?? 0.7,
-      max_tokens: options.maxTokens ?? 4096,
-      stream: options.stream ?? true
-    }
-
-    // Make request to Claude API
-    const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
+    // Call Anthropic API
+    const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01'
       },
-      body: JSON.stringify(claudeOptions)
+      body: JSON.stringify({
+        model: 'claude-3-sonnet-20240229',
+        messages,
+        max_tokens: options?.maxTokens || 2048,
+        temperature: options?.temperature || 0.8,
+        stream: options?.stream !== false
+      })
     })
 
-    if (!claudeResponse.ok) {
-      const error = await claudeResponse.text()
-      throw new Error(`Claude API error: ${error}`)
-    }
-
-    // Handle streaming response with optimized handler
-    if (options.stream) {
-      // Create code generation stream
-      async function* generateCode() {
-        yield* streamingHandler.streamCodeGeneration(
-          prompt,
-          assembledContext,
-          async (p, ctx) => claudeResponse
-        )
-      }
-
-      // Track streaming metrics
-      let fullResponse = ''
-      let tokenCount = 0
-
-      const trackedGenerator = async function*() {
-        for await (const chunk of generateCode()) {
-          // Track content
-          if (chunk.type === 'code') {
-            fullResponse += chunk.content || chunk.delta || ''
-            tokenCount++
-          }
-
-          // Yield chunk to client
-          yield chunk
-
-          // On completion, track interaction
-          if (chunk.type === 'progress' && chunk.phase === 'complete') {
-            const duration = Date.now() - interactionStart
-            await historyTracker.trackInteraction({
-              userId: authResult.userId,
-              projectId: projectId || 'default',
-              type: 'code_generation',
-              data: {
-                prompt,
-                response: fullResponse.substring(0, 1000),
-                context: assembledContext?.metadata,
-                patterns: assembledContext?.patterns?.map(p => p.name),
-                duration,
-                success: true
-              },
-              metadata: {
-                timestamp: new Date().toISOString(),
-                modelVersion: 'claude-3-5-sonnet-20241022',
-                tokenCount
-              }
-            })
-
-            // Store in cache
-            await storeInCache(authResult.userId, prompt, fullResponse, context)
-
-            // Log performance metrics
-            await logger.logPerformance('code_generation_stream', interactionStart, {
-              tokenCount,
-              responseLength: fullResponse.length
-            })
-          }
+    if (!anthropicResponse.ok) {
+      const error = await anthropicResponse.text()
+      console.error('Anthropic API error:', error)
+      return new Response(
+        JSON.stringify({ error: `AI API error: ${error}` }), 
+        {
+          status: anthropicResponse.status,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
-      }
-
-      // Return streaming response
-      return streamingHandler.createStreamResponse(trackedGenerator(), {
-        chunkSize: 100,
-        includeMetadata: true
-      })
+      )
     }
 
-    // Non-streaming response
-    const result = await claudeResponse.json()
-    let generatedCode = result.content[0]?.text || ''
-    let qualityAnalysis = null
-    let enhancedCode = null
+    // If streaming is enabled, transform and return the stream
+    if (options?.stream !== false) {
+      const encoder = new TextEncoder()
+      const decoder = new TextDecoder()
 
-    // Perform quality analysis if requested
-    if (options.analyzeQuality || options.autoEnhance) {
-      try {
-        const analysisResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/code-analysis`, {
-          method: 'POST',
-          headers: {
-            'Authorization': req.headers.get('Authorization')!,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            code: generatedCode,
-            language: 'typescript',
-            projectId,
-            analysisType: 'full',
-            platform: 'both'
-          })
-        })
-
-        if (analysisResponse.ok) {
-          qualityAnalysis = await analysisResponse.json()
+      // Create a transform stream to convert Anthropic's format to our format
+      const transformStream = new TransformStream({
+        async transform(chunk, controller) {
+          const text = decoder.decode(chunk, { stream: true })
+          const lines = text.split('\n')
           
-          // Auto-enhance if requested and score is below target
-          if (options.autoEnhance && qualityAnalysis.overallScore < (options.targetQualityScore || 80)) {
-            const enhanceResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/code-enhance`, {
-              method: 'POST',
-              headers: {
-                'Authorization': req.headers.get('Authorization')!,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                code: generatedCode,
-                enhancements: {
-                  fixSecurity: true,
-                  fixPerformance: true,
-                  fixStyle: true,
-                  addAccessibility: true,
-                  modernizeSyntax: false,
-                  addTypeScript: false
-                },
-                targetScore: options.targetQualityScore || 80
-              })
-            })
-
-            if (enhanceResponse.ok) {
-              const enhanceResult = await enhanceResponse.json()
-              enhancedCode = enhanceResult.enhancedCode
-              generatedCode = enhancedCode // Use enhanced version
-              
-              // Re-analyze enhanced code
-              const reAnalysisResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/code-analysis`, {
-                method: 'POST',
-                headers: {
-                  'Authorization': req.headers.get('Authorization')!,
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                  code: enhancedCode,
-                  language: 'typescript',
-                  projectId,
-                  analysisType: 'quick'
-                })
-              })
-
-              if (reAnalysisResponse.ok) {
-                qualityAnalysis = await reAnalysisResponse.json()
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const dataStr = line.slice(6)
+              if (dataStr.trim()) {
+                try {
+                  const data = JSON.parse(dataStr)
+                  
+                  // Transform Anthropic format to our format
+                  if (data.type === 'content_block_delta' && data.delta?.text) {
+                    const streamChunk = {
+                      type: 'code',
+                      delta: data.delta.text
+                    }
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(streamChunk)}\n\n`))
+                  } else if (data.type === 'message_stop') {
+                    controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+                  }
+                } catch (e) {
+                  console.error('Error parsing stream data:', e)
+                }
               }
             }
           }
         }
-      } catch (error) {
-        console.error('Quality analysis error:', error)
-        // Don't fail the main request if quality analysis fails
+      })
+
+      // Pipe the response through our transform
+      anthropicResponse.body?.pipeThrough(transformStream)
+
+      // Return streaming response with proper headers
+      return new Response(transformStream.readable, {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no'
+        }
+      })
+    }
+
+    // Non-streaming response
+    const result = await anthropicResponse.json()
+    const responseContent = result.content?.[0]?.text || ''
+    
+    return new Response(
+      JSON.stringify({
+        type: 'code',
+        content: responseContent
+      }), 
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
-    }
-
-    // Store in cache for similarity search
-    await storeInCache(authResult.userId, prompt, generatedCode, context)
-
-    // Track interaction
-    const duration = Date.now() - interactionStart
-    await historyTracker.trackInteraction({
-      userId: authResult.userId,
-      projectId: projectId || 'default',
-      type: 'code_generation',
-      data: {
-        prompt,
-        response: generatedCode.substring(0, 1000), // Store truncated response
-        context: assembledContext?.metadata,
-        patterns: assembledContext?.patterns?.map(p => p.pattern),
-        files: assembledContext?.relevantFiles?.map(f => f.path),
-        duration,
-        success: true,
-        qualityScore: qualityAnalysis?.overallScore,
-        enhanced: !!enhancedCode
-      },
-      metadata: {
-        timestamp: new Date().toISOString(),
-        modelVersion: 'claude-3-5-sonnet-20241022',
-        tokenCount: result.usage?.total_tokens
-      }
-    })
-
-    // Log success
-    await logger.info('Code generation completed', {
-      userId: authResult.userId,
-      responseLength: generatedCode.length,
-      qualityScore: qualityAnalysis?.overallScore,
-      enhanced: !!enhancedCode
-    })
-
-    return new Response(JSON.stringify({
-      code: generatedCode,
-      usage: result.usage,
-      ...(qualityAnalysis ? { qualityAnalysis } : {}),
-      ...(enhancedCode ? { originalCode: result.content[0]?.text, enhanced: true } : {})
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
-
-  } catch (error) {
-    await logger.error('Code generation error', { error: error.message })
-    return new Response(JSON.stringify({ 
-      error: 'Internal server error',
-      message: error.message 
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
-  }
-})
-
-async function buildEnhancedPrompt(prompt: string, context?: any, assembledContext?: any): Promise<string> {
-  let enhanced = prompt
-
-  // Add assembled context if available
-  if (assembledContext) {
-    const contextParts = []
-    
-    // Add relevant files
-    if (assembledContext.relevantFiles?.length > 0) {
-      const fileContext = assembledContext.relevantFiles
-        .slice(0, 5)
-        .map(f => `File: ${f.path}\nRelevance: ${(f.relevanceScore * 100).toFixed(0)}%\nSnippet:\n${f.content.substring(0, 500)}...`)
-        .join('\n\n')
-      contextParts.push(`Relevant Project Files:\n${fileContext}`)
-    }
-    
-    // Add detected patterns
-    if (assembledContext.patterns?.length > 0) {
-      const patterns = assembledContext.patterns
-        .map(p => `- ${p.pattern} (${p.type}, confidence: ${(p.confidence * 100).toFixed(0)}%)`)
-        .join('\n')
-      contextParts.push(`Detected Patterns:\n${patterns}`)
-    }
-    
-    // Add user history insights
-    if (assembledContext.userHistory?.length > 0) {
-      const history = assembledContext.userHistory
-        .slice(0, 3)
-        .map(h => `Previous: ${h.prompt.substring(0, 100)}...`)
-        .join('\n')
-      contextParts.push(`Recent Related Prompts:\n${history}`)
-    }
-    
-    if (contextParts.length > 0) {
-      enhanced = `${contextParts.join('\n\n')}\n\n${enhanced}`
-    }
-  }
-
-  // Add manual context if provided
-  if (context) {
-    // Add project structure context
-    if (context.projectStructure?.length > 0) {
-      enhanced = `Project Structure:\n${context.projectStructure.join('\n')}\n\n${enhanced}`
-    }
-
-    // Add current file context
-    if (context.currentFile) {
-      enhanced = `Current File: ${context.currentFile}\n\n${enhanced}`
-    }
-  }
-
-  // Always add React Native context
-  enhanced = `You are generating code for a React Native application using Expo SDK. Please follow React Native and Expo best practices.\n\n${enhanced}`
-
-  return enhanced
-}
-
-async function storeInCache(userId: string, prompt: string, response: string, context?: any) {
-  try {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
-    // Generate embedding for the prompt
-    const embedding = await generateEmbedding(prompt)
-
-    // Store in cache table
-    await supabase.from('ai_cache').insert({
-      user_id: userId,
-      prompt,
-      response,
-      context: context || {},
-      embedding,
-      created_at: new Date().toISOString()
-    })
   } catch (error) {
-    console.error('Cache storage error:', error)
-    // Don't throw - caching failure shouldn't break the main flow
+    console.error('Edge function error:', error)
+    return new Response(
+      JSON.stringify({ 
+        error: 'Internal server error', 
+        message: error.message 
+      }), 
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    )
   }
-}
-
-async function generateEmbedding(text: string): Promise<number[]> {
-  const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')
-  if (!OPENAI_API_KEY) {
-    throw new Error('OpenAI API key not configured for embeddings')
-  }
-
-  const response = await fetch('https://api.openai.com/v1/embeddings', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${OPENAI_API_KEY}`
-    },
-    body: JSON.stringify({
-      model: 'text-embedding-ada-002',
-      input: text
-    })
-  })
-
-  if (!response.ok) {
-    throw new Error('Failed to generate embedding')
-  }
-
-  const result = await response.json()
-  return result.data[0].embedding
-}
+})

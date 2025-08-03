@@ -2,7 +2,10 @@ import React, { useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom'
 import { initializeStoreSubscriptions } from './stores'
 import { useAuthStore } from './stores/useAuthStore'
+import { useAppStore } from './stores/useAppStore'
 import { authService } from './services/auth'
+import { projectService } from './services/projectService'
+import { useNavigate } from 'react-router-dom'
 import { Button } from './components/ui/button'
 import { Textarea } from './components/ui/textarea'
 import { AuroraBackground } from './components/ui/aurora-background'
@@ -35,6 +38,7 @@ import { Modal } from './components/ui/modal'
 import { SignupForm } from './components/ui/signup-form'
 import { AuthenticatedLayout } from './components/AuthenticatedLayout'
 import { Dashboard } from './pages/Dashboard'
+import { ProjectDesign } from './pages/ProjectDesign'
 import { 
   Home, 
   Palette, 
@@ -53,17 +57,26 @@ import {
   Lightbulb,
   Layers,
   Play,
-  Paperclip
+  Paperclip,
+  Edit
 } from 'lucide-react'
 import { useTheme } from './components/theme-provider'
 
-function NavigationContent() {
+function NavigationContent({ onOpenAuthModal }: { onOpenAuthModal?: (mode: 'signup' | 'login') => void }) {
   const [isOpen, setIsOpen] = useState(false)
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
-  const [authMode, setAuthMode] = useState<'signup' | 'login'>('signup')
+  const [localAuthModalOpen, setLocalAuthModalOpen] = useState(false)
+  const [localAuthMode, setLocalAuthMode] = useState<'signup' | 'login'>('signup')
   const location = useLocation()
   const { theme, setTheme } = useTheme()
   const { user, isAuthenticated, logout } = useAuthStore()
+  const { currentProject } = useAppStore()
+  const navigate = useNavigate()
+  
+  // Use local modal state if no shared handler provided
+  const isAuthModalOpen = onOpenAuthModal ? false : localAuthModalOpen
+  const authMode = onOpenAuthModal ? 'signup' : localAuthMode
+  const setIsAuthModalOpen = onOpenAuthModal ? () => {} : setLocalAuthModalOpen
+  const setAuthMode = onOpenAuthModal ? () => {} : setLocalAuthMode
   
   const handleLogout = async () => {
     await logout()
@@ -86,6 +99,9 @@ function NavigationContent() {
     setIsOpen(false)
   }, [location])
 
+  // Check if we're on a project page
+  const isProjectPage = location.pathname.startsWith('/project/')
+
   return (
     <>
       <header className="fixed top-0 left-0 right-0 z-50">
@@ -97,24 +113,45 @@ function NavigationContent() {
               <span className="text-foreground">Velocity</span>
             </Link>
             
-            {/* Center Navigation Links - centered in the full width */}
+            {/* Center Content - Show project title on project pages, navigation links otherwise */}
             <div className="hidden md:flex items-center gap-8 mx-auto">
-              <span className="text-sm font-medium text-foreground/40 cursor-not-allowed">
-                Features
-              </span>
-              <span className="text-sm font-medium text-foreground/40 cursor-not-allowed">
-                Learn
-              </span>
-              <span className="text-sm font-medium text-foreground/40 cursor-not-allowed">
-                Pricing
-              </span>
-              <span className="text-sm font-medium text-foreground/40 cursor-not-allowed">
-                Enterprise
-              </span>
+              {isProjectPage && currentProject ? (
+                <div className="text-center">
+                  <h1 className="text-lg font-semibold text-foreground">{currentProject.name}</h1>
+                </div>
+              ) : (
+                <>
+                  <span className="text-sm font-medium text-foreground/40 cursor-not-allowed">
+                    Features
+                  </span>
+                  <span className="text-sm font-medium text-foreground/40 cursor-not-allowed">
+                    Learn
+                  </span>
+                  <span className="text-sm font-medium text-foreground/40 cursor-not-allowed">
+                    Pricing
+                  </span>
+                  <span className="text-sm font-medium text-foreground/40 cursor-not-allowed">
+                    Enterprise
+                  </span>
+                </>
+              )}
             </div>
             
             {/* Right side controls - absolutely positioned */}
             <div className="absolute right-0 flex items-center gap-2">
+              {/* Open Editor Button - only show on project pages */}
+              {isProjectPage && currentProject && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate(`/editor/${currentProject.id}`)}
+                  className="hidden md:flex gap-2"
+                >
+                  <Edit className="w-4 h-4" />
+                  Open Editor
+                </Button>
+              )}
+              
               {/* Hamburger Menu */}
               <DropdownMenu open={isOpen} onOpenChange={setIsOpen} modal={false}>
                 <DropdownMenuTrigger asChild>
@@ -181,8 +218,12 @@ function NavigationContent() {
                     size="sm"
                     className="hidden md:flex"
                     onClick={() => {
-                      setAuthMode('login');
-                      setIsAuthModalOpen(true);
+                      if (onOpenAuthModal) {
+                        onOpenAuthModal('login');
+                      } else {
+                        setLocalAuthMode('login');
+                        setLocalAuthModalOpen(true);
+                      }
                     }}
                   >
                     Log in
@@ -193,8 +234,12 @@ function NavigationContent() {
                     size="sm"
                     className="hidden md:flex bg-blue-600 hover:bg-blue-700 text-white"
                     onClick={() => {
-                      setAuthMode('signup');
-                      setIsAuthModalOpen(true);
+                      if (onOpenAuthModal) {
+                        onOpenAuthModal('signup');
+                      } else {
+                        setLocalAuthMode('signup');
+                        setLocalAuthModalOpen(true);
+                      }
                     }}
                   >
                     Get Started
@@ -207,6 +252,38 @@ function NavigationContent() {
         </nav>
       </header>
       
+      {!onOpenAuthModal && (
+        <Modal isOpen={localAuthModalOpen} onClose={() => setLocalAuthModalOpen(false)}>
+          <SignupForm 
+            mode={localAuthMode} 
+            onClose={() => setLocalAuthModalOpen(false)}
+            onModeSwitch={(newMode) => setLocalAuthMode(newMode)}
+          />
+        </Modal>
+      )}
+    </>
+  )
+}
+
+// Wrapper component to provide Router context
+function Navigation({ onOpenAuthModal }: { onOpenAuthModal?: (mode: 'signup' | 'login') => void }) {
+  return <NavigationContent onOpenAuthModal={onOpenAuthModal} />
+}
+
+// Unauthenticated layout with shared auth modal
+function UnauthenticatedLayout() {
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
+  const [authMode, setAuthMode] = useState<'signup' | 'login'>('signup')
+  
+  const handleOpenAuthModal = (mode: 'signup' | 'login' = 'signup') => {
+    setAuthMode(mode)
+    setIsAuthModalOpen(true)
+  }
+  
+  return (
+    <>
+      <Navigation onOpenAuthModal={handleOpenAuthModal} />
+      <HomePage onAuthRequired={() => handleOpenAuthModal('signup')} />
       <Modal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)}>
         <SignupForm 
           mode={authMode} 
@@ -218,21 +295,54 @@ function NavigationContent() {
   )
 }
 
-// Wrapper component to provide Router context
-function Navigation() {
-  return <NavigationContent />
-}
-
-function HomePage() {
+function HomePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
   const [prompt, setPrompt] = useState('')
   const [mouseX, setMouseX] = useState(50) // percentage
   const [isHovering, setIsHovering] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const { isAuthenticated } = useAuthStore()
+  const navigate = useNavigate()
 
-  const handleSubmit = () => {
-    if (prompt.trim()) {
-      // TODO: Handle submission
-      console.log('Submitting prompt:', prompt)
+  const handleSubmit = async () => {
+    if (prompt.trim() && !isSubmitting) {
+      // Check if user is authenticated
+      if (!isAuthenticated) {
+        // Open auth modal instead of submitting
+        onAuthRequired?.()
+        return
+      }
+      
+      setIsSubmitting(true)
+      
+      try {
+        // Generate a name from the prompt (first 50 chars or first sentence)
+        const projectName = prompt.split('.')[0].substring(0, 50) + 
+          (prompt.length > 50 ? '...' : '')
+        
+        // Create the project
+        const { project, error } = await projectService.createProject({
+          name: projectName,
+          description: prompt,
+          initialPrompt: prompt,
+          template: 'react-native'
+        })
+        
+        if (error) {
+          console.error('Error creating project:', error)
+          // TODO: Show error notification
+          return
+        }
+        
+        if (project) {
+          // Navigate to the project design page
+          navigate(`/project/${project.id}`)
+        }
+      } catch (error) {
+        console.error('Unexpected error:', error)
+        // TODO: Show error notification
+      } finally {
+        setIsSubmitting(false)
+      }
     }
   }
 
@@ -284,11 +394,16 @@ function HomePage() {
                 </Button>
                 <Button
                   onClick={handleSubmit}
-                  disabled={!prompt.trim()}
+                  disabled={!prompt.trim() || isSubmitting}
                   className="absolute bottom-3 right-3 h-10 px-4 bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed z-20"
                   size="sm"
+                  title={!isAuthenticated && prompt.trim() ? "Sign up to create your app" : ""}
                 >
-                  <Sparkles className="w-4 h-4" />
+                  {isSubmitting ? (
+                    <span className="animate-pulse">Creating...</span>
+                  ) : (
+                    <Sparkles className="w-4 h-4" />
+                  )}
                 </Button>
               </div>
             </MovingBorderWrapper>
@@ -403,10 +518,7 @@ function App() {
                 <AuthenticatedLayout />
               </AuroraBackground>
             ) : (
-              <>
-                <Navigation />
-                <HomePage />
-              </>
+              <UnauthenticatedLayout />
             )
           }>
             {isAuthenticated && (
@@ -414,6 +526,7 @@ function App() {
                 <Route index element={<HomePage />} />
                 <Route path="dashboard" element={<Dashboard />} />
                 <Route path="apps" element={<SnackProjects />} />
+                <Route path="project/:id" element={<ProjectDesign />} />
                 <Route path="editor" element={
                   <LazyBoundary>
                     <EditorDemo />

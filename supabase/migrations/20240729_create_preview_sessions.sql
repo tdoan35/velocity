@@ -12,15 +12,15 @@ CREATE TABLE IF NOT EXISTS preview_sessions (
   error_message TEXT,
   expires_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  ended_at TIMESTAMPTZ,
-  
-  -- Indexes for performance
-  INDEX idx_preview_sessions_user_id (user_id),
-  INDEX idx_preview_sessions_project_id (project_id),
-  INDEX idx_preview_sessions_session_id (session_id),
-  INDEX idx_preview_sessions_status (status),
-  INDEX idx_preview_sessions_created_at (created_at DESC)
+  ended_at TIMESTAMPTZ
 );
+
+-- Create indexes for preview_sessions
+CREATE INDEX IF NOT EXISTS idx_preview_sessions_user_id ON preview_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_preview_sessions_project_id ON preview_sessions(project_id);
+CREATE INDEX IF NOT EXISTS idx_preview_sessions_session_id ON preview_sessions(session_id);
+CREATE INDEX IF NOT EXISTS idx_preview_sessions_status ON preview_sessions(status);
+CREATE INDEX IF NOT EXISTS idx_preview_sessions_created_at ON preview_sessions(created_at DESC);
 
 -- Create preview_session_metrics table for usage tracking
 CREATE TABLE IF NOT EXISTS preview_session_metrics (
@@ -32,13 +32,13 @@ CREATE TABLE IF NOT EXISTS preview_session_metrics (
   device_type TEXT,
   hot_reloads_count INTEGER DEFAULT 0,
   errors_count INTEGER DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  
-  -- Indexes
-  INDEX idx_preview_metrics_session_id (session_id),
-  INDEX idx_preview_metrics_user_id (user_id),
-  INDEX idx_preview_metrics_project_id (project_id)
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Create indexes for preview_session_metrics
+CREATE INDEX IF NOT EXISTS idx_preview_metrics_session_id ON preview_session_metrics(session_id);
+CREATE INDEX IF NOT EXISTS idx_preview_metrics_user_id ON preview_session_metrics(user_id);
+CREATE INDEX IF NOT EXISTS idx_preview_metrics_project_id ON preview_session_metrics(project_id);
 
 -- Create preview_sharing table for public preview links
 CREATE TABLE IF NOT EXISTS preview_sharing (
@@ -51,13 +51,13 @@ CREATE TABLE IF NOT EXISTS preview_sharing (
   access_count INTEGER DEFAULT 0,
   expires_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  last_accessed_at TIMESTAMPTZ,
-  
-  -- Indexes
-  INDEX idx_preview_sharing_share_token (share_token),
-  INDEX idx_preview_sharing_project_id (project_id),
-  INDEX idx_preview_sharing_expires_at (expires_at)
+  last_accessed_at TIMESTAMPTZ
 );
+
+-- Create indexes for preview_sharing
+CREATE INDEX IF NOT EXISTS idx_preview_sharing_share_token ON preview_sharing(share_token);
+CREATE INDEX IF NOT EXISTS idx_preview_sharing_project_id ON preview_sharing(project_id);
+CREATE INDEX IF NOT EXISTS idx_preview_sharing_expires_at ON preview_sharing(expires_at);
 
 -- Create session pool for resource optimization
 CREATE TABLE IF NOT EXISTS preview_session_pool (
@@ -70,13 +70,13 @@ CREATE TABLE IF NOT EXISTS preview_session_pool (
   reserved_at TIMESTAMPTZ,
   last_used_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  expires_at TIMESTAMPTZ,
-  
-  -- Indexes
-  INDEX idx_session_pool_status (status),
-  INDEX idx_session_pool_device_id (device_id),
-  INDEX idx_session_pool_reserved_by (reserved_by)
+  expires_at TIMESTAMPTZ
 );
+
+-- Create indexes for preview_session_pool
+CREATE INDEX IF NOT EXISTS idx_session_pool_status ON preview_session_pool(status);
+CREATE INDEX IF NOT EXISTS idx_session_pool_device_id ON preview_session_pool(device_id);
+CREATE INDEX IF NOT EXISTS idx_session_pool_reserved_by ON preview_session_pool(reserved_by);
 
 -- Enable RLS
 ALTER TABLE preview_sessions ENABLE ROW LEVEL SECURITY;

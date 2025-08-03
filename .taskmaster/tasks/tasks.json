@@ -1425,11 +1425,27 @@
             "testStrategy": ""
           }
         ]
+      },
+      {
+        "id": 14,
+        "title": "Implement Project Design Page with AI Chat Interface",
+        "description": "Create an AI chat interface that appears after users submit their app design prompt, including project creation, routing to a project-specific page, and implementing real-time chat functionality for design iteration.",
+        "details": "1. Implement project creation and database integration:\n   - Create a new database table/schema for storing project design prompts and chat history\n   - Implement API endpoint for creating a new project when a prompt is submitted\n   - Store initial prompt, project metadata, and timestamps in Supabase\n   - Generate unique project IDs for routing and reference\n\n2. Develop project-specific routing:\n   - Set up dynamic routing with React Router for `/project/:projectId` paths\n   - Implement route guards to verify project access permissions\n   - Create loading states and error handling for invalid project IDs\n   - Add project metadata to page title and browser history\n\n3. Design and implement chat interface:\n   - Create a responsive chat UI with message bubbles for user and AI\n   - Display the original prompt as the first message in the conversation\n   - Implement message composition with markdown support\n   - Add typing indicators and loading states for AI responses\n   - Support code blocks with syntax highlighting using Monaco Editor components\n   - Implement message timestamps and read receipts\n\n4. Integrate real-time functionality:\n   - Set up Supabase Realtime subscriptions for chat messages\n   - Implement optimistic UI updates for immediate feedback\n   - Create message queue for handling network interruptions\n   - Add presence indicators for collaborative sessions\n   - Implement message delivery confirmation\n\n5. Develop AI integration for design assistance:\n   - Connect to OpenAI API for generating design responses\n   - Implement context assembly with project details and chat history\n   - Create specialized prompts for app design assistance\n   - Add support for design iterations and refinements\n   - Implement vector similarity search to reference similar designs\n   - Cache common design patterns for performance optimization\n\n6. Add design visualization capabilities:\n   - Generate UI mockups based on design descriptions\n   - Implement component previews for suggested UI elements\n   - Create visual design system references\n   - Support image uploads and references in the chat\n\n7. Implement session management:\n   - Track active design sessions\n   - Add auto-save functionality for draft messages\n   - Implement session timeout and recovery\n   - Create session persistence across page reloads",
+        "testStrategy": "1. Test project creation and database integration:\n   - Verify new projects are correctly created in the database when prompts are submitted\n   - Test project ID generation for uniqueness and format\n   - Validate all required metadata is stored correctly\n   - Test error handling for failed project creation\n\n2. Validate routing and navigation:\n   - Test navigation to `/project/:projectId` with valid and invalid IDs\n   - Verify proper loading states and error messages\n   - Test browser history and navigation between projects\n   - Validate URL sharing functionality\n\n3. Test chat interface functionality:\n   - Verify original prompt appears as first message\n   - Test message composition and submission\n   - Validate markdown rendering and code block formatting\n   - Test UI responsiveness across device sizes\n   - Verify typing indicators and loading states\n\n4. Test real-time capabilities:\n   - Verify messages appear in real-time across multiple clients\n   - Test optimistic UI updates and conflict resolution\n   - Validate message queue behavior during network interruptions\n   - Test presence indicators for accuracy\n   - Measure performance with multiple concurrent users\n\n5. Validate AI integration:\n   - Test AI response quality for design prompts\n   - Verify context assembly with project history\n   - Test response times and optimization\n   - Validate design iteration capabilities\n   - Test vector similarity search accuracy\n\n6. Test design visualization:\n   - Verify UI mockup generation quality\n   - Test component preview rendering\n   - Validate design system references\n   - Test image upload and display functionality\n\n7. Perform end-to-end testing:\n   - Complete full design workflows from prompt to final design\n   - Test with various prompt types and complexity levels\n   - Validate session persistence across page reloads\n   - Test with simulated network conditions",
+        "status": "pending",
+        "dependencies": [
+          1,
+          2,
+          10,
+          13
+        ],
+        "priority": "medium",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-07-22T22:49:25.170Z",
-      "updated": "2025-07-31T08:06:15.756Z",
+      "updated": "2025-08-02T03:55:00.240Z",
       "description": "Tasks for master context"
     }
   }
