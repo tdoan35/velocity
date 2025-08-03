@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Outlet, useNavigate, useLocation, Link } from "react-router-dom";
 import { Sidebar, SidebarBody, SidebarLink } from "./ui/sidebar";
+import { projectService } from "@/services/projectService";
 import {
   IconArrowLeft,
   IconBrandTabler,
@@ -20,13 +21,14 @@ import {
   IconSquareRoundedPlus,
   IconSquareRoundedPlusFilled,
 } from "@tabler/icons-react";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import { useSidebar } from "./ui/sidebar";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/useAuthStore";
+import { useAppStore } from "@/stores/useAppStore";
 import { Button } from "./ui/button";
 import { useTheme } from "./theme-provider";
-import { Sun, Moon, Menu, X } from "lucide-react";
+import { Sun, Moon, Menu, X, Edit, ChevronDown, ChevronRight, FolderOpen } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,11 +41,17 @@ export function AuthenticatedLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuthStore();
+  const { currentProject } = useAppStore();
   const { theme, setTheme } = useTheme();
   const [pinned, setPinned] = useState(false);
   const [open, setOpen] = useState(pinned);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [userProjects, setUserProjects] = useState<any[]>([]);
+  const [projectsExpanded, setProjectsExpanded] = useState(false);
+  
+  // Check if we're on a project page
+  const isProjectPage = location.pathname.startsWith('/project/');
 
   const handleLogout = async () => {
     await logout();
@@ -61,6 +69,20 @@ export function AuthenticatedLayout() {
   useEffect(() => {
     setMounted(true);
   }, []);
+  
+  // Fetch user projects
+  useEffect(() => {
+    const fetchProjects = async () => {
+      const { projects, error } = await projectService.getUserProjects();
+      if (!error && projects) {
+        setUserProjects(projects);
+      }
+    };
+    
+    if (user) {
+      fetchProjects();
+    }
+  }, [user]);
 
   const animate = mounted;
 
@@ -73,28 +95,21 @@ export function AuthenticatedLayout() {
       label: "Create",
       href: "/",
       icon: isActive("/") ? (
-        <IconSquareRoundedPlusFilled className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />
+        <IconSquareRoundedPlusFilled className="h-5 w-5 shrink-0" />
       ) : (
-        <IconSquareRoundedPlus className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />
+        <IconSquareRoundedPlus className="h-5 w-5 shrink-0" />
       ),
+      isActive: isActive("/")
     },
     {
       label: "Dashboard",
       href: "/dashboard",
       icon: isActive("/dashboard") ? (
-        <IconLayoutDashboardFilled className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />
+        <IconLayoutDashboardFilled className="h-5 w-5 shrink-0" />
       ) : (
-        <IconLayoutDashboard className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />
+        <IconLayoutDashboard className="h-5 w-5 shrink-0" />
       ),
-    },
-    {
-      label: "My Apps",
-      href: "/apps",
-      icon: isActive("/apps") ? (
-        <IconAppsFilled className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />
-      ) : (
-        <IconApps className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />
-      ),
+      isActive: isActive("/dashboard")
     }
   ];
 
@@ -102,9 +117,10 @@ export function AuthenticatedLayout() {
     label: "Logout",
     href: "#",
     icon: (
-      <IconArrowLeft className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />
+      <IconArrowLeft className="h-5 w-5 shrink-0" />
     ),
     onClick: handleLogout,
+    isActive: false
   };
 
   return (
@@ -123,24 +139,45 @@ export function AuthenticatedLayout() {
             </Link>
           </div>
           
-          {/* Center Navigation Links - centered in full width */}
+          {/* Center Content - Show project title on project pages, navigation links otherwise */}
           <div className="hidden md:flex items-center gap-8 mx-auto">
-            <span className="text-sm font-medium text-foreground/40 cursor-not-allowed transition-all duration-200 hover:text-foreground/60">
-              Features
-            </span>
-            <span className="text-sm font-medium text-foreground/40 cursor-not-allowed transition-all duration-200 hover:text-foreground/60">
-              Learn
-            </span>
-            <span className="text-sm font-medium text-foreground/40 cursor-not-allowed transition-all duration-200 hover:text-foreground/60">
-              Pricing
-            </span>
-            <span className="text-sm font-medium text-foreground/40 cursor-not-allowed transition-all duration-200 hover:text-foreground/60">
-              Enterprise
-            </span>
+            {isProjectPage && currentProject ? (
+              <div className="text-center">
+                <h1 className="text-lg font-semibold text-foreground">{currentProject.name}</h1>
+              </div>
+            ) : (
+              <>
+                <span className="text-sm font-medium text-foreground/40 cursor-not-allowed transition-all duration-200 hover:text-foreground/60">
+                  Features
+                </span>
+                <span className="text-sm font-medium text-foreground/40 cursor-not-allowed transition-all duration-200 hover:text-foreground/60">
+                  Learn
+                </span>
+                <span className="text-sm font-medium text-foreground/40 cursor-not-allowed transition-all duration-200 hover:text-foreground/60">
+                  Pricing
+                </span>
+                <span className="text-sm font-medium text-foreground/40 cursor-not-allowed transition-all duration-200 hover:text-foreground/60">
+                  Enterprise
+                </span>
+              </>
+            )}
           </div>
           
           {/* Right side controls - absolutely positioned */}
           <div className="absolute right-0 flex items-center gap-4 px-4">
+            {/* Open Editor Button - only show on project pages */}
+            {isProjectPage && currentProject && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate(`/editor/${currentProject.id}`)}
+                className="hidden md:flex gap-2"
+              >
+                <Edit className="w-4 h-4" />
+                Open Editor
+              </Button>
+            )}
+            
             {/* Theme Toggle */}
             <Button
               variant="ghost"
@@ -166,22 +203,178 @@ export function AuthenticatedLayout() {
               {links.map((link, idx) => (
                 <SidebarLink key={idx} link={link} />
               ))}
+              
+              {/* My Projects Dropdown */}
+              <div className="flex flex-col">
+                <button
+                  onClick={() => setProjectsExpanded(!projectsExpanded)}
+                  className={cn(
+                    "flex items-center gap-2 py-2 rounded-xl text-neutral-700 dark:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-900 hover:text-neutral-900 dark:hover:text-white transition-colors group/sidebar relative",
+                    "mx-1 px-3"
+                  )}
+                >
+                  {/* Outline for collapsed state when on project page */}
+                  {isProjectPage && !open && (
+                    <motion.div 
+                      className="absolute inset-y-0 rounded-xl border-2 border-neutral-300 dark:border-neutral-600"
+                      initial={false}
+                      animate={{
+                        opacity: open ? 0 : 1,
+                        left: "50%",
+                        x: "-50%",
+                        width: "40px"
+                      }}
+                      transition={{
+                        duration: 0.2,
+                        ease: "easeInOut"
+                      }}
+                    />
+                  )}
+                  <span className="flex-shrink-0 relative z-10">
+                    <FolderOpen className="h-5 w-5" />
+                  </span>
+                  
+                  <motion.div
+                    initial={{
+                      opacity: open ? 1 : 0,
+                      width: open ? "auto" : 0,
+                    }}
+                    animate={{
+                      opacity: animate ? (open ? 1 : 0) : (open ? 1 : 0),
+                      width: animate ? (open ? "auto" : 0) : (open ? "auto" : 0),
+                    }}
+                    transition={{
+                      duration: animate ? 0.2 : 0,
+                      ease: "easeInOut",
+                      opacity: { duration: animate ? 0.15 : 0, delay: animate && open ? 0.05 : 0 }
+                    }}
+                    className="flex items-center justify-between overflow-hidden"
+                    style={{ originX: 0 }}
+                  >
+                    <span className="text-sm whitespace-nowrap pr-2">My Projects</span>
+                    <motion.span
+                      animate={{ rotate: projectsExpanded ? 90 : 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="ml-auto"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </motion.span>
+                  </motion.div>
+                </button>
+                
+                {/* Projects List */}
+                <AnimatePresence>
+                  {projectsExpanded && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ 
+                        height: "auto", 
+                        opacity: open ? 1 : 0,
+                        marginLeft: open ? 28 : 0
+                      }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ 
+                        duration: 0.2,
+                        ease: "easeInOut"
+                      }}
+                      className="flex flex-col gap-1 overflow-hidden"
+                    >
+                      {userProjects.length > 0 ? (
+                        userProjects.map((project) => (
+                          <Link
+                            key={project.id}
+                            to={`/project/${project.id}`}
+                            className={cn(
+                              "transition-colors py-1 px-3 rounded-xl block relative",
+                              isProjectPage && currentProject?.id === project.id 
+                                ? "bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-white"
+                                : "text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-50 dark:hover:bg-neutral-900"
+                            )}
+                          >
+                            <motion.span
+                              initial={{
+                                opacity: open ? 1 : 0,
+                                width: open ? "auto" : 0,
+                              }}
+                              animate={{
+                                opacity: open ? 1 : 0,
+                                width: open ? "auto" : 0,
+                              }}
+                              transition={{
+                                duration: 0.2,
+                                ease: "easeInOut",
+                              }}
+                              className="text-sm whitespace-nowrap overflow-hidden block"
+                              style={{ originX: 0 }}
+                            >
+                              {project.name}
+                            </motion.span>
+                          </Link>
+                        ))
+                      ) : (
+                        <motion.span
+                          initial={{
+                            opacity: open ? 1 : 0,
+                            width: open ? "auto" : 0,
+                          }}
+                          animate={{
+                            opacity: open ? 1 : 0,
+                            width: open ? "auto" : 0,
+                          }}
+                          transition={{
+                            duration: 0.2,
+                            ease: "easeInOut",
+                          }}
+                          className="text-sm text-neutral-500 dark:text-neutral-500 py-1 px-2 whitespace-nowrap overflow-hidden block"
+                          style={{ originX: 0 }}
+                        >
+                          No projects yet
+                        </motion.span>
+                      )}
+                      <Link
+                        to="/apps"
+                        className="text-neutral-500 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors py-1 px-3 mt-1"
+                      >
+                        <motion.span
+                          initial={{
+                            opacity: open ? 1 : 0,
+                            width: open ? "auto" : 0,
+                          }}
+                          animate={{
+                            opacity: open ? 1 : 0,
+                            width: open ? "auto" : 0,
+                          }}
+                          transition={{
+                            duration: 0.2,
+                            ease: "easeInOut",
+                          }}
+                          className="text-xs whitespace-nowrap overflow-hidden block"
+                          style={{ originX: 0 }}
+                        >
+                          View all projects →
+                        </motion.span>
+                      </Link>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
           </div>
           <div className="flex flex-col gap-2">
             <button
               onClick={() => setPinned(!pinned)}
               className={cn(
-                "flex items-center justify-start gap-2 py-2 px-0 group/sidebar",
+                "flex items-center gap-2 py-2 rounded-xl group/sidebar relative",
+                "mx-1 px-3",
                 "text-neutral-700 dark:text-neutral-200",
-                "hover:text-neutral-900 dark:hover:text-white transition-colors"
+                "hover:bg-neutral-50 dark:hover:bg-neutral-900 hover:text-neutral-900 dark:hover:text-white transition-colors"
               )}
               title={pinned ? "Unpin sidebar" : "Pin sidebar"}
             >
               {pinned ? (
-                <IconLayoutSidebarLeftExpandFilled className="h-5 w-5 shrink-0" />
+                <IconLayoutSidebarLeftExpandFilled className="h-5 w-5 shrink-0 relative z-10" />
               ) : (
-                <IconLayoutSidebarLeftExpand className="h-5 w-5 shrink-0" />
+                <IconLayoutSidebarLeftExpand className="h-5 w-5 shrink-0 relative z-10" />
               )}
             </button>
             <SidebarLink 
@@ -189,8 +382,9 @@ export function AuthenticatedLayout() {
                 label: "Settings",
                 href: "/settings",
                 icon: (
-                  <IconSettings className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />
+                  <IconSettings className="h-5 w-5 shrink-0" />
                 ),
+                isActive: isActive("/settings")
               }}
             />
             <SidebarLink link={logoutLink} />
@@ -214,6 +408,7 @@ export function AuthenticatedLayout() {
                       </span>
                     </div>
                   ),
+                  isActive: isActive("/profile")
                 }}
               />
             )}

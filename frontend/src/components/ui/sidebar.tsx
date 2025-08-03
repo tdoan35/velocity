@@ -10,6 +10,7 @@ interface Links {
   href: string;
   icon: React.ReactNode;
   onClick?: () => void;
+  isActive?: boolean;
 }
 
 interface SidebarContextProps {
@@ -108,15 +109,15 @@ export const DesktopSidebar = ({
     <>
       <motion.div
         className={cn(
-          "h-screen px-4 pt-20 pb-4 hidden md:flex md:flex-col flex-shrink-0 fixed left-0 top-0 z-[99]",
+          "h-screen px-2 pt-20 pb-4 hidden md:flex md:flex-col flex-shrink-0 fixed left-0 top-0 z-[99]",
           open 
             ? "bg-white/80 dark:bg-neutral-900/80 backdrop-blur-md border-r border-neutral-200/20 dark:border-neutral-700/20" 
             : "bg-transparent backdrop-blur-none border-r border-transparent",
           className
         )}
-        initial={{ width: open ? "250px" : "60px" }}
+        initial={{ width: open ? "250px" : "69px" }}
         animate={{
-          width: animate ? (open ? "250px" : "60px") : (open ? "250px" : "60px"),
+          width: animate ? (open ? "250px" : "69px") : (open ? "250px" : "69px"),
         }}
         transition={{
           duration: animate ? 0.2 : 0,
@@ -205,12 +206,53 @@ export const SidebarLink = ({
       to={link.href}
       onClick={handleClick}
       className={cn(
-        "flex items-center justify-start gap-2 group/sidebar py-2 relative",
+        "flex items-center gap-2 group/sidebar py-2 relative rounded-xl transition-colors",
+        "mx-1 px-3",
+        !link.isActive && "hover:bg-neutral-50 dark:hover:bg-neutral-900",
         className
       )}
       {...props}
     >
-      <span className="flex-shrink-0 relative z-10">
+      {/* Highlight background/outline */}
+      {link.isActive && (
+        <>
+          {/* Background for expanded state */}
+          <motion.div 
+            className="absolute inset-y-0 rounded-xl bg-neutral-100 dark:bg-neutral-800"
+            initial={false}
+            animate={{
+              opacity: open ? 1 : 0,
+              left: 0,
+              right: 0,
+              width: "100%"
+            }}
+            transition={{
+              duration: animate ? 0.2 : 0,
+              ease: "easeInOut"
+            }}
+          />
+          {/* Outline for collapsed state */}
+          <motion.div 
+            className="absolute inset-y-0 rounded-xl border-2 border-neutral-300 dark:border-neutral-600"
+            initial={false}
+            animate={{
+              opacity: open ? 0 : 1,
+              left: "50%",
+              x: "-50%",
+              width: "40px"
+            }}
+            transition={{
+              duration: animate ? 0.2 : 0,
+              ease: "easeInOut"
+            }}
+          />
+        </>
+      )}
+      
+      <span className={cn(
+        "flex-shrink-0 relative z-10",
+        link.isActive && "text-neutral-900 dark:text-white"
+      )}>
         {link.icon}
       </span>
 
@@ -228,7 +270,12 @@ export const SidebarLink = ({
           ease: "easeInOut",
           opacity: { duration: animate ? 0.15 : 0, delay: animate && open ? 0.05 : 0 }
         }}
-        className="text-neutral-700 dark:text-neutral-200 text-sm whitespace-nowrap overflow-hidden"
+        className={cn(
+          "text-sm whitespace-nowrap overflow-hidden relative z-10",
+          link.isActive 
+            ? "text-neutral-900 dark:text-white" 
+            : "text-neutral-700 dark:text-neutral-200"
+        )}
         style={{ originX: 0 }}
       >
         <span className="inline-block pr-2 group-hover/sidebar:translate-x-1 transition-transform duration-150">
