@@ -366,11 +366,10 @@ function HomePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
           <div className="w-full mb-8 relative">
             <MovingBorderWrapper
               borderRadius="0.5rem"
-              duration={3000}
-              borderClassName="bg-gradient-to-r from-blue-500 via-blue-500 to-blue-500 dark:from-blue-400 dark:via-blue-400 dark:to-blue-400"
+              duration={4000}
               containerClassName="relative"
             >
-              <div className="relative">
+              <div className="relative w-full">
                 <Textarea
                   placeholder="Describe your app idea..."
                   value={prompt}
@@ -381,12 +380,12 @@ function HomePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
                       handleSubmit()
                     }
                   }}
-                  className="min-h-[120px] p-4 pr-24 resize-none border-0 bg-background/50 backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:ring-offset-0"
+                  className="min-h-[120px] w-full p-4 resize-none border-0 bg-background/50 backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:ring-offset-0"
                 />
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="absolute bottom-3 left-3 h-8 w-8 text-muted-foreground hover:text-foreground"
+                  className="absolute bottom-4 left-4 h-8 w-8 text-muted-foreground hover:text-foreground"
                   onClick={() => console.log('Attach image clicked')}
                   aria-label="Attach image"
                 >
@@ -395,12 +394,12 @@ function HomePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
                 <Button
                   onClick={handleSubmit}
                   disabled={!prompt.trim() || isSubmitting}
-                  className="absolute bottom-3 right-3 h-10 px-4 bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed z-20"
-                  size="sm"
+                  className="absolute bottom-4 right-4 h-8 w-8 p-0 bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                  size="icon"
                   title={!isAuthenticated && prompt.trim() ? "Sign up to create your app" : ""}
                 >
                   {isSubmitting ? (
-                    <span className="animate-pulse">Creating...</span>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
                     <Sparkles className="w-4 h-4" />
                   )}

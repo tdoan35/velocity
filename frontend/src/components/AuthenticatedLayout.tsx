@@ -371,7 +371,7 @@ export function AuthenticatedLayout() {
                         duration: 0.2,
                         ease: "easeInOut"
                       }}
-                      className="flex flex-col gap-1 overflow-hidden"
+                      className="flex flex-col gap-1 overflow-hidden mt-2"
                     >
                       {userProjects.length > 0 ? (
                         userProjects.map((project) => (

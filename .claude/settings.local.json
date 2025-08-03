@@ -53,7 +53,9 @@
       "mcp__github_com_upstash_context7-mcp__resolve-library-id",
       "mcp__playwright__browser_hover",
       "mcp__supabase__list_migrations",
-      "mcp__supabase__list_migrations"
+      "mcp__supabase__list_migrations",
+      "mcp__taskmaster-ai__add_task",
+      "mcp__playwright__browser_type"
     ]
   },
   "enableAllProjectMcpServers": true,

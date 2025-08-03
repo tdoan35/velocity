@@ -60,19 +60,17 @@ export function MovingBorderWrapper({
     <Component
       ref={containerRef}
       className={cn(
-        "relative overflow-hidden bg-transparent p-[4px] transition-all duration-200",
+        "relative overflow-hidden bg-transparent transition-all duration-200",
         containerClassName,
       )}
       style={{
         borderRadius: borderRadius,
+        padding: '2px',
       }}
       {...otherProps}
     >
       <div
-        className={cn(
-          "absolute inset-0 transition-opacity duration-200",
-          isFocused ? "opacity-100" : "opacity-100"
-        )}
+        className="absolute inset-0 transition-opacity duration-200 opacity-100"
         style={{ borderRadius: `calc(${borderRadius} * 0.96)` }}
       >
         <MovingBorder duration={duration} rx="8" ry="8">
@@ -80,20 +78,17 @@ export function MovingBorderWrapper({
             className={cn(
               "h-60 w-60 transition-all duration-200",
               isFocused 
-                ? "bg-[radial-gradient(ellipse_at_center,#3b82f6_0%,transparent_50%)] opacity-[1]" 
-                : "bg-[radial-gradient(ellipse_at_center,#0ea5e9_0%,transparent_50%)] opacity-[0.8]",
+                ? "bg-[radial-gradient(ellipse_at_center,#3b82f6_0%,transparent_60%)] opacity-100" 
+                : "bg-[radial-gradient(ellipse_at_center,#3b82f6_0%,transparent_70%)] opacity-60",
               borderClassName,
             )}
-            style={{
-              transform: 'rotate(-45deg)',
-            }}
           />
         </MovingBorder>
       </div>
 
       <div
         className={cn(
-          "relative bg-background transition-all duration-200",
+          "relative bg-background transition-all duration-200 w-full h-full",
           className,
         )}
         style={{
@@ -146,7 +141,7 @@ export const MovingBorder = ({
       <svg
         xmlns="http://www.w3.org/2000/svg"
         preserveAspectRatio="none"
-        className="absolute h-full w-full"
+        className="absolute inset-0 h-full w-full"
         width="100%"
         height="100%"
         {...otherProps}

@@ -14,6 +14,7 @@ interface ConversationRequest {
     projectState?: any
   }
   action?: 'continue' | 'refine' | 'explain' | 'debug'
+  agentType?: 'project_manager' | 'design_assistant' | 'code_generator' | 'config_helper'
 }
 
 interface ConversationMessage {
@@ -69,7 +70,7 @@ Deno.serve(async (req) => {
 
     // Parse request body
     const body: ConversationRequest = await req.json()
-    const { conversationId, message, context, action = 'continue' } = body
+    const { conversationId, message, context, action = 'continue', agentType = 'project_manager' } = body
 
     if (!message) {
       return new Response(JSON.stringify({ error: 'Message is required' }), {
@@ -83,6 +84,7 @@ Deno.serve(async (req) => {
       userId: authResult.userId,
       conversationId,
       action,
+      agentType,
       messageLength: message.length
     })
 
@@ -99,7 +101,7 @@ Deno.serve(async (req) => {
       role: 'user',
       content: message,
       timestamp: new Date().toISOString(),
-      metadata: { action }
+      metadata: { action, agentType }
     })
 
     // Update conversation context
@@ -130,7 +132,7 @@ Deno.serve(async (req) => {
         temperature: 0.7,
         max_tokens: 4096,
         stream: true,
-        system: buildSystemPrompt(action, conversation.context)
+        system: buildSystemPrompt(action, conversation.context, agentType)
       })
     })
 
@@ -167,7 +169,7 @@ Deno.serve(async (req) => {
                     conversation.id,
                     'assistant',
                     fullResponse,
-                    { action }
+                    { action, agentType }
                   )
                   controller.close()
                   return
@@ -267,6 +269,8 @@ async function createConversation(userId: string): Promise<ConversationState> {
     metadata: {
       model: 'claude-3-5-sonnet-20241022',
       totalTokens: 0,
+      primaryAgent: 'project_manager',
+      agentsUsed: ['project_manager'],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }
@@ -310,13 +314,46 @@ async function saveConversationMessage(
     created_at: new Date().toISOString()
   })
 
-  // Update conversation metadata
-  await supabase
-    .from('conversations')
-    .update({
-      'metadata.updatedAt': new Date().toISOString()
-    })
-    .eq('id', conversationId)
+  // Update conversation metadata including agent tracking
+  if (metadata?.agentType) {
+    // Get current conversation metadata
+    const { data: conv } = await supabase
+      .from('conversations')
+      .select('metadata')
+      .eq('id', conversationId)
+      .single()
+    
+    if (conv) {
+      const currentMetadata = conv.metadata || {}
+      const agentsUsed = currentMetadata.agentsUsed || []
+      
+      // Add agent to used list if not already there
+      if (!agentsUsed.includes(metadata.agentType)) {
+        agentsUsed.push(metadata.agentType)
+      }
+      
+      // Update metadata
+      await supabase
+        .from('conversations')
+        .update({
+          metadata: {
+            ...currentMetadata,
+            agentsUsed,
+            lastAgent: metadata.agentType,
+            updatedAt: new Date().toISOString()
+          }
+        })
+        .eq('id', conversationId)
+    }
+  } else {
+    // Just update the timestamp
+    await supabase
+      .from('conversations')
+      .update({
+        'metadata.updatedAt': new Date().toISOString()
+      })
+      .eq('id', conversationId)
+  }
 }
 
 async function prepareClaudeMessages(
@@ -348,8 +385,40 @@ async function prepareClaudeMessages(
   }))
 }
 
-function buildSystemPrompt(action: string, context: any): string {
-  let systemPrompt = `You are an expert React Native developer using Expo SDK. Your role is to help users build mobile applications with clean, efficient, and well-documented code.
+function buildSystemPrompt(action: string, context: any, agentType: string = 'project_manager'): string {
+  let systemPrompt = ''
+
+  // Agent-specific base prompts
+  switch (agentType) {
+    case 'project_manager':
+      systemPrompt = `You are a Project Manager specializing in mobile app development planning and management. Your role is to help users plan, organize, and manage their React Native/Expo projects effectively.
+
+Key responsibilities:
+1. Project planning and feature prioritization
+2. Task breakdown and milestone planning  
+3. Technical architecture decisions
+4. Development workflow optimization
+5. Team collaboration strategies
+6. Project timeline estimation
+7. Risk assessment and mitigation`
+      break
+
+    case 'design_assistant':
+      systemPrompt = `You are a Design Assistant specializing in mobile UI/UX design for React Native applications. Your expertise covers visual design, user experience, and mobile-specific design patterns.
+
+Key responsibilities:
+1. UI/UX design patterns and best practices
+2. Component design and styling with React Native
+3. Responsive layouts for different screen sizes
+4. Accessibility and inclusive design
+5. Animation and gesture interactions
+6. Color schemes and typography
+7. Design system development
+8. Platform-specific design guidelines (iOS/Android)`
+      break
+
+    case 'code_generator':
+      systemPrompt = `You are a Code Generator specializing in React Native and Expo development. Your role is to generate clean, efficient, and production-ready code.
 
 Key principles:
 1. Always use TypeScript with proper type definitions
@@ -358,15 +427,35 @@ Key principles:
 4. Implement proper error handling and loading states
 5. Use performance-optimized patterns
 6. Include accessibility features
-7. Write clean, maintainable code with comments`
+7. Write clean, maintainable code with comments
+8. Implement proper testing strategies`
+      break
+
+    case 'config_helper':
+      systemPrompt = `You are a Config Helper specializing in React Native/Expo app configuration and deployment. Your expertise covers build configuration, environment setup, and deployment processes.
+
+Key responsibilities:
+1. Expo and React Native CLI configuration
+2. Build settings and optimization
+3. Environment variables and secrets management
+4. App permissions and capabilities
+5. Native module configuration
+6. CI/CD pipeline setup
+7. App store deployment configuration
+8. Performance optimization settings`
+      break
+
+    default:
+      systemPrompt = `You are an expert React Native developer using Expo SDK. Your role is to help users build mobile applications with clean, efficient, and well-documented code.`
+  }
 
   // Add action-specific instructions
   switch (action) {
     case 'refine':
-      systemPrompt += '\n\nThe user wants to refine the previous code. Focus on improving code quality, performance, and following best practices.'
+      systemPrompt += '\n\nThe user wants to refine the previous response. Focus on improving quality, adding more detail, and following best practices.'
       break
     case 'explain':
-      systemPrompt += '\n\nThe user wants an explanation. Provide clear, detailed explanations of the code, its purpose, and how it works.'
+      systemPrompt += '\n\nThe user wants an explanation. Provide clear, detailed explanations with examples when relevant.'
       break
     case 'debug':
       systemPrompt += '\n\nThe user is debugging an issue. Help identify problems, suggest solutions, and explain the root cause.'
@@ -381,6 +470,9 @@ Key principles:
   if (context?.projectState) {
     systemPrompt += '\n\nProject state information is available. Ensure your suggestions align with the existing project structure.'
   }
+
+  // Add general guidelines
+  systemPrompt += '\n\nAlways be helpful, accurate, and provide practical solutions. When generating code, ensure it is complete and ready to use.'
 
   return systemPrompt
 }

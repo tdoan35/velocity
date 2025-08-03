@@ -96,3 +96,95 @@
     animation-delay: 4s;
   }
 }
+
+/* Custom scrollbar styles - macOS-like appearance */
+@layer base {
+  /* For Webkit browsers (Chrome, Safari, Edge) */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgb(203 213 225 / 0.5);
+    border-radius: 10px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(203 213 225 / 0.7);
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:active {
+    background: rgb(148 163 184 / 0.7);
+    background-clip: content-box;
+  }
+
+  /* Dark mode scrollbar */
+  .dark ::-webkit-scrollbar-thumb {
+    background: rgb(71 85 105 / 0.5);
+    background-clip: content-box;
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: rgb(71 85 105 / 0.7);
+    background-clip: content-box;
+  }
+
+  .dark ::-webkit-scrollbar-thumb:active {
+    background: rgb(100 116 139 / 0.7);
+    background-clip: content-box;
+  }
+
+  /* For Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(203 213 225 / 0.5) transparent;
+  }
+
+  .dark * {
+    scrollbar-color: rgb(71 85 105 / 0.5) transparent;
+  }
+
+  /* Hide scrollbar when not scrolling (auto-hide behavior) */
+  @supports (scrollbar-gutter: stable) {
+    * {
+      scrollbar-gutter: stable;
+    }
+  }
+
+  /* Make scrollbars overlay content like macOS */
+  .overflow-y-auto::-webkit-scrollbar,
+  .overflow-x-auto::-webkit-scrollbar,
+  .overflow-auto::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  /* Ensure scrollbar doesn't take up space when not needed */
+  .overflow-y-auto,
+  .overflow-x-auto,
+  .overflow-auto {
+    overflow: overlay;
+  }
+
+  /* Fallback for browsers that don't support overlay */
+  @supports not (overflow: overlay) {
+    .overflow-y-auto {
+      overflow-y: auto;
+    }
+    .overflow-x-auto {
+      overflow-x: auto;
+    }
+    .overflow-auto {
+      overflow: auto;
+    }
+  }
+}

@@ -105,33 +105,45 @@ export const aiService = {
     return fullResponse
   },
 
-  // Simplified method for chat conversations
+  // Method for chat conversations using the conversation edge function
   async generateChatResponse(
     prompt: string,
     projectId: string,
-    conversationHistory?: Array<{ role: string; content: string }>
-  ): Promise<ReadableStream<StreamChunk>> {
-    // Build context from conversation history
-    const userHistory = conversationHistory
-      ?.filter(msg => msg.role === 'user')
-      .map(msg => msg.content)
-      .slice(-5) // Last 5 user messages
+    conversationHistory?: Array<{ role: string; content: string }>,
+    conversationId?: string,
+    agentType: 'project_manager' | 'design_assistant' | 'code_generator' | 'config_helper' = 'project_manager'
+  ): Promise<ReadableStream> {
+    const { data: { session } } = await supabase.auth.getSession()
     
-    return this.generateCode({
-      prompt,
-      projectId,
-      context: {
-        userHistory,
-        preferences: {
-          conversationType: 'design_assistant',
-          responseStyle: 'conversational'
-        }
+    if (!session) {
+      throw new Error('Not authenticated')
+    }
+
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/conversation`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
       },
-      options: {
-        temperature: 0.8,
-        maxTokens: 2048,
-        stream: true
-      }
+      body: JSON.stringify({
+        conversationId,
+        message: prompt,
+        context: {
+          projectId,
+          projectState: {
+            type: 'mobile_app_design'
+          }
+        },
+        action: 'continue',
+        agentType
+      })
     })
+
+    if (!response.ok) {
+      const error = await response.text()
+      throw new Error(`Conversation API failed: ${error}`)
+    }
+
+    return response.body!
   }
 }

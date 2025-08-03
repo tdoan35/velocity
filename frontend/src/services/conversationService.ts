@@ -25,7 +25,11 @@ export interface ConversationMessage {
 }
 
 export const conversationService = {
-  async createConversation(projectId: string, title?: string): Promise<{ conversation: Conversation | null; error: Error | null }> {
+  async createConversation(
+    projectId: string, 
+    title?: string,
+    initialAgent: string = 'project_manager'
+  ): Promise<{ conversation: Conversation | null; error: Error | null }> {
     try {
       const { data: { user }, error: authError } = await supabase.auth.getUser()
       
@@ -42,6 +46,11 @@ export const conversationService = {
           context: {
             type: 'project_design',
             createdFrom: 'project_design_page'
+          },
+          metadata: {
+            primaryAgent: initialAgent,
+            agentsUsed: [initialAgent],
+            lastAgent: initialAgent
           }
         })
         .select()

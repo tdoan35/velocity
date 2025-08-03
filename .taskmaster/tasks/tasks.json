@@ -1441,11 +1441,22 @@
         ],
         "priority": "medium",
         "subtasks": []
+      },
+      {
+        "id": 15,
+        "title": "Enable Multi-Agent Chat System",
+        "description": "Update the existing conversation edge function to support multiple AI agent personalities and enable agent switching in the frontend. Each agent will have specialized prompts and context for their specific domain (project management, UI/UX design, code generation, configuration).",
+        "details": "## Implementation Steps:\n\n1. **Update Conversation Edge Function**\n   - Add `agentType` parameter to ConversationRequest interface\n   - Create agent-specific system prompt functions\n   - Implement buildSystemPrompt() switch for different agents\n   - Store agent_type in conversation metadata\n\n2. **Create Agent-Specific Prompts**\n   - Project Assistant: Focus on project planning, task management, feature prioritization\n   - Design Assistant: UI/UX patterns, component design, accessibility, mobile best practices\n   - Code Generator: React Native syntax, TypeScript, performance optimization, error handling\n   - Config Helper: Build settings, environment variables, deployment, app permissions\n\n3. **Frontend Updates (ProjectDesign.tsx)**\n   - Add activeAgent state management\n   - Enable all agent buttons (remove opacity-60)\n   - Implement agent switching logic\n   - Pass agentType in conversation API calls\n   - Update UI to show active agent context\n   - Add visual feedback for agent switching\n\n4. **Database Schema Updates**\n   - Add agent_type column to conversation_messages table\n   - Add agent_type to conversations metadata\n   - Create migration for schema changes\n\n5. **Agent Context Management**\n   - Maintain separate conversation contexts per agent\n   - Allow context sharing between agents when relevant\n   - Implement agent handoff capabilities\n\n## Technical Details:\n- Reuse existing authentication, rate limiting, and streaming infrastructure\n- Maintain backward compatibility with existing conversations\n- Use prompt engineering for agent specialization\n- Keep single edge function for easier maintenance",
+        "testStrategy": "1. Test agent switching in frontend UI\n2. Verify correct system prompts are applied per agent\n3. Test conversation continuity when switching agents\n4. Validate database persistence of agent_type\n5. Test streaming responses with different agents\n6. Verify rate limiting works across all agents\n7. Test error handling for invalid agent types",
+        "status": "pending",
+        "dependencies": [],
+        "priority": "high",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-07-22T22:49:25.170Z",
-      "updated": "2025-08-02T03:55:00.240Z",
+      "updated": "2025-08-03T04:45:51.682Z",
       "description": "Tasks for master context"
     }
   }
