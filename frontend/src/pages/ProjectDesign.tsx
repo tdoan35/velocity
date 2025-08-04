@@ -460,7 +460,11 @@ export function ProjectDesign() {
         ...currentConversation,
         id: actualConversationId,
         isTemporary: false,
-        metadata: newConv.metadata || {}
+        metadata: {
+          primaryAgent: currentConversation.activeAgent,
+          agentsUsed: [currentConversation.activeAgent],
+          lastAgent: currentConversation.activeAgent
+        }
       })
     }
     
@@ -505,358 +509,356 @@ export function ProjectDesign() {
   }
   
   return (
-    <div className="flex flex-col h-full pb-6 px-6 pt-2">
-      <Card className="flex flex-col h-full overflow-hidden bg-transparent border-gray-300 dark:border-gray-800">
-        <ResizablePanelGroup direction="horizontal" className="h-full">
-          {/* Left Panel - Chat Interface */}
-          <ResizablePanel defaultSize={65} minSize={40}>
-            <div className="h-full p-4">
-              <Card className="h-full flex flex-col">
-                {/* Card Header */}
-                <CardHeader className="p-4 pl-5 border-b">
-                  <div className="flex items-center gap-2">
-                    <MessageSquare className="w-5 h-5" />
-                    <CardTitle className="text-lg">
-                      {currentConversation?.title || 'Chat Conversation'}
-                    </CardTitle>
-                  </div>
-                </CardHeader>
-                
-                {/* Messages */}
-                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-                  {!currentConversation ? (
-                    <div className="flex flex-col items-center justify-center h-full">
-                      <MessageSquare className="w-12 h-12 text-muted-foreground mb-4" />
-                      <p className="text-muted-foreground text-sm mb-4">No active conversations</p>
-                      <Button onClick={() => createNewConversation()}>
-                        <Plus className="w-4 h-4 mr-2" />
-                        Start New Conversation
-                      </Button>
-                    </div>
-                  ) : (
-                    <AnimatePresence initial={false}>
-                      {messages.map((message) => {
-                      const assistantAgentInfo = message.role === 'assistant' 
-                        ? getAgentInfo(message.metadata?.agentType || activeAgent)
-                        : null
-                      const AssistantIcon = assistantAgentInfo?.icon || Bot
-                      
-                      return (
-                        <motion.div
-                          key={message.id}
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -20 }}
-                          transition={{ duration: 0.3 }}
-                          className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                        >
-                          <div className={`flex gap-3 max-w-[85%] ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                              message.role === 'user' 
-                                ? 'bg-blue-600' 
-                                : assistantAgentInfo 
-                                  ? assistantAgentInfo.bgColor
-                                  : 'bg-gray-200 dark:bg-gray-700'
-                            }`}>
-                              {message.role === 'user' ? (
-                                <User className="w-4 h-4 text-white" />
-                              ) : (
-                                <AssistantIcon className={`w-4 h-4 ${
-                                  assistantAgentInfo ? assistantAgentInfo.textColor : ''
-                                }`} />
-                              )}
-                            </div>
-                            <Card className={`${message.role === 'user' ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}>
-                              <CardContent className="p-3">
-                                {message.isLoading ? (
-                                  <div className="flex items-center gap-2">
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                    <span className="text-muted-foreground">Thinking...</span>
-                                  </div>
-                                ) : (
-                                  <div>
-                                    {message.metadata?.agentType && message.role === 'assistant' && (
-                                      <div className="text-xs text-muted-foreground mb-1">
-                                        {message.metadata.agentType === 'project_manager' ? 'Project Manager' :
-                                         message.metadata.agentType === 'design_assistant' ? 'Design Assistant' :
-                                         message.metadata.agentType === 'code_generator' ? 'Code Generator' :
-                                         message.metadata.agentType === 'config_helper' ? 'Config Helper' : ''}
-                                      </div>
-                                    )}
-                                    <p className="whitespace-pre-wrap text-sm">{message.content}</p>
-                                  </div>
-                                )}
-                              </CardContent>
-                            </Card>
-                          </div>
-                        </motion.div>
-                      )
-                    })}
-                    </AnimatePresence>
-                  )}
-                  <div ref={messagesEndRef} />
+    <div className="flex flex-col h-full border mx-2 mb-2 rounded-lg border-gray-300 dark:border-gray-800 overflow-hidden">
+      <ResizablePanelGroup direction="horizontal" className="h-full">
+        {/* Left Panel - Chat Interface */}
+        <ResizablePanel defaultSize={65} minSize={40}>
+          <div className="h-full p-2">
+            <Card className="h-full flex flex-col">
+              {/* Card Header */}
+              <CardHeader className="p-4 pl-5 border-b bg-transparent">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5" />
+                  <CardTitle className="text-lg">
+                    {currentConversation?.title || 'Chat Conversation'}
+                  </CardTitle>
                 </div>
-                
-                {/* Input */}
-                <div className="border-t p-4">
-                  <div className="flex gap-3">
-                    <Textarea
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      placeholder="Type your message..."
-                      className="min-h-[60px] resize-none text-sm"
-                      disabled={isLoading || !currentConversation}
-                    />
+              </CardHeader>
+              
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+                {!currentConversation ? (
+                  <div className="flex flex-col items-center justify-center h-full">
+                    <MessageSquare className="w-12 h-12 text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground text-sm mb-4">No active conversations</p>
+                    <Button onClick={() => createNewConversation()}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Start New Conversation
+                    </Button>
+                  </div>
+                ) : (
+                  <AnimatePresence initial={false}>
+                    {messages.map((message) => {
+                    const assistantAgentInfo = message.role === 'assistant' 
+                      ? getAgentInfo(message.metadata?.agentType || activeAgent)
+                      : null
+                    const AssistantIcon = assistantAgentInfo?.icon || Bot
+                    
+                    return (
+                      <motion.div
+                        key={message.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        transition={{ duration: 0.3 }}
+                        className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                      >
+                        <div className={`flex gap-3 max-w-[85%] ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                            message.role === 'user' 
+                              ? 'bg-blue-600' 
+                              : assistantAgentInfo 
+                                ? assistantAgentInfo.bgColor
+                                : 'bg-gray-200 dark:bg-gray-700'
+                          }`}>
+                            {message.role === 'user' ? (
+                              <User className="w-4 h-4 text-white" />
+                            ) : (
+                              <AssistantIcon className={`w-4 h-4 ${
+                                assistantAgentInfo ? assistantAgentInfo.textColor : ''
+                              }`} />
+                            )}
+                          </div>
+                          <Card className={`${message.role === 'user' ? 'bg-blue-50/50 dark:bg-blue-900/10' : 'bg-transparent'}`}>
+                            <CardContent className="p-3">
+                              {message.isLoading ? (
+                                <div className="flex items-center gap-2">
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  <span className="text-muted-foreground">Thinking...</span>
+                                </div>
+                              ) : (
+                                <div>
+                                  {message.metadata?.agentType && message.role === 'assistant' && (
+                                    <div className="text-xs text-muted-foreground mb-1">
+                                      {message.metadata.agentType === 'project_manager' ? 'Project Manager' :
+                                        message.metadata.agentType === 'design_assistant' ? 'Design Assistant' :
+                                        message.metadata.agentType === 'code_generator' ? 'Code Generator' :
+                                        message.metadata.agentType === 'config_helper' ? 'Config Helper' : ''}
+                                    </div>
+                                  )}
+                                  <p className="whitespace-pre-wrap text-sm">{message.content}</p>
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        </div>
+                      </motion.div>
+                    )
+                  })}
+                  </AnimatePresence>
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+              
+              {/* Input */}
+              <div className="border-t p-4">
+                <div className="flex gap-3">
+                  <Textarea
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Type your message..."
+                    className="min-h-[60px] resize-none text-sm"
+                    disabled={isLoading || !currentConversation}
+                  />
+                  <Button
+                    onClick={handleSend}
+                    disabled={!input.trim() || isLoading || !currentConversation}
+                    size="icon"
+                    className="h-[60px] w-[60px]"
+                  >
+                    {isLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4" />
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Press Enter to send, Shift+Enter for new line
+                </p>
+              </div>
+            </Card>
+          </div>
+        </ResizablePanel>
+
+        <ResizableHandle withHandle />
+
+        {/* Right Panel - Agents List or History */}
+        <ResizablePanel defaultSize={35} minSize={25}>
+          <div className="h-full p-2">
+            <Card className="h-full flex flex-col">
+              <CardHeader className="p-4 pl-5 border-b">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {showHistory ? (
+                      <>
+                        <History className="w-5 h-5" />
+                        <CardTitle className="text-lg">Chat History</CardTitle>
+                      </>
+                    ) : (
+                      <>
+                        <Users className="w-5 h-5" />
+                        <CardTitle className="text-lg">AI Agents</CardTitle>
+                      </>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
                     <Button
-                      onClick={handleSend}
-                      disabled={!input.trim() || isLoading || !currentConversation}
+                      variant="ghost"
                       size="icon"
-                      className="h-[60px] w-[60px]"
+                      className="h-8 w-8"
+                      onClick={() => createNewConversation()}
+                      title="New Conversation"
                     >
-                      {isLoading ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => setShowHistory(!showHistory)}
+                      title={showHistory ? "Show AI Agents" : "Show Chat History"}
+                    >
+                      {showHistory ? (
+                        <ChevronLeft className="w-4 h-4" />
                       ) : (
-                        <Send className="w-4 h-4" />
+                        <History className="w-4 h-4" />
                       )}
                     </Button>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Press Enter to send, Shift+Enter for new line
-                  </p>
                 </div>
-              </Card>
-            </div>
-          </ResizablePanel>
-
-          <ResizableHandle withHandle />
-
-          {/* Right Panel - Agents List or History */}
-          <ResizablePanel defaultSize={35} minSize={25}>
-            <div className="h-full p-4">
-              <Card className="h-full flex flex-col">
-                <CardHeader className="p-4 pl-5 border-b">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {showHistory ? (
-                        <>
-                          <History className="w-5 h-5" />
-                          <CardTitle className="text-lg">Chat History</CardTitle>
-                        </>
-                      ) : (
-                        <>
-                          <Users className="w-5 h-5" />
-                          <CardTitle className="text-lg">AI Agents</CardTitle>
-                        </>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => createNewConversation()}
-                        title="New Conversation"
-                      >
-                        <Plus className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => setShowHistory(!showHistory)}
-                        title={showHistory ? "Show AI Agents" : "Show Chat History"}
-                      >
-                        {showHistory ? (
-                          <ChevronLeft className="w-4 h-4" />
-                        ) : (
-                          <History className="w-4 h-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-4 flex-1 overflow-y-auto">
-                  {showHistory ? (
-                    // Conversation History View
-                    <div className="space-y-2">
-                      {conversationHistory.length === 0 ? (
-                        <div className="text-center py-8">
-                          <History className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
-                          <p className="text-sm text-muted-foreground">No conversation history yet</p>
-                        </div>
-                      ) : (
-                        conversationHistory.map((conv) => {
-                          const agentInfo = getAgentInfo(conv.metadata?.primaryAgent || conv.metadata?.lastAgent)
-                          const AgentIcon = agentInfo.icon
-                          const hasMultipleAgents = (conv.metadata?.agentsUsed?.length || 0) > 1
-                          
-                          return (
-                            <div
-                              key={conv.id}
-                              className="p-3 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors"
-                              onClick={async () => {
-                                // Load this conversation
-                                await createNewConversation(conv.title, conv.id)
-                                setShowHistory(false)
-                              }}
-                            >
-                              <div className="flex items-start gap-3">
-                                <div className={`w-8 h-8 rounded-full ${agentInfo.bgColor} flex items-center justify-center flex-shrink-0`}>
-                                  <AgentIcon className={`w-4 h-4 ${agentInfo.textColor}`} />
+              </CardHeader>
+              <CardContent className="p-4 flex-1 overflow-y-auto">
+                {showHistory ? (
+                  // Conversation History View
+                  <div className="space-y-2">
+                    {conversationHistory.length === 0 ? (
+                      <div className="text-center py-8">
+                        <History className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+                        <p className="text-sm text-muted-foreground">No conversation history yet</p>
+                      </div>
+                    ) : (
+                      conversationHistory.map((conv) => {
+                        const agentInfo = getAgentInfo(conv.metadata?.primaryAgent || conv.metadata?.lastAgent)
+                        const AgentIcon = agentInfo.icon
+                        const hasMultipleAgents = (conv.metadata?.agentsUsed?.length || 0) > 1
+                        
+                        return (
+                          <div
+                            key={conv.id}
+                            className="p-3 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors"
+                            onClick={async () => {
+                              // Load this conversation
+                              await createNewConversation(conv.title, conv.id)
+                              setShowHistory(false)
+                            }}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className={`w-8 h-8 rounded-full ${agentInfo.bgColor} flex items-center justify-center flex-shrink-0`}>
+                                <AgentIcon className={`w-4 h-4 ${agentInfo.textColor}`} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <h3 className="font-medium text-sm truncate flex-1">{conv.title}</h3>
+                                  {hasMultipleAgents && (
+                                    <div className="flex -space-x-2">
+                                      {conv.metadata?.agentsUsed?.slice(0, 3).map((agent, idx) => {
+                                        const info = getAgentInfo(agent)
+                                        const Icon = info.icon
+                                        return (
+                                          <div
+                                            key={idx}
+                                            className={`w-5 h-5 rounded-full ${info.bgColor} flex items-center justify-center border-2 border-background`}
+                                            title={agent}
+                                          >
+                                            <Icon className={`w-3 h-3 ${info.textColor}`} />
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  )}
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <h3 className="font-medium text-sm truncate flex-1">{conv.title}</h3>
-                                    {hasMultipleAgents && (
-                                      <div className="flex -space-x-2">
-                                        {conv.metadata?.agentsUsed?.slice(0, 3).map((agent, idx) => {
-                                          const info = getAgentInfo(agent)
-                                          const Icon = info.icon
-                                          return (
-                                            <div
-                                              key={idx}
-                                              className={`w-5 h-5 rounded-full ${info.bgColor} flex items-center justify-center border-2 border-background`}
-                                              title={agent}
-                                            >
-                                              <Icon className={`w-3 h-3 ${info.textColor}`} />
-                                            </div>
-                                          )
-                                        })}
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center justify-between mt-1">
-                                    <p className="text-xs text-muted-foreground">
-                                      {new Date(conv.created_at).toLocaleDateString()}
-                                    </p>
-                                    <span className="text-xs text-muted-foreground">
-                                      {conv.message_count} messages
-                                    </span>
-                                  </div>
+                                <div className="flex items-center justify-between mt-1">
+                                  <p className="text-xs text-muted-foreground">
+                                    {new Date(conv.created_at).toLocaleDateString()}
+                                  </p>
+                                  <span className="text-xs text-muted-foreground">
+                                    {conv.message_count} messages
+                                  </span>
                                 </div>
                               </div>
                             </div>
-                          )
-                        })
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                ) : (
+                  // AI Agents View
+                  <div className="space-y-3">
+                    {/* Project Manager */}
+                  <div 
+                    className={`p-3 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors ${
+                      activeAgent === 'project_manager' ? 'ring-2 ring-emerald-500' : ''
+                    }`}
+                    onClick={() => updateActiveAgent('project_manager')}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
+                        <Users className="w-5 h-5 text-emerald-500" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-medium text-sm">Project Manager</h3>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Manages project planning and coordination
+                        </p>
+                      </div>
+                      {activeAgent === 'project_manager' && (
+                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
                       )}
                     </div>
-                  ) : (
-                    // AI Agents View
-                    <div className="space-y-3">
-                      {/* Project Manager */}
-                    <div 
-                      className={`p-3 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors ${
-                        activeAgent === 'project_manager' ? 'ring-2 ring-emerald-500' : ''
-                      }`}
-                      onClick={() => updateActiveAgent('project_manager')}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
-                          <Users className="w-5 h-5 text-emerald-500" />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-medium text-sm">Project Manager</h3>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Manages project planning and coordination
-                          </p>
-                        </div>
-                        {activeAgent === 'project_manager' && (
-                          <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                        )}
-                      </div>
-                    </div>
+                  </div>
 
-                    {/* Design Assistant */}
-                    <div 
-                      className={`p-3 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors ${
-                        activeAgent === 'design_assistant' ? 'ring-2 ring-blue-500' : ''
-                      }`}
-                      onClick={() => updateActiveAgent('design_assistant')}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-                          <Sparkles className="w-5 h-5 text-blue-500" />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-medium text-sm">Design Assistant</h3>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Helps with UI/UX design and app layout
-                          </p>
-                        </div>
-                        {activeAgent === 'design_assistant' && (
-                          <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                        )}
+                  {/* Design Assistant */}
+                  <div 
+                    className={`p-3 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors ${
+                      activeAgent === 'design_assistant' ? 'ring-2 ring-blue-500' : ''
+                    }`}
+                    onClick={() => updateActiveAgent('design_assistant')}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                        <Sparkles className="w-5 h-5 text-blue-500" />
                       </div>
-                    </div>
-
-                    {/* Code Generator */}
-                    <div 
-                      className={`p-3 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors ${
-                        activeAgent === 'code_generator' ? 'ring-2 ring-purple-500' : ''
-                      }`}
-                      onClick={() => updateActiveAgent('code_generator')}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center flex-shrink-0">
-                          <Code2 className="w-5 h-5 text-purple-500" />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-medium text-sm">Code Generator</h3>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Generates React Native code
-                          </p>
-                        </div>
-                        {activeAgent === 'code_generator' && (
-                          <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Config Helper */}
-                    <div 
-                      className={`p-3 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors ${
-                        activeAgent === 'config_helper' ? 'ring-2 ring-orange-500' : ''
-                      }`}
-                      onClick={() => updateActiveAgent('config_helper')}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">
-                          <Settings className="w-5 h-5 text-orange-500" />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-medium text-sm">Config Helper</h3>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Assists with app configuration
-                          </p>
-                        </div>
-                        {activeAgent === 'config_helper' && (
-                          <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                        )}
-                      </div>
-                    </div>
-
-                      <div className="mt-6 p-3 rounded-lg bg-muted/50">
-                        <p className="text-xs text-muted-foreground">
-                          <span className="font-medium">Active:</span> {
-                            activeAgent === 'project_manager' ? 'Project Manager' :
-                            activeAgent === 'design_assistant' ? 'Design Assistant' :
-                            activeAgent === 'code_generator' ? 'Code Generator' :
-                            'Config Helper'
-                          }
-                        </p>
+                      <div className="flex-1">
+                        <h3 className="font-medium text-sm">Design Assistant</h3>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Click on an agent to switch context
+                          Helps with UI/UX design and app layout
                         </p>
                       </div>
+                      {activeAgent === 'design_assistant' && (
+                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                      )}
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      </Card>
+                  </div>
+
+                  {/* Code Generator */}
+                  <div 
+                    className={`p-3 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors ${
+                      activeAgent === 'code_generator' ? 'ring-2 ring-purple-500' : ''
+                    }`}
+                    onClick={() => updateActiveAgent('code_generator')}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center flex-shrink-0">
+                        <Code2 className="w-5 h-5 text-purple-500" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-medium text-sm">Code Generator</h3>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Generates React Native code
+                        </p>
+                      </div>
+                      {activeAgent === 'code_generator' && (
+                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Config Helper */}
+                  <div 
+                    className={`p-3 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors ${
+                      activeAgent === 'config_helper' ? 'ring-2 ring-orange-500' : ''
+                    }`}
+                    onClick={() => updateActiveAgent('config_helper')}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">
+                        <Settings className="w-5 h-5 text-orange-500" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-medium text-sm">Config Helper</h3>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Assists with app configuration
+                        </p>
+                      </div>
+                      {activeAgent === 'config_helper' && (
+                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                      )}
+                    </div>
+                  </div>
+
+                    <div className="mt-6 p-3 rounded-lg bg-muted/50">
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium">Active:</span> {
+                          activeAgent === 'project_manager' ? 'Project Manager' :
+                          activeAgent === 'design_assistant' ? 'Design Assistant' :
+                          activeAgent === 'code_generator' ? 'Code Generator' :
+                          'Config Helper'
+                        }
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Click on an agent to switch context
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   )
 }

@@ -72,9 +72,6 @@
   * {
     @apply border-border;
   }
-  html {
-    overflow-y: scroll;
-  }
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-geist-sans);
@@ -154,11 +151,7 @@
   }
 
   /* Hide scrollbar when not scrolling (auto-hide behavior) */
-  @supports (scrollbar-gutter: stable) {
-    * {
-      scrollbar-gutter: stable;
-    }
-  }
+  /* Removed scrollbar-gutter: stable as it reserves space even when not needed */
 
   /* Make scrollbars overlay content like macOS */
   .overflow-y-auto::-webkit-scrollbar,

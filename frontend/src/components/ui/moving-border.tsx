@@ -76,7 +76,7 @@ export function MovingBorderWrapper({
         <MovingBorder duration={duration} rx="8" ry="8">
           <div
             className={cn(
-              "h-60 w-60 transition-all duration-200",
+              "h-[180px] w-[180px] transition-all duration-200",
               isFocused 
                 ? "bg-[radial-gradient(ellipse_at_center,#3b82f6_0%,transparent_60%)] opacity-100" 
                 : "bg-[radial-gradient(ellipse_at_center,#3b82f6_0%,transparent_70%)] opacity-60",
