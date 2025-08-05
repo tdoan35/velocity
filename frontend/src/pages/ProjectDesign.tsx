@@ -509,7 +509,7 @@ export function ProjectDesign() {
   }
   
   return (
-    <div className="flex flex-col h-full mx-2 mb-2 rounded-lg overflow-hidden bg-white/50 dark:bg-gray-900/50 backdrop-blur-lg border border-gray-200/50 dark:border-gray-700/50 shadow-xl">
+    <div className="flex flex-col h-full mx-2 mb-2 rounded-lg overflow-hidden bg-white/30 dark:bg-gray-900/30 backdrop-blur-lg border border-gray-200/50 dark:border-gray-700/50 shadow-xl">
       <ResizablePanelGroup direction="horizontal" className="h-full">
         {/* Left Panel - Chat Interface */}
         <ResizablePanel defaultSize={65} minSize={40}>
@@ -518,7 +518,15 @@ export function ProjectDesign() {
               {/* Card Header */}
               <CardHeader className="p-4 pl-5 border-b bg-transparent">
                 <div className="flex items-center gap-2">
-                  <MessageSquare className="w-5 h-5" />
+                  {(() => {
+                    const agentInfo = getAgentInfo(currentConversation?.activeAgent)
+                    const AgentIcon = agentInfo.icon
+                    return (
+                      <div className={`w-8 h-8 rounded-full ${agentInfo.bgColor} flex items-center justify-center flex-shrink-0`}>
+                        <AgentIcon className={`w-4 h-4 ${agentInfo.textColor}`} />
+                      </div>
+                    )
+                  })()}
                   <CardTitle className="text-lg">
                     {currentConversation?.title || 'Chat Conversation'}
                   </CardTitle>
@@ -553,24 +561,9 @@ export function ProjectDesign() {
                         transition={{ duration: 0.3 }}
                         className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                       >
-                        <div className={`flex gap-3 max-w-[85%] ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                            message.role === 'user' 
-                              ? 'bg-blue-600' 
-                              : assistantAgentInfo 
-                                ? assistantAgentInfo.bgColor
-                                : 'bg-gray-200 dark:bg-gray-700'
-                          }`}>
-                            {message.role === 'user' ? (
-                              <User className="w-4 h-4 text-white" />
-                            ) : (
-                              <AssistantIcon className={`w-4 h-4 ${
-                                assistantAgentInfo ? assistantAgentInfo.textColor : ''
-                              }`} />
-                            )}
-                          </div>
-                          <Card className={`${message.role === 'user' ? 'bg-blue-50/50 dark:bg-blue-900/10' : 'bg-transparent'}`}>
-                            <CardContent className="p-3">
+                        <div className={`max-w-[85%]`}>
+                          <Card className={`${message.role === 'user' ? 'bg-blue-50/50 dark:bg-blue-900/10' : 'bg-transparent border-0 shadow-none'}`}>
+                            <CardContent className="p-1 px-3">
                               {message.isLoading ? (
                                 <div className="flex items-center gap-2">
                                   <Loader2 className="w-4 h-4 animate-spin" />
