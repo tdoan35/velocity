@@ -7,9 +7,9 @@ import { conversationService, type ConversationMessage } from '@/services/conver
 import { aiService } from '@/services/aiService'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
+import { EnhancedTextarea } from '@/components/ui/enhanced-textarea'
 import { motion, AnimatePresence } from 'motion/react'
 import { 
   Send, 
@@ -492,13 +492,6 @@ export function ProjectDesign() {
     await handleAIResponse(messageContent, actualConversationId)
   }
   
-  // Handle Enter key
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSend()
-    }
-  }
   
   if (isProjectLoading) {
     return (
@@ -595,31 +588,18 @@ export function ProjectDesign() {
               
               {/* Input */}
               <div className="border-t p-4">
-                <div className="flex gap-3">
-                  <Textarea
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Type your message..."
-                    className="min-h-[60px] resize-none text-sm"
-                    disabled={isLoading || !currentConversation}
-                  />
-                  <Button
-                    onClick={handleSend}
-                    disabled={!input.trim() || isLoading || !currentConversation}
-                    size="icon"
-                    className="h-[60px] w-[60px]"
-                  >
-                    {isLoading ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Send className="w-4 h-4" />
-                    )}
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Press Enter to send, Shift+Enter for new line
-                </p>
+                <EnhancedTextarea
+                  value={input}
+                  onChange={setInput}
+                  onSubmit={handleSend}
+                  placeholder="Type your message..."
+                  disabled={isLoading || !currentConversation}
+                  isLoading={isLoading}
+                  submitIcon={Send}
+                  minHeight="60px"
+                  showAttachButton={false}
+                  textareaClassName="text-sm"
+                />
               </div>
             </Card>
           </div>
