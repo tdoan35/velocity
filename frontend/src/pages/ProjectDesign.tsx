@@ -509,12 +509,12 @@ export function ProjectDesign() {
   }
   
   return (
-    <div className="flex flex-col h-full border mx-2 mb-2 rounded-lg border-gray-300 dark:border-gray-800 overflow-hidden">
+    <div className="flex flex-col h-full mx-2 mb-2 rounded-lg overflow-hidden bg-white/50 dark:bg-gray-900/50 backdrop-blur-lg border border-gray-200/50 dark:border-gray-700/50 shadow-xl">
       <ResizablePanelGroup direction="horizontal" className="h-full">
         {/* Left Panel - Chat Interface */}
         <ResizablePanel defaultSize={65} minSize={40}>
           <div className="h-full p-2">
-            <Card className="h-full flex flex-col">
+            <Card className="h-full flex flex-col bg-transparent">
               {/* Card Header */}
               <CardHeader className="p-4 pl-5 border-b bg-transparent">
                 <div className="flex items-center gap-2">
