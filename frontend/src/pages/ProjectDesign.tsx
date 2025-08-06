@@ -28,7 +28,7 @@ interface ConversationTab {
   id: string
   title: string
   isLoading: boolean
-  activeAgent: 'project_manager' | 'design_assistant' | 'code_generator' | 'config_helper'
+  activeAgent: 'project_manager' | 'design_assistant' | 'engineering_assistant' | 'config_helper'
   isTemporary?: boolean
   metadata?: {
     primaryAgent?: string
@@ -46,7 +46,7 @@ export function ProjectDesign() {
   const [project, setProject] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [currentConversation, setCurrentConversation] = useState<ConversationTab | null>(null)
-  const [activeAgent, setActiveAgent] = useState<'project_manager' | 'design_assistant' | 'code_generator' | 'config_helper'>('project_manager')
+  const [activeAgent, setActiveAgent] = useState<'project_manager' | 'design_assistant' | 'engineering_assistant' | 'config_helper'>('project_manager')
   const [showHistory, setShowHistory] = useState(false)
   const [conversationHistory, setConversationHistory] = useState<Array<{ 
     id: string; 
@@ -69,9 +69,9 @@ export function ProjectDesign() {
       case 'design_assistant':
       case 'ui':
         return { icon: Sparkles, color: 'blue', bgColor: 'bg-blue-500/10', textColor: 'text-blue-500', label: 'Design Assistant' }
-      case 'code_generator':
-      case 'code':
-        return { icon: Code2, color: 'purple', bgColor: 'bg-purple-500/10', textColor: 'text-purple-500', label: 'Code Generator' }
+      case 'engineering_assistant':
+      case 'engineering':
+        return { icon: Code2, color: 'purple', bgColor: 'bg-purple-500/10', textColor: 'text-purple-500', label: 'Engineering Assistant' }
       case 'config_helper':
       case 'config':
         return { icon: Settings, color: 'orange', bgColor: 'bg-orange-500/10', textColor: 'text-orange-500', label: 'Config Helper' }
@@ -123,7 +123,7 @@ export function ProjectDesign() {
   }
   
   // Update active agent
-  const updateActiveAgent = (agent: 'project_manager' | 'design_assistant' | 'code_generator' | 'config_helper') => {
+  const updateActiveAgent = (agent: 'project_manager' | 'design_assistant' | 'engineering_assistant' | 'config_helper') => {
     setActiveAgent(agent)
     if (currentConversation) {
       setCurrentConversation({
@@ -465,10 +465,10 @@ export function ProjectDesign() {
                         </div>
                       </div>
 
-                      {/* Code Generator */}
+                      {/* Engineering Assistant */}
                       <div 
                         className={`p-3 rounded-lg border bg-card opacity-50 cursor-not-allowed transition-colors ${
-                          activeAgent === 'code_generator' ? 'ring-2 ring-purple-500' : ''
+                          activeAgent === 'engineering_assistant' ? 'ring-2 ring-purple-500' : ''
                         }`}
                       >
                         <div className="flex items-start gap-3">
@@ -476,12 +476,12 @@ export function ProjectDesign() {
                             <Code2 className="w-5 h-5 text-purple-500" />
                           </div>
                           <div className="flex-1">
-                            <h3 className="font-medium text-sm">Code Generator</h3>
+                            <h3 className="font-medium text-sm">Engineering Assistant</h3>
                             <p className="text-xs text-muted-foreground mt-1">
                               Generates React Native code for your app
                             </p>
                           </div>
-                          {activeAgent === 'code_generator' && (
+                          {activeAgent === 'engineering_assistant' && (
                             <div className="w-2 h-2 rounded-full bg-green-500"></div>
                           )}
                         </div>

@@ -14,7 +14,7 @@ interface ConversationRequest {
     projectState?: any
   }
   action?: 'continue' | 'refine' | 'explain' | 'debug'
-  agentType?: 'project_manager' | 'design_assistant' | 'code_generator' | 'config_helper'
+  agentType?: 'project_manager' | 'design_assistant' | 'engineering_assistant' | 'config_helper'
 }
 
 interface ConversationMessage {
@@ -428,8 +428,8 @@ Key responsibilities:
 8. Platform-specific design guidelines (iOS/Android)`
       break
 
-    case 'code_generator':
-      systemPrompt = `You are a Code Generator specializing in React Native and Expo development. Your role is to generate clean, efficient, and production-ready code.
+    case 'engineering_assistant':
+      systemPrompt = `You are an Engineering Assistant specializing in React Native and Expo development. Your role is to generate clean, efficient, and production-ready code.
 
 Key principles:
 1. Always use TypeScript with proper type definitions

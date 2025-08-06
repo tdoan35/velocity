@@ -24,8 +24,8 @@ interface EnhancedChatInterfaceProps {
   conversationId?: string
   className?: string
   onApplyCode?: (code: string) => void
-  activeAgent?: 'project_manager' | 'design_assistant' | 'code_generator' | 'config_helper'
-  onAgentChange?: (agent: 'project_manager' | 'design_assistant' | 'code_generator' | 'config_helper') => void
+  activeAgent?: 'project_manager' | 'design_assistant' | 'engineering_assistant' | 'config_helper'
+  onAgentChange?: (agent: 'project_manager' | 'design_assistant' | 'engineering_assistant' | 'config_helper') => void
   conversationTitle?: string
   onNewConversation?: () => void
   onToggleHistory?: () => void
@@ -34,7 +34,7 @@ interface EnhancedChatInterfaceProps {
 const agentConfig: Record<AgentType, { label: string; icon: any; color: string }> = {
   project: { label: 'Project Manager', icon: '📊', color: 'bg-blue-500' },
   ui: { label: 'UI/UX Designer', icon: '🎨', color: 'bg-purple-500' },
-  code: { label: 'Code Generator', icon: '💻', color: 'bg-green-500' },
+  engineering: { label: 'Engineering Assistant', icon: '💻', color: 'bg-green-500' },
   config: { label: 'Config Helper', icon: '⚙️', color: 'bg-orange-500' },
 }
 
@@ -74,7 +74,7 @@ export function EnhancedChatInterface({
     initialAgent: activeAgent ? 
       (activeAgent === 'project_manager' ? 'project' :
        activeAgent === 'design_assistant' ? 'ui' :
-       activeAgent === 'code_generator' ? 'code' :
+       activeAgent === 'engineering_assistant' ? 'engineering' :
        activeAgent === 'config_helper' ? 'config' : 'project') : 'project',
     onStreamStart: () => {
       // Scroll to bottom when streaming starts
@@ -107,7 +107,7 @@ export function EnhancedChatInterface({
       const mappedAgent = 
         activeAgent === 'project_manager' ? 'project' :
         activeAgent === 'design_assistant' ? 'ui' :
-        activeAgent === 'code_generator' ? 'code' :
+        activeAgent === 'engineering_assistant' ? 'engineering' :
         activeAgent === 'config_helper' ? 'config' : 'project'
       
       switchAgent(mappedAgent as AgentType)
@@ -228,9 +228,9 @@ export function EnhancedChatInterface({
       case 'design_assistant':
       case 'ui':
         return { icon: Sparkles, color: 'blue', bgColor: 'bg-blue-500/10', textColor: 'text-blue-500', label: 'Design Assistant' }
-      case 'code_generator':
-      case 'code':
-        return { icon: Code2, color: 'purple', bgColor: 'bg-purple-500/10', textColor: 'text-purple-500', label: 'Code Generator' }
+      case 'engineering_assistant':
+      case 'engineering':
+        return { icon: Code2, color: 'purple', bgColor: 'bg-purple-500/10', textColor: 'text-purple-500', label: 'Engineering Assistant' }
       case 'config_helper':
       case 'config':
         return { icon: Settings, color: 'orange', bgColor: 'bg-orange-500/10', textColor: 'text-orange-500', label: 'Config Helper' }

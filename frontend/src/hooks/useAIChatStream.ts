@@ -12,6 +12,17 @@ interface UseAIChatStreamOptions {
   onStreamEnd?: (usage: any) => void;
 }
 
+// Map internal agent types to backend agent types
+function mapAgentTypeToBackend(agentType: AgentType): string {
+  const agentMap: Record<AgentType, string> = {
+    'project': 'project_manager',
+    'ui': 'design_assistant',
+    'engineering': 'engineering_assistant',
+    'config': 'config_helper'
+  };
+  return agentMap[agentType] || 'project_manager';
+}
+
 export function useAIChatStream({
   conversationId: initialConversationId,
   projectId,
@@ -173,7 +184,7 @@ export function useAIChatStream({
           conversationId,
           message: userMessage.content,
           context,
-          agentType: currentAgent,
+          agentType: mapAgentTypeToBackend(currentAgent),
           action: 'continue',
         }),
         signal: abortControllerRef.current.signal,

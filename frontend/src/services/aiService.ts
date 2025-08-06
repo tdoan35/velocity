@@ -111,7 +111,7 @@ export const aiService = {
     projectId: string,
     conversationHistory?: Array<{ role: string; content: string }>,
     conversationId?: string,
-    agentType: 'project_manager' | 'design_assistant' | 'code_generator' | 'config_helper' = 'project_manager'
+    agentType: 'project_manager' | 'design_assistant' | 'engineering_assistant' | 'config_helper' = 'project_manager'
   ): Promise<ReadableStream> {
     const { data: { session } } = await supabase.auth.getSession()
     

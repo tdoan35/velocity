@@ -1562,11 +1562,117 @@
             "testStrategy": "Benchmark performance with large message histories. Test accessibility with screen readers and keyboard navigation. Validate virtualization with hundreds of messages. Test search functionality with various query patterns."
           }
         ]
+      },
+      {
+        "id": 17,
+        "title": "Implement Conversational PRD Creation in Project Manager Agent",
+        "description": "Enhance the Project Manager agent to guide users through creating a comprehensive Product Requirements Document (PRD) with conversational guidance and suggested response options.",
+        "details": "## Implementation Details\n\n1. **Extend Project Manager Agent Capabilities**\n   - Modify the existing Project Manager agent to include PRD creation functionality\n   - Define a structured PRD template with sections for overview, core features (minimum 3), and additional features\n   - Implement conversation flow states to track progress through PRD creation process\n\n2. **Develop Conversational Guidance System**\n   - Create a state machine to track the PRD creation progress (initialization, overview, core features, additional features, review)\n   - Implement contextual prompts for each section to elicit appropriate information\n   - Design follow-up questions to refine and expand user inputs\n   - Add validation logic to ensure minimum requirements are met (e.g., at least 3 core features)\n   - Store PRD creation progress in the database to allow for multi-session creation\n\n3. **Implement Suggested Responses Feature**\n   - Create a component to display 3 clickable response options after each agent message\n   - Develop a system to generate contextually relevant response suggestions based on:\n     - Current PRD section being discussed\n     - Previous user inputs and conversation history\n     - Common patterns and best practices for PRD content\n   - Implement click handlers to insert selected suggestions into the chat input\n   - Add visual styling to make suggestions stand out but not overwhelm the interface\n\n4. **PRD Storage and Integration**\n   - Create database schema extensions to store PRD content with project metadata\n   - Implement versioning to track PRD evolution over time\n   - Develop export functionality to generate formatted PRD documents (Markdown, PDF)\n   - Create API endpoints to share PRD data with downstream agents:\n     - Design Assistant for UI/UX planning\n     - Engineering Assistant for technical architecture\n     - Config Helper for backend/integrations\n\n5. **User Experience Enhancements**\n   - Add progress indicators to show completion status of PRD sections\n   - Implement inline previews of the PRD as it's being created\n   - Create a summary view that highlights missing or incomplete sections\n   - Add contextual help and examples for each PRD section\n\n6. **Integration with Vercel AI SDK**\n   - Leverage streaming responses for real-time feedback during PRD creation\n   - Implement specialized prompt templates for PRD guidance\n   - Use function calling capabilities to structure PRD data extraction from conversations",
+        "testStrategy": "## Test Strategy\n\n1. **Unit Testing**\n   - Test PRD state machine transitions with various input scenarios\n   - Verify suggested responses generation logic with different conversation contexts\n   - Validate PRD validation rules (e.g., minimum 3 core features requirement)\n   - Test database operations for storing and retrieving PRD content\n\n2. **Integration Testing**\n   - Verify Project Manager agent correctly integrates with Vercel AI SDK\n   - Test PRD data sharing with downstream agents (Design, Engineering, Config)\n   - Validate PRD export functionality in different formats\n   - Test multi-session PRD creation with conversation persistence\n\n3. **User Experience Testing**\n   - Conduct usability testing with different user personas:\n     - Technical users with clear product vision\n     - Non-technical users needing more guidance\n     - Users with partial PRD information\n   - Test the suggested responses feature with various conversation flows\n   - Verify that clickable suggestions correctly insert content into the chat\n\n4. **Conversation Flow Testing**\n   - Create test scripts that simulate complete PRD creation journeys\n   - Test edge cases where users provide minimal or excessive information\n   - Verify agent's ability to guide conversation back on track when it diverges\n   - Test agent's handling of ambiguous or contradictory requirements\n\n5. **Performance Testing**\n   - Measure response time for suggested options generation\n   - Test system performance with large PRDs and extended conversation histories\n   - Verify PRD creation process works efficiently across different devices and browsers\n\n6. **Acceptance Testing**\n   - Verify final PRD output meets all requirements:\n     - Contains overview section\n     - Includes at least 3 core features\n     - Has additional features section\n     - Properly formatted and structured\n   - Validate that downstream agents can successfully consume the PRD data",
+        "status": "pending",
+        "dependencies": [
+          15,
+          16
+        ],
+        "priority": "high",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Update PM Agent System Prompt with PRD-Focused Guidance",
+            "description": "Modify the Project Manager agent's system prompt to include specialized instructions for guiding users through PRD creation with conversational approaches.",
+            "dependencies": [],
+            "details": "- Review existing Project Manager agent system prompt\n- Add specialized instructions for PRD creation guidance\n- Include prompts for eliciting product vision, target users, and core functionality\n- Add contextual examples of good PRD components\n- Implement prompt engineering techniques to maintain conversation flow\n- Test prompt variations to optimize guidance quality",
+            "status": "pending",
+            "testStrategy": "Test the updated system prompt with various user inputs to verify it effectively guides PRD creation. Compare PRD quality before and after prompt modifications."
+          },
+          {
+            "id": 2,
+            "title": "Implement PRD Data Model and Storage",
+            "description": "Design and implement the database schema and models to store PRD content with appropriate relationships to projects and versioning support.",
+            "dependencies": [
+              "17.1"
+            ],
+            "details": "- Design database schema for PRD storage with sections for overview, core features, and additional features\n- Implement versioning system to track PRD changes over time\n- Create database migrations for the new schema\n- Develop API endpoints for CRUD operations on PRD data\n- Implement data validation for PRD content\n- Add export functionality for Markdown and PDF formats",
+            "status": "pending",
+            "testStrategy": "Test database operations for creating, retrieving, updating, and versioning PRDs. Verify data integrity across PRD versions and validate export functionality."
+          },
+          {
+            "id": 3,
+            "title": "Create Suggested Responses Generation System",
+            "description": "Develop a system that generates contextually relevant suggested responses based on the current PRD section and conversation history.",
+            "dependencies": [
+              "17.1",
+              "17.2"
+            ],
+            "details": "- Implement algorithms to analyze conversation context and PRD section\n- Create response templates for different PRD sections (overview, features, etc.)\n- Develop logic to generate 3 distinct, helpful response options\n- Implement ranking system to prioritize most relevant suggestions\n- Add personalization based on user's previous responses\n- Create fallback suggestions for unclear contexts",
+            "status": "pending",
+            "testStrategy": "Test suggestion relevance across different PRD sections. Verify suggestions adapt to conversation history and maintain contextual appropriateness."
+          },
+          {
+            "id": 4,
+            "title": "Add UI Components for Clickable Response Buttons",
+            "description": "Design and implement UI components to display suggested responses as clickable buttons that insert text into the chat input.",
+            "dependencies": [
+              "17.3"
+            ],
+            "details": "- Design responsive UI components for suggested response buttons\n- Implement click handlers to insert selected text into chat input\n- Add animations for button interactions\n- Ensure accessibility compliance (keyboard navigation, screen reader support)\n- Implement mobile-friendly layout adaptations\n- Add visual styling consistent with application design system",
+            "status": "pending",
+            "testStrategy": "Test button rendering, click functionality, and text insertion across devices and browsers. Verify accessibility compliance and responsive behavior."
+          },
+          {
+            "id": 5,
+            "title": "Implement Conversation Flow Management",
+            "description": "Create a state machine to track PRD creation progress through different sections and guide the conversation accordingly.",
+            "dependencies": [
+              "17.1",
+              "17.2"
+            ],
+            "details": "- Design state machine with states for each PRD section (initialization, overview, core features, etc.)\n- Implement transition logic between states based on conversation progress\n- Add validation rules to ensure section completion before advancing\n- Create recovery mechanisms for handling off-topic conversations\n- Implement progress tracking and visualization\n- Add contextual help based on current state",
+            "status": "pending",
+            "testStrategy": "Test state transitions with various conversation patterns. Verify validation rules prevent incomplete sections and test recovery from off-topic discussions."
+          },
+          {
+            "id": 6,
+            "title": "Create PRD Template and Validation",
+            "description": "Define a structured PRD template with validation rules to ensure comprehensive and high-quality documentation.",
+            "dependencies": [
+              "17.2",
+              "17.5"
+            ],
+            "details": "- Design comprehensive PRD template with all required sections\n- Implement validation rules (e.g., minimum 3 core features)\n- Create section-specific guidance and examples\n- Develop completeness checks for each section\n- Add quality assessment metrics for PRD content\n- Implement inline preview of PRD as it's being created",
+            "status": "pending",
+            "testStrategy": "Test validation rules with various input scenarios. Verify completeness checks accurately identify missing information and test preview functionality."
+          },
+          {
+            "id": 7,
+            "title": "Integrate with Downstream Agents",
+            "description": "Create API endpoints and integration points to share PRD data with Design Assistant, Engineering Assistant, and Config Helper agents.",
+            "dependencies": [
+              "17.2",
+              "17.6"
+            ],
+            "details": "- Design API contracts for downstream agent integration\n- Implement endpoints to share PRD data with Design Assistant\n- Create integration with Engineering Assistant for technical architecture planning\n- Develop Config Helper integration for backend configuration\n- Add notification system for PRD updates\n- Implement access controls for agent-specific PRD views",
+            "status": "pending",
+            "testStrategy": "Test data sharing between agents with various PRD structures. Verify downstream agents correctly receive and process PRD information."
+          },
+          {
+            "id": 8,
+            "title": "Add Conversation State Persistence",
+            "description": "Implement persistence for conversation state to allow users to continue PRD creation across multiple sessions.",
+            "dependencies": [
+              "17.2",
+              "17.5"
+            ],
+            "details": "- Design database schema for storing conversation state\n- Implement save/restore functionality for conversation context\n- Add automatic state saving at key conversation points\n- Create user interface for resuming previous PRD creation sessions\n- Implement conflict resolution for concurrent edits\n- Add session timeout handling and recovery",
+            "status": "pending",
+            "testStrategy": "Test state persistence across session breaks and browser refreshes. Verify conversation context is accurately restored and users can seamlessly continue PRD creation."
+          }
+        ]
       }
     ],
     "metadata": {
       "created": "2025-07-22T22:49:25.170Z",
-      "updated": "2025-08-06T22:42:40.382Z",
+      "updated": "2025-08-06T22:45:37.903Z",
       "description": "Tasks for master context"
     }
   }
