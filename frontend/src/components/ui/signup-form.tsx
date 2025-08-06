@@ -24,6 +24,7 @@ export function SignupForm({ mode = 'signup', onClose, onModeSwitch }: SignupFor
   const [showEmailForm, setShowEmailForm] = React.useState(false);
   const [agreedToTerms, setAgreedToTerms] = React.useState(true);
   const [isLoading, setIsLoading] = React.useState(false);
+  const [loginError, setLoginError] = React.useState<string | null>(null);
   
   // Form state
   const [firstName, setFirstName] = React.useState('');
@@ -38,6 +39,9 @@ export function SignupForm({ mode = 'signup', onClose, onModeSwitch }: SignupFor
   
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    
+    // Clear any previous errors
+    setLoginError(null);
     
     // Validation
     if (mode === 'signup') {
@@ -102,9 +106,21 @@ export function SignupForm({ mode = 'signup', onClose, onModeSwitch }: SignupFor
         });
         
         if (error) {
+          let errorMessage = error.message;
+          
+          // Provide more specific error messages for common login errors
+          if (error.message.toLowerCase().includes('invalid login credentials')) {
+            errorMessage = "Invalid email or password. Please check your credentials and try again.";
+          } else if (error.message.toLowerCase().includes('email not confirmed')) {
+            errorMessage = "Please verify your email before logging in. Check your inbox for the verification link.";
+          } else if (error.message.toLowerCase().includes('user not found')) {
+            errorMessage = "No account found with this email. Please sign up first.";
+          }
+          
+          setLoginError(errorMessage);
           toast({
             title: "Login failed",
-            description: error.message,
+            description: errorMessage,
             variant: "destructive",
           });
         } else if (user) {
@@ -308,23 +324,54 @@ export function SignupForm({ mode = 'signup', onClose, onModeSwitch }: SignupFor
               placeholder="john@example.com" 
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setLoginError(null); // Clear error when user types
+              }}
               disabled={isLoading}
               required
+              className={loginError && mode === 'login' ? "border-red-500 focus:ring-red-500" : ""}
             />
           </LabelInputContainer>
-          <LabelInputContainer className={mode === 'signup' ? "mb-4" : "mb-8"}>
+          <LabelInputContainer className={mode === 'signup' ? "mb-4" : "mb-2"}>
             <Label htmlFor="password">Password</Label>
             <Input 
               id="password" 
               placeholder="••••••••" 
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setLoginError(null); // Clear error when user types
+              }}
               disabled={isLoading}
               required
+              className={loginError && mode === 'login' ? "border-red-500 focus:ring-red-500" : ""}
             />
           </LabelInputContainer>
+          {mode === 'login' && (
+            <>
+              <div className="mb-2 text-right">
+                <button
+                  type="button"
+                  onClick={() => {
+                    toast({
+                      title: "Password reset",
+                      description: "Password reset functionality coming soon!",
+                    });
+                  }}
+                  className="text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:underline"
+                >
+                  Forgot password?
+                </button>
+              </div>
+              {loginError && (
+                <div className="mb-4 p-3 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                  <p className="text-sm text-red-600 dark:text-red-400">{loginError}</p>
+                </div>
+              )}
+            </>
+          )}
           {mode === 'signup' && (
             <>
               <LabelInputContainer className="mb-4">
@@ -384,6 +431,7 @@ export function SignupForm({ mode = 'signup', onClose, onModeSwitch }: SignupFor
               <button
                 type="button"
                 onClick={() => {
+                  setLoginError(null); // Clear any errors when switching modes
                   onModeSwitch?.(mode === 'signup' ? 'login' : 'signup');
                   // Keep the email form open when switching modes
                 }}

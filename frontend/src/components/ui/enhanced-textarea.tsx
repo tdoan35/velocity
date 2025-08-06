@@ -200,8 +200,6 @@ export const EnhancedTextarea = forwardRef<HTMLTextAreaElement, EnhancedTextarea
             onKeyDown={handleKeyDown}
             className={cn(
               "w-full p-4 resize-none border-0 bg-background/50 backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:ring-offset-0",
-              showAttachButton ? "pl-12" : "",
-              enableCommands ? "pr-20" : "pr-12",
               textareaClassName
             )}
             style={{ minHeight }}
@@ -213,25 +211,12 @@ export const EnhancedTextarea = forwardRef<HTMLTextAreaElement, EnhancedTextarea
             <Button
               variant="ghost"
               size="icon"
-              className="absolute bottom-4 left-4 h-8 w-8 text-muted-foreground hover:text-foreground"
+              className="absolute bottom-4 right-14 h-8 w-8 text-muted-foreground hover:text-foreground"
               onClick={onAttach}
               disabled={disabled || isLoading}
               aria-label="Attach file"
             >
               <Paperclip className="w-4 h-4" />
-            </Button>
-          )}
-          
-          {enableCommands && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute bottom-4 right-12 h-8 w-8 text-muted-foreground hover:text-foreground"
-              onClick={() => setMessage('/')}
-              disabled={disabled || isLoading}
-              aria-label="Show commands"
-            >
-              <Command className="w-4 h-4" />
             </Button>
           )}
           
