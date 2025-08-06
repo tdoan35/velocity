@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { MessageSquarePlus, History, FileCode, Bot, User, Settings, Send } from 'lucide-react'
+import { MessageSquarePlus, History, FileCode, Bot, User, Settings, Send, Users, Sparkles, Code2, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { EnhancedTextarea } from '@/components/ui/enhanced-textarea'
@@ -26,6 +26,9 @@ interface EnhancedChatInterfaceProps {
   onApplyCode?: (code: string) => void
   activeAgent?: 'project_manager' | 'design_assistant' | 'code_generator' | 'config_helper'
   onAgentChange?: (agent: 'project_manager' | 'design_assistant' | 'code_generator' | 'config_helper') => void
+  conversationTitle?: string
+  onNewConversation?: () => void
+  onToggleHistory?: () => void
 }
 
 const agentConfig: Record<AgentType, { label: string; icon: any; color: string }> = {
@@ -42,6 +45,9 @@ export function EnhancedChatInterface({
   onApplyCode,
   activeAgent,
   onAgentChange,
+  conversationTitle,
+  onNewConversation,
+  onToggleHistory,
 }: EnhancedChatInterfaceProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -232,50 +238,71 @@ export function EnhancedChatInterface({
     )
   }
 
+  // Helper function to get agent info
+  const getAgentInfo = (agentType?: string) => {
+    switch (agentType) {
+      case 'project_manager':
+      case 'project':
+        return { icon: Users, color: 'emerald', bgColor: 'bg-emerald-500/10', textColor: 'text-emerald-500', label: 'Project Manager' }
+      case 'design_assistant':
+      case 'ui':
+        return { icon: Sparkles, color: 'blue', bgColor: 'bg-blue-500/10', textColor: 'text-blue-500', label: 'Design Assistant' }
+      case 'code_generator':
+      case 'code':
+        return { icon: Code2, color: 'purple', bgColor: 'bg-purple-500/10', textColor: 'text-purple-500', label: 'Code Generator' }
+      case 'config_helper':
+      case 'config':
+        return { icon: Settings, color: 'orange', bgColor: 'bg-orange-500/10', textColor: 'text-orange-500', label: 'Config Helper' }
+      default:
+        return { icon: MessageSquarePlus, color: 'gray', bgColor: 'bg-gray-500/10', textColor: 'text-gray-500', label: 'AI Assistant' }
+    }
+  }
+
+  const agentInfo = getAgentInfo(activeAgent || currentAgent)
+  const AgentIcon = agentInfo.icon
+
   return (
     <div className={cn('flex flex-col h-full', className)}>
       {/* Header */}
-      <div className="flex items-center justify-between border-b px-4 py-3">
-        <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold">AI Design Assistant</h2>
-          <Badge variant="secondary" className="text-xs">
-            {agentConfig[currentAgent].icon} {agentConfig[currentAgent].label}
-          </Badge>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <Settings className="h-4 w-4" />
+      <div className="p-4 pl-5 border-b bg-transparent">
+        <div className="flex items-center justify-between w-full">
+          <div className="flex items-center gap-2">
+            <div className={`w-8 h-8 rounded-full ${agentInfo.bgColor} flex items-center justify-center flex-shrink-0`}>
+              <AgentIcon className={`w-4 h-4 ${agentInfo.textColor}`} />
+            </div>
+            <h2 className="text-lg font-semibold">
+              {conversationTitle || 'Chat Conversation'}
+            </h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className={`px-2 py-1 rounded-md ${agentInfo.bgColor} flex items-center gap-1`}>
+              <span className={`text-xs font-medium ${agentInfo.textColor}`}>
+                {agentInfo.label}
+              </span>
+            </div>
+            {onNewConversation && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={onNewConversation}
+                title="New Conversation"
+              >
+                <Plus className="w-4 h-4" />
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Switch Agent</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {Object.entries(agentConfig).map(([key, config]) => (
-                <DropdownMenuItem
-                  key={key}
-                  onClick={() => handleAgentSwitch(key as AgentType)}
-                  className={cn(
-                    'flex items-center gap-2',
-                    currentAgent === key && 'bg-accent'
-                  )}
-                >
-                  <span>{config.icon}</span>
-                  <span>{config.label}</span>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setShowHistory(!showHistory)}
-          >
-            <History className="h-4 w-4" />
-          </Button>
+            )}
+            {onToggleHistory && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={onToggleHistory}
+                title="Show Chat History"
+              >
+                <History className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
         </div>
       </div>
       

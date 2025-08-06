@@ -81,7 +81,7 @@ export function ProjectDesign() {
   }
 
   // Create or load conversation
-  const createNewConversation = async (title?: string, loadFromId?: string) => {
+  const createNewConversation = async (title?: string, loadFromId?: string, forceNew: boolean = false) => {
     if (!projectId) return
     
     try {
@@ -90,9 +90,10 @@ export function ProjectDesign() {
       let metadata = {}
       let isTemporary = false
       
-      if (!loadFromId) {
+      if (!loadFromId || forceNew) {
         // Create temporary local conversation
         conversationId = `temp-${Date.now()}`
+        conversationTitle = forceNew ? 'New Conversation' : conversationTitle
         isTemporary = true
         metadata = {
           primaryAgent: activeAgent,
@@ -111,6 +112,11 @@ export function ProjectDesign() {
       }
       
       setCurrentConversation(newConversation)
+      
+      // Close history panel when creating a new conversation
+      if (forceNew && showHistory) {
+        setShowHistory(false)
+      }
     } catch (error) {
       console.error('Error creating conversation:', error)
     }
@@ -299,39 +305,23 @@ export function ProjectDesign() {
           <div className="h-full p-2">
             <Card className="h-full flex flex-col bg-transparent">
                 {currentConversation ? (
-                  <>
-                    {/* Card Header */}
-                    <CardHeader className="p-4 pl-5 border-b bg-transparent">
-                      <div className="flex items-center gap-2">
-                        {(() => {
-                          const agentInfo = getAgentInfo(currentConversation?.activeAgent)
-                          const AgentIcon = agentInfo.icon
-                          return (
-                            <div className={`w-8 h-8 rounded-full ${agentInfo.bgColor} flex items-center justify-center flex-shrink-0`}>
-                              <AgentIcon className={`w-4 h-4 ${agentInfo.textColor}`} />
-                            </div>
-                          )
-                        })()}
-                        <CardTitle className="text-lg">
-                          {currentConversation?.title || 'Chat Conversation'}
-                        </CardTitle>
-                      </div>
-                    </CardHeader>
-                    <EnhancedChatInterface
-                      key={currentConversation.id}
-                      projectId={projectId || ''}
-                      conversationId={currentConversation.isTemporary ? undefined : currentConversation.id}
-                      onApplyCode={handleApplyCode}
-                      className="flex-1"
-                      activeAgent={currentConversation.activeAgent}
-                      onAgentChange={updateActiveAgent}
-                    />
-                  </>
+                  <EnhancedChatInterface
+                    key={currentConversation.id}
+                    projectId={projectId || ''}
+                    conversationId={currentConversation.id}
+                    onApplyCode={handleApplyCode}
+                    className="flex-1"
+                    activeAgent={currentConversation.activeAgent}
+                    onAgentChange={updateActiveAgent}
+                    conversationTitle={currentConversation.title}
+                    onNewConversation={() => createNewConversation(undefined, undefined, true)}
+                    onToggleHistory={() => setShowHistory(!showHistory)}
+                  />
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full">
                     <MessageSquare className="w-12 h-12 text-muted-foreground mb-4" />
                     <p className="text-muted-foreground text-sm mb-4">No active conversations</p>
-                    <Button onClick={() => createNewConversation()}>
+                    <Button onClick={() => createNewConversation(undefined, undefined, true)}>
                       <Plus className="w-4 h-4 mr-2" />
                       Start New Conversation
                     </Button>
@@ -348,44 +338,18 @@ export function ProjectDesign() {
             <div className="h-full p-2">
               <Card className="h-full flex flex-col">
                 <CardHeader className="p-4 pl-5 border-b">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {showHistory ? (
-                        <>
-                          <History className="w-5 h-5" />
-                          <CardTitle className="text-lg">Chat History</CardTitle>
-                        </>
-                      ) : (
-                        <>
-                          <Users className="w-5 h-5" />
-                          <CardTitle className="text-lg">AI Agents</CardTitle>
-                        </>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => createNewConversation()}
-                        title="New Conversation"
-                      >
-                        <Plus className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => setShowHistory(!showHistory)}
-                        title={showHistory ? "Show AI Agents" : "Show Chat History"}
-                      >
-                        {showHistory ? (
-                          <ChevronLeft className="w-4 h-4" />
-                        ) : (
-                          <History className="w-4 h-4" />
-                        )}
-                      </Button>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    {showHistory ? (
+                      <>
+                        <History className="w-5 h-5" />
+                        <CardTitle className="text-lg">Chat History</CardTitle>
+                      </>
+                    ) : (
+                      <>
+                        <Users className="w-5 h-5" />
+                        <CardTitle className="text-lg">AI Agents</CardTitle>
+                      </>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent className="p-4 flex-1 overflow-y-auto">

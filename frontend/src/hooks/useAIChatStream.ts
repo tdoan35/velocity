@@ -30,12 +30,51 @@ export function useAIChatStream({
   const { toast } = useToast();
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  const loadConversationMessages = async (convId: string) => {
+    try {
+      setIsInitializing(true);
+      const { messages } = await conversationService.getConversationMessages(convId);
+      if (messages.length > 0) {
+        // Convert messages to AIMessage format
+        const formattedMessages: AIMessage[] = messages.map(msg => ({
+          id: msg.id,
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content,
+          createdAt: new Date(msg.created_at),
+          metadata: msg.metadata,
+        }));
+        setMessages(formattedMessages);
+      }
+    } catch (error) {
+      console.error('Error loading messages:', error);
+    } finally {
+      setIsInitializing(false);
+    }
+  };
+
+  // Reset conversation when initialConversationId changes
+  useEffect(() => {
+    setConversationId(initialConversationId);
+    
+    // Clear messages immediately when conversation ID changes
+    setMessages([]);
+    
+    // Load messages if we have a real conversation ID (not temporary)
+    if (initialConversationId && !initialConversationId.startsWith('temp-')) {
+      loadConversationMessages(initialConversationId);
+    } else if (initialConversationId?.startsWith('temp-')) {
+      // For temporary conversations, ensure we start fresh
+      setMessages([]);
+      setIsInitializing(false);
+    }
+  }, [initialConversationId]);
+
   // Initialize conversation if needed
   useEffect(() => {
     if (!conversationId && projectId) {
       initializeConversation();
     }
-  }, [projectId]);
+  }, [projectId]); // Removed conversationId from deps to prevent re-initialization
 
   const initializeConversation = async () => {
     if (!projectId) return;

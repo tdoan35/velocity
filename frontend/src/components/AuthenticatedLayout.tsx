@@ -1,65 +1,34 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { Outlet, useNavigate, useLocation, Link } from "react-router-dom";
 import { Sidebar, SidebarBody, SidebarLink } from "./ui/sidebar";
 import { projectService } from "@/services/projectService";
 import {
   IconArrowLeft,
-  IconBrandTabler,
   IconSettings,
-  IconUserBolt,
-  IconApps,
-  IconAppsFilled,
-  IconHistory,
-  IconBrandCodepen,
-  IconHome,
   IconLayoutDashboard,
   IconLayoutDashboardFilled,
-  IconPin,
-  IconPinFilled,
   IconLayoutSidebarLeftExpand,
   IconLayoutSidebarLeftExpandFilled,
   IconSquareRoundedPlus,
   IconSquareRoundedPlusFilled,
 } from "@tabler/icons-react";
 import { motion, AnimatePresence } from "motion/react";
-import { useSidebar } from "./ui/sidebar";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useAppStore } from "@/stores/useAppStore";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
-import { useTheme } from "./theme-provider";
-import { Sun, Moon, Menu, X, Edit, ChevronDown, ChevronRight, FolderOpen, Check } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from "./ui/dropdown-menu";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "./ui/popover";
+import { ChevronRight, FolderOpen } from "lucide-react";
+import { Navbar } from "./navigation";
 
 export function AuthenticatedLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuthStore();
-  const { currentProject, setCurrentProject } = useAppStore();
-  const { theme, setTheme } = useTheme();
+  const { currentProject } = useAppStore();
   const [pinned, setPinned] = useState(false);
   const [open, setOpen] = useState(pinned);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [userProjects, setUserProjects] = useState<any[]>([]);
   const [projectsExpanded, setProjectsExpanded] = useState(false);
-  const [isEditingProjectName, setIsEditingProjectName] = useState(false);
-  const [projectNameInput, setProjectNameInput] = useState("");
-  const [isSavingProjectName, setIsSavingProjectName] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
   
   // Check if we're on a project page
   const isProjectPage = location.pathname.startsWith('/project/');
@@ -67,49 +36,6 @@ export function AuthenticatedLayout() {
   const handleLogout = async () => {
     await logout();
     navigate("/");
-  };
-
-  const handleProjectNameSave = async () => {
-    if (!currentProject || !projectNameInput.trim() || projectNameInput === currentProject.name) {
-      setIsEditingProjectName(false);
-      return;
-    }
-
-    setIsSavingProjectName(true);
-    try {
-      const { project, error } = await projectService.updateProject(currentProject.id, {
-        name: projectNameInput.trim()
-      });
-
-      if (!error && project) {
-        setCurrentProject(project);
-        // Update the project in userProjects list
-        setUserProjects(prev => 
-          prev.map(p => p.id === project.id ? project : p)
-        );
-      }
-    } catch (error) {
-      console.error('Error updating project name:', error);
-    } finally {
-      setIsSavingProjectName(false);
-      setIsEditingProjectName(false);
-    }
-  };
-
-  const handleProjectNameEdit = () => {
-    if (currentProject) {
-      setProjectNameInput(currentProject.name);
-      setIsEditingProjectName(true);
-      // Focus input and set cursor at end after popover opens
-      setTimeout(() => {
-        if (inputRef.current) {
-          inputRef.current.focus();
-          // Set cursor position at the end of the text
-          const length = inputRef.current.value.length;
-          inputRef.current.setSelectionRange(length, length);
-        }
-      }, 100);
-    }
   };
 
   // Keep sidebar open when pinned
@@ -180,115 +106,15 @@ export function AuthenticatedLayout() {
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden bg-transparent">
       {/* Navigation Bar */}
-      <header className="fixed top-0 left-0 right-0 z-[100] h-16">
-        <nav className="w-full h-full flex items-center relative">
-          {/* Logo section - absolutely positioned */}
-          <div className={cn(
-            "absolute left-0 h-16 px-4 flex items-center transition-all duration-200",
-            open ? "w-[250px]" : "w-auto"
-          )}>
-            <Link to="/" className="flex items-center gap-2 font-semibold text-lg [text-shadow:_0_1px_2px_rgb(0_0_0_/_20%)]">
-              <span className="text-xl drop-shadow-sm">✨</span>
-              <span className="text-foreground">Velocity</span>
-            </Link>
-          </div>
-          
-          {/* Center Content - Show project title on project pages, navigation links on non-project pages */}
-          <div className="hidden md:flex items-center gap-8 mx-auto">
-            {isProjectPage && currentProject ? (
-              <Popover open={isEditingProjectName} onOpenChange={setIsEditingProjectName}>
-                <PopoverTrigger asChild>
-                  <button 
-                    onClick={handleProjectNameEdit}
-                    className="group text-center cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg px-3 py-1 transition-colors flex items-center gap-2"
-                  >
-                    <h1 className="text-lg font-semibold text-foreground">{currentProject.name}</h1>
-                    <Edit className="w-4 h-4 opacity-0 group-hover:opacity-60 transition-opacity" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-64 px-3 pt-1">
-                  <div className="space-y-1">
-                    <Label htmlFor="project-name" className="text-xs text-muted-foreground">Project title</Label>
-                    <div className="flex gap-1.5 items-center">
-                      <Input
-                        id="project-name"
-                        ref={inputRef}
-                        value={projectNameInput}
-                        onChange={(e) => setProjectNameInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            handleProjectNameSave();
-                          } else if (e.key === 'Escape') {
-                            setIsEditingProjectName(false);
-                          }
-                        }}
-                        placeholder="Enter project name"
-                        className="flex-1 bg-background h-8 text-sm"
-                        disabled={isSavingProjectName}
-                      />
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={handleProjectNameSave}
-                        disabled={isSavingProjectName || !projectNameInput.trim() || projectNameInput === currentProject.name}
-                        className="h-8 w-8"
-                      >
-                        <Check className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            ) : !isProjectPage ? (
-              <>
-                <span className="text-sm font-medium text-foreground/40 cursor-not-allowed transition-all duration-200 hover:text-foreground/60">
-                  Features
-                </span>
-                <span className="text-sm font-medium text-foreground/40 cursor-not-allowed transition-all duration-200 hover:text-foreground/60">
-                  Learn
-                </span>
-                <span className="text-sm font-medium text-foreground/40 cursor-not-allowed transition-all duration-200 hover:text-foreground/60">
-                  Pricing
-                </span>
-                <span className="text-sm font-medium text-foreground/40 cursor-not-allowed transition-all duration-200 hover:text-foreground/60">
-                  Enterprise
-                </span>
-              </>
-            ) : null}
-          </div>
-          
-          {/* Right side controls - absolutely positioned */}
-          <div className="absolute right-0 flex items-center gap-4 px-4">
-            {/* Open Editor Button - only show on project pages */}
-            {isProjectPage && currentProject && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate(`/editor/${currentProject.id}`)}
-                className="hidden md:flex gap-2"
-              >
-                <Edit className="w-4 h-4" />
-                Open Editor
-              </Button>
-            )}
-            
-            {/* Theme Toggle */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-              className="relative hover:bg-background/20 [&_svg]:drop-shadow-sm"
-              aria-label="Toggle theme"
-            >
-              <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-              <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-            </Button>
-          </div>
-        </nav>
-      </header>
+      <Navbar 
+        className="h-14"
+        onLogout={handleLogout}
+        showDemoMenu={false}
+        showProjectTitle={true}
+      />
 
       {/* Main content area with padding for fixed header */}
-      <div className="flex h-screen pt-16">
+      <div className="flex h-screen pt-14">
         {/* Sidebar */}
         <Sidebar open={open} setOpen={setOpen} pinned={pinned} setPinned={setPinned} animate={true}>
           <SidebarBody className="justify-between gap-10">

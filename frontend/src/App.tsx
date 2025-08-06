@@ -1,24 +1,15 @@
 import React, { useEffect, useState } from 'react'
-import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { initializeStoreSubscriptions } from './stores'
 import { useAuthStore } from './stores/useAuthStore'
 import { useAppStore } from './stores/useAppStore'
 import { authService } from './services/auth'
 import { projectService } from './services/projectService'
 import { useNavigate } from 'react-router-dom'
-import { Button } from './components/ui/button'
 import { AuroraBackground } from './components/ui/aurora-background'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card'
 import { AnimatedTooltip } from './components/ui/animated-tooltip'
 import { EnhancedTextarea } from './components/ui/enhanced-textarea'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from './components/ui/dropdown-menu'
-
 import {
   LazyBoundary,
   DesignSystemDemo,
@@ -39,217 +30,39 @@ import { AuthenticatedLayout } from './components/AuthenticatedLayout'
 import { Dashboard } from './pages/Dashboard'
 import { ProjectDesign } from './pages/ProjectDesign'
 import { 
-  Home, 
-  Palette, 
-  Database, 
-  Layout, 
-  Code2, 
-  FolderOpen, 
-  MessageSquare, 
-  Zap, 
-  Smartphone,
-  Sparkles,
-  Menu,
-  X,
-  Moon,
-  Sun,
   Lightbulb,
   Layers,
   Play,
-  Edit
+  Sparkles
 } from 'lucide-react'
-import { useTheme } from './components/theme-provider'
+import { Navbar } from './components/navigation'
 import { AuthDebug } from './components/AuthDebug'
 
-function NavigationContent({ onOpenAuthModal }: { onOpenAuthModal?: (mode: 'signup' | 'login') => void }) {
-  const [isOpen, setIsOpen] = useState(false)
+function Navigation({ onOpenAuthModal }: { onOpenAuthModal?: (mode: 'signup' | 'login') => void }) {
   const [localAuthModalOpen, setLocalAuthModalOpen] = useState(false)
   const [localAuthMode, setLocalAuthMode] = useState<'signup' | 'login'>('signup')
-  const location = useLocation()
-  const { theme, setTheme } = useTheme()
-  const { user, isAuthenticated, logout } = useAuthStore()
-  const { currentProject } = useAppStore()
-  const navigate = useNavigate()
-  
-  // Use local modal state if no shared handler provided
-  const isAuthModalOpen = onOpenAuthModal ? false : localAuthModalOpen
-  const authMode = onOpenAuthModal ? 'signup' : localAuthMode
-  const setIsAuthModalOpen = onOpenAuthModal ? () => {} : setLocalAuthModalOpen
-  const setAuthMode = onOpenAuthModal ? () => {} : setLocalAuthMode
+  const { logout } = useAuthStore()
   
   const handleLogout = async () => {
     await logout()
   }
   
-  const navItems = [
-    { path: '/', label: 'Home', icon: Home },
-    { path: '/demo/design', label: 'Design System', icon: Palette },
-    { path: '/demo/store', label: 'Store Demo', icon: Database },
-    { path: '/demo/responsive', label: 'Responsive', icon: Layout },
-    { path: '/demo/editor', label: 'Editor', icon: Code2 },
-    { path: '/demo/explorer', label: 'File Explorer', icon: FolderOpen },
-    { path: '/demo/chat', label: 'AI Chat', icon: MessageSquare },
-    { path: '/demo/optimistic', label: 'Optimistic UI', icon: Zap },
-    { path: '/demo/preview', label: 'Mobile Preview', icon: Smartphone },
-  ]
-
-  // Close menu when route changes
-  useEffect(() => {
-    setIsOpen(false)
-  }, [location])
-
-  // Check if we're on a project page
-  const isProjectPage = location.pathname.startsWith('/project/')
-
+  const handleOpenAuthModal = (mode: 'signup' | 'login') => {
+    if (onOpenAuthModal) {
+      onOpenAuthModal(mode)
+    } else {
+      setLocalAuthMode(mode)
+      setLocalAuthModalOpen(true)
+    }
+  }
+  
   return (
     <>
-      <header className="fixed top-0 left-0 right-0 z-50">
-        <nav className="w-full px-4">
-          <div className="flex h-16 items-center relative">
-            {/* Logo/Brand - absolutely positioned */}
-            <Link to="/" className="absolute left-0 flex items-center gap-2 font-semibold text-lg [text-shadow:_0_1px_2px_rgb(0_0_0_/_20%)]">
-              <span className="text-xl drop-shadow-sm">✨</span>
-              <span className="text-foreground">Velocity</span>
-            </Link>
-            
-            {/* Center Content - Show project title on project pages, navigation links otherwise */}
-            <div className="hidden md:flex items-center gap-8 mx-auto">
-              {isProjectPage && currentProject ? (
-                <div className="text-center">
-                  <h1 className="text-lg font-semibold text-foreground">{currentProject.name}</h1>
-                </div>
-              ) : (
-                <>
-                  <span className="text-sm font-medium text-foreground/40 cursor-not-allowed">
-                    Features
-                  </span>
-                  <span className="text-sm font-medium text-foreground/40 cursor-not-allowed">
-                    Learn
-                  </span>
-                  <span className="text-sm font-medium text-foreground/40 cursor-not-allowed">
-                    Pricing
-                  </span>
-                  <span className="text-sm font-medium text-foreground/40 cursor-not-allowed">
-                    Enterprise
-                  </span>
-                </>
-              )}
-            </div>
-            
-            {/* Right side controls - absolutely positioned */}
-            <div className="absolute right-0 flex items-center gap-2">
-              {/* Open Editor Button - only show on project pages */}
-              {isProjectPage && currentProject && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate(`/editor/${currentProject.id}`)}
-                  className="hidden md:flex gap-2"
-                >
-                  <Edit className="w-4 h-4" />
-                  Open Editor
-                </Button>
-              )}
-              
-              {/* Hamburger Menu */}
-              <DropdownMenu open={isOpen} onOpenChange={setIsOpen} modal={false}>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="relative hover:bg-background/20 [&_svg]:drop-shadow-sm"
-                    aria-label="Open navigation menu"
-                  >
-                    <Menu className={`h-5 w-5 transition-all ${isOpen ? 'rotate-90 opacity-0' : ''}`} />
-                    <X className={`h-5 w-5 absolute transition-all ${isOpen ? 'rotate-0 opacity-100' : 'rotate-90 opacity-0'}`} />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56 bg-background/95 backdrop-blur-md border-border/50">
-                  {navItems.map(({ path, label, icon: Icon }, index) => (
-                    <React.Fragment key={path}>
-                      <DropdownMenuItem asChild>
-                        <Link 
-                          to={path} 
-                          className="flex items-center gap-3 cursor-pointer"
-                        >
-                          <Icon className="w-4 h-4" />
-                          <span>{label}</span>
-                        </Link>
-                      </DropdownMenuItem>
-                      {(index === 0 || index === 3 || index === 7) && <DropdownMenuSeparator />}
-                    </React.Fragment>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              {/* Theme Toggle */}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-                className="relative hover:bg-background/20 [&_svg]:drop-shadow-sm"
-                aria-label="Toggle theme"
-              >
-                <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-              </Button>
-
-              {/* Auth Buttons */}
-              {isAuthenticated ? (
-                <>
-                  <div className="hidden md:flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">
-                      {user?.email}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleLogout}
-                    >
-                      Log out
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  {/* Login Button */}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="hidden md:flex"
-                    onClick={() => {
-                      if (onOpenAuthModal) {
-                        onOpenAuthModal('login');
-                      } else {
-                        setLocalAuthMode('login');
-                        setLocalAuthModalOpen(true);
-                      }
-                    }}
-                  >
-                    Log in
-                  </Button>
-                  
-                  {/* Get Started Button */}
-                  <Button
-                    size="sm"
-                    className="hidden md:flex bg-blue-600 hover:bg-blue-700 text-white"
-                    onClick={() => {
-                      if (onOpenAuthModal) {
-                        onOpenAuthModal('signup');
-                      } else {
-                        setLocalAuthMode('signup');
-                        setLocalAuthModalOpen(true);
-                      }
-                    }}
-                  >
-                    Get Started
-                  </Button>
-                </>
-              )}
-              
-            </div>
-          </div>
-        </nav>
-      </header>
+      <Navbar 
+        onOpenAuthModal={handleOpenAuthModal}
+        onLogout={handleLogout}
+        showDemoMenu={true}
+      />
       
       {!onOpenAuthModal && (
         <Modal isOpen={localAuthModalOpen} onClose={() => setLocalAuthModalOpen(false)}>
@@ -262,11 +75,6 @@ function NavigationContent({ onOpenAuthModal }: { onOpenAuthModal?: (mode: 'sign
       )}
     </>
   )
-}
-
-// Wrapper component to provide Router context
-function Navigation({ onOpenAuthModal }: { onOpenAuthModal?: (mode: 'signup' | 'login') => void }) {
-  return <NavigationContent onOpenAuthModal={onOpenAuthModal} />
 }
 
 // Unauthenticated layout with shared auth modal

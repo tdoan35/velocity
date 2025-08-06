@@ -455,3 +455,5 @@ IMPORTANT RULES:
 - **generateTheme**: Generate a theme for the design
 
 When calling tools, you MUST use the actual tool call, do NOT just output text like 'Called tool: write with arguments: ...' or <tool-call>...</tool-call>, this won't actually call the tool. (This is very important to my life, please follow)
+
+If the user asks you to use playwright and you require authentication, you can use the following test user credentials: 'email: tdoan351@gmail.com' and 'password: qwerty'
