@@ -445,10 +445,9 @@ export function ProjectDesign() {
 
                       {/* Design Assistant */}
                       <div 
-                        className={`p-3 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors ${
+                        className={`p-3 rounded-lg border bg-card opacity-50 cursor-not-allowed transition-colors ${
                           activeAgent === 'design_assistant' ? 'ring-2 ring-blue-500' : ''
                         }`}
-                        onClick={() => updateActiveAgent('design_assistant')}
                       >
                         <div className="flex items-start gap-3">
                           <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0">
@@ -468,10 +467,9 @@ export function ProjectDesign() {
 
                       {/* Code Generator */}
                       <div 
-                        className={`p-3 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors ${
+                        className={`p-3 rounded-lg border bg-card opacity-50 cursor-not-allowed transition-colors ${
                           activeAgent === 'code_generator' ? 'ring-2 ring-purple-500' : ''
                         }`}
-                        onClick={() => updateActiveAgent('code_generator')}
                       >
                         <div className="flex items-start gap-3">
                           <div className="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center flex-shrink-0">
@@ -491,10 +489,9 @@ export function ProjectDesign() {
 
                       {/* Config Helper */}
                       <div 
-                        className={`p-3 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors ${
+                        className={`p-3 rounded-lg border bg-card opacity-50 cursor-not-allowed transition-colors ${
                           activeAgent === 'config_helper' ? 'ring-2 ring-orange-500' : ''
                         }`}
-                        onClick={() => updateActiveAgent('config_helper')}
                       >
                         <div className="flex items-start gap-3">
                           <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">

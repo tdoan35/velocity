@@ -188,9 +188,7 @@ export function EnhancedChatInterface({
           
           <div className={cn(
             'rounded-lg p-2 max-w-full',
-            isAssistant 
-              ? 'bg-muted' 
-              : 'bg-primary text-primary-foreground'
+            isAssistant ? 'bg-transparent' : 'bg-muted'
           )}>
             {isAssistant && message.content.includes('```') ? (
               <MarkdownMessage
@@ -205,12 +203,6 @@ export function EnhancedChatInterface({
               )}>{message.content}</p>
             )}
           </div>
-          
-          {!isAssistant && (
-            <span className="text-xs text-muted-foreground">
-              {new Date(message.createdAt).toLocaleTimeString()}
-            </span>
-          )}
         </div>
       </div>
     )

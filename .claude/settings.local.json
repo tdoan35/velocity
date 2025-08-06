@@ -60,7 +60,8 @@
       "Bash(task-master list:*)",
       "mcp__github__get_file_contents",
       "mcp__github__list_branches",
-      "mcp__playwright__browser_type"
+      "mcp__playwright__browser_type",
+      "mcp__playwright__browser_drag"
     ]
   },
   "enableAllProjectMcpServers": true,

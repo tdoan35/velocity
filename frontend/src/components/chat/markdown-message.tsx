@@ -41,7 +41,7 @@ export function MarkdownMessage({
               }
               
               return (
-                <div className="my-4 -mx-4">
+                <div className="my-4 mx-2">
                   <CodeSuggestion
                     codeBlock={codeBlock}
                     onApply={onApplyCode}
