@@ -30,7 +30,7 @@ export function MessageBubble({ message, className }: MessageBubbleProps) {
       
       <div
         className={cn(
-          'max-w-[70%] space-y-2',
+          'max-w-[70%] space-y-2 overflow-visible',
           isUser ? 'items-end' : 'items-start'
         )}
       >

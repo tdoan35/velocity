@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { MessageSquarePlus, History, FileCode, Bot, User, Settings, Send, Users, Sparkles, Code2, Plus } from 'lucide-react'
+import { MessageSquarePlus, History, FileCode, Bot, Settings, Send, Users, Sparkles, Code2, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { EnhancedTextarea } from '@/components/ui/enhanced-textarea'
@@ -167,31 +167,16 @@ export function EnhancedChatInterface({
       <div
         key={message.id}
         className={cn(
-          'flex gap-3',
+          'flex gap-3 w-full',
           !isAssistant && 'flex-row-reverse'
         )}
       >
-        <div className="flex-shrink-0">
-          {isAssistant ? (
-            <div className={cn(
-              'w-8 h-8 rounded-full flex items-center justify-center text-white',
-              agent.color
-            )}>
-              <span className="text-sm">{agent.icon}</span>
-            </div>
-          ) : (
-            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-              <User className="w-4 h-4" />
-            </div>
-          )}
-        </div>
-        
         <div className={cn(
-          'flex-1 space-y-1',
+          'flex-1 space-y-1 min-w-0',
           !isAssistant && 'flex flex-col items-end'
         )}>
           {isAssistant && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-medium text-muted-foreground">
                 {agent.label}
               </span>
@@ -202,7 +187,7 @@ export function EnhancedChatInterface({
           )}
           
           <div className={cn(
-            'rounded-lg p-3 max-w-[80%]',
+            'rounded-lg p-2 max-w-full',
             isAssistant 
               ? 'bg-muted' 
               : 'bg-primary text-primary-foreground'
@@ -211,9 +196,13 @@ export function EnhancedChatInterface({
               <MarkdownMessage
                 content={message.content}
                 onApplyCode={onApplyCode}
+                className="text-sm"
               />
             ) : (
-              <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+              <p className={cn(
+                "whitespace-pre-wrap break-words overflow-wrap-anywhere",
+                "text-sm"
+              )}>{message.content}</p>
             )}
           </div>
           
@@ -262,9 +251,9 @@ export function EnhancedChatInterface({
   const AgentIcon = agentInfo.icon
 
   return (
-    <div className={cn('flex flex-col h-full', className)}>
+    <div className={cn('flex flex-col h-full overflow-hidden', className)}>
       {/* Header */}
-      <div className="p-4 pl-5 border-b bg-transparent">
+      <div className="p-4 pl-5 border-b bg-transparent flex-shrink-0">
         <div className="flex items-center justify-between w-full">
           <div className="flex items-center gap-2">
             <div className={`w-8 h-8 rounded-full ${agentInfo.bgColor} flex items-center justify-center flex-shrink-0`}>
@@ -307,8 +296,8 @@ export function EnhancedChatInterface({
       </div>
       
       {/* Messages */}
-      <ScrollArea ref={scrollRef} className="flex-1 p-4">
-        <div className="space-y-4">
+      <ScrollArea ref={scrollRef} className="flex-1 p-4 overflow-hidden">
+        <div className="space-y-4 w-full max-w-full overflow-wrap-anywhere">
           {messages.length === 0 ? (
             <div className="text-center text-muted-foreground py-8">
               <div className="space-y-4">
@@ -365,7 +354,7 @@ export function EnhancedChatInterface({
       </ScrollArea>
       
       {/* Input */}
-      <div className="border-t p-4">
+      <div className="border-t p-4 flex-shrink-0">
         <EnhancedTextarea
           ref={inputRef}
           value={input}

@@ -1,5 +1,5 @@
 // Supabase Edge Function for performance monitoring and alerting
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
+import { createClient } from '@supabase/supabase-js'
 import { corsHeaders } from '../_shared/cors.ts'
 import { requireAuth } from '../_shared/auth.ts'
 import { createLogger } from '../_shared/logger.ts'

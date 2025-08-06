@@ -1,5 +1,5 @@
 // Quota alert system for proactive notifications
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
+import { createClient } from '@supabase/supabase-js'
 import { quotaManager } from './quota-manager.ts'
 import { createLogger } from './logger.ts'
 
