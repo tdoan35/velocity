@@ -38,6 +38,7 @@ import { SignupForm } from './components/ui/signup-form'
 import { AuthenticatedLayout } from './components/AuthenticatedLayout'
 import { Dashboard } from './pages/Dashboard'
 import { ProjectDesign } from './pages/ProjectDesign'
+import { TestEnhancedTextarea } from './pages/TestEnhancedTextarea'
 import { 
   Home, 
   Palette, 
@@ -59,6 +60,7 @@ import {
   Edit
 } from 'lucide-react'
 import { useTheme } from './components/theme-provider'
+import { AuthDebug } from './components/AuthDebug'
 
 function NavigationContent({ onOpenAuthModal }: { onOpenAuthModal?: (mode: 'signup' | 'login') => void }) {
   const [isOpen, setIsOpen] = useState(false)
@@ -470,6 +472,7 @@ function App() {
   return (
     <Router>
       <div>
+        <AuthDebug />
         <Routes>
           {/* Auth callback route */}
           <Route path="/auth/callback" element={<AuthCallback />} />
@@ -516,6 +519,7 @@ function App() {
                     <p className="text-muted-foreground mt-2">Configure your app preferences.</p>
                   </div>
                 } />
+                <Route path="test-textarea" element={<TestEnhancedTextarea />} />
               </>
             )}
           </Route>
