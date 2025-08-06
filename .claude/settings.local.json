@@ -55,7 +55,11 @@
       "mcp__supabase__list_migrations",
       "mcp__supabase__list_migrations",
       "mcp__taskmaster-ai__add_task",
-      "mcp__playwright__browser_type"
+      "mcp__playwright__browser_type",
+      "Bash(git pull:*)",
+      "Bash(task-master list:*)",
+      "mcp__github__get_file_contents",
+      "mcp__github__list_branches"
     ]
   },
   "enableAllProjectMcpServers": true,

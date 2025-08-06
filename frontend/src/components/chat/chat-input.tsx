@@ -6,7 +6,9 @@ import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 
 interface ChatInputProps {
-  onSubmit: (message: string) => void
+  value?: string
+  onChange?: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
+  onSubmit: (message?: string) => void
   disabled?: boolean
   placeholder?: string
   className?: string
@@ -26,16 +28,32 @@ const COMMAND_SUGGESTIONS = [
 ]
 
 export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(({ 
+  value,
+  onChange,
   onSubmit, 
   disabled = false,
   placeholder = 'Ask me anything...',
   className,
   fileContext
 }, ref) => {
-  const [message, setMessage] = useState('')
+  const [localMessage, setLocalMessage] = useState('')
   const [showCommands, setShowCommands] = useState(false)
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  
+  // Use controlled or uncontrolled mode
+  const message = value !== undefined ? value : localMessage
+  const setMessage = (newValue: string) => {
+    if (onChange) {
+      // Simulate event for controlled mode
+      const event = {
+        target: { value: newValue }
+      } as React.ChangeEvent<HTMLTextAreaElement>
+      onChange(event)
+    } else {
+      setLocalMessage(newValue)
+    }
+  }
   
   useImperativeHandle(ref, () => textareaRef.current!)
   
@@ -140,7 +158,13 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(({
           <Textarea
             ref={textareaRef}
             value={message}
-            onChange={(e) => setMessage(e.target.value)}
+            onChange={(e) => {
+              if (onChange) {
+                onChange(e)
+              } else {
+                setLocalMessage(e.target.value)
+              }
+            }}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
             disabled={disabled}

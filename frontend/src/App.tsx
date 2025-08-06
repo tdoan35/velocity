@@ -38,7 +38,6 @@ import { SignupForm } from './components/ui/signup-form'
 import { AuthenticatedLayout } from './components/AuthenticatedLayout'
 import { Dashboard } from './pages/Dashboard'
 import { ProjectDesign } from './pages/ProjectDesign'
-import { TestEnhancedTextarea } from './pages/TestEnhancedTextarea'
 import { 
   Home, 
   Palette, 
@@ -519,7 +518,6 @@ function App() {
                     <p className="text-muted-foreground mt-2">Configure your app preferences.</p>
                   </div>
                 } />
-                <Route path="test-textarea" element={<TestEnhancedTextarea />} />
               </>
             )}
           </Route>

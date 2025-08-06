@@ -20,6 +20,11 @@ export interface AppConfig {
   sentryDsn?: string
   gaTrackingId?: string
   
+  // AI Configuration
+  anthropicApiKey?: string
+  openaiApiKey?: string
+  enableAIStreaming: boolean
+  
   // Build
   sourceMap: boolean
   bundleAnalyze: boolean
@@ -80,6 +85,11 @@ export const config: AppConfig = {
   ),
   sentryDsn: getEnvVar('VITE_SENTRY_DSN'),
   gaTrackingId: getEnvVar('VITE_GA_TRACKING_ID'),
+  
+  // AI Configuration
+  anthropicApiKey: getEnvVar('VITE_ANTHROPIC_API_KEY'),
+  openaiApiKey: getEnvVar('VITE_OPENAI_API_KEY'),
+  enableAIStreaming: getEnvBool('VITE_ENABLE_AI_STREAMING', true),
   
   // Build
   sourceMap: getEnvBool('VITE_SOURCE_MAP', !isProduction),

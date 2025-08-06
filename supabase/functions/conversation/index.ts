@@ -171,6 +171,17 @@ Deno.serve(async (req) => {
                     fullResponse,
                     { action, agentType }
                   )
+                  
+                  // Send completion event with usage data
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                    type: 'done',
+                    done: true,
+                    usage: {
+                      totalTokens: fullResponse.length / 4, // Rough estimate
+                      model: 'claude-3-5-sonnet-20241022'
+                    }
+                  })}\n\n`))
+                  
                   controller.close()
                   return
                 }

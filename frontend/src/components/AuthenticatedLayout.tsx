@@ -193,7 +193,7 @@ export function AuthenticatedLayout() {
             </Link>
           </div>
           
-          {/* Center Content - Show project title on project pages, navigation links otherwise */}
+          {/* Center Content - Show project title on project pages, navigation links on non-project pages */}
           <div className="hidden md:flex items-center gap-8 mx-auto">
             {isProjectPage && currentProject ? (
               <Popover open={isEditingProjectName} onOpenChange={setIsEditingProjectName}>
@@ -239,7 +239,7 @@ export function AuthenticatedLayout() {
                   </div>
                 </PopoverContent>
               </Popover>
-            ) : (
+            ) : !isProjectPage ? (
               <>
                 <span className="text-sm font-medium text-foreground/40 cursor-not-allowed transition-all duration-200 hover:text-foreground/60">
                   Features
@@ -254,7 +254,7 @@ export function AuthenticatedLayout() {
                   Enterprise
                 </span>
               </>
-            )}
+            ) : null}
           </div>
           
           {/* Right side controls - absolutely positioned */}
