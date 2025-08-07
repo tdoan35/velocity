@@ -45,7 +45,7 @@ export const useAppStore = create<AppState>()(
       setProjects: (projects) => set({ projects }),
       
       addProject: (project) => 
-        set((state) => ({ projects: [...state.projects, project] })),
+        set((state) => ({ projects: [project, ...state.projects] })),
       
       updateProject: (id, updates) =>
         set((state) => ({
