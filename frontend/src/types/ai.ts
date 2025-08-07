@@ -1,6 +1,6 @@
 // AI SDK Types and Interfaces
 
-export type AgentType = 'project' | 'ui' | 'engineering' | 'config';
+export type AgentType = 'project_manager' | 'design_assistant' | 'engineering_assistant' | 'config_helper';
 
 export interface AIMessage {
   id: string;
