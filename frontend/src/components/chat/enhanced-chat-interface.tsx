@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { MessageSquarePlus, History, FileCode, Bot, Settings, Send, Users, Sparkles, Code2, Plus } from 'lucide-react'
+import { MessageSquarePlus, History, FileCode, Bot, Settings, Send, Users, Sparkles, Code2, Plus, ArrowDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { EnhancedTextarea } from '@/components/ui/enhanced-textarea'
 import { MarkdownMessage } from './markdown-message'
 import { TypingIndicator } from './typing-indicator'
-import { SuggestedResponses, type SuggestedResponse } from './suggested-responses'
-import { useAIChatStream } from '@/hooks/useAIChatStream'
+import { SuggestedResponses } from './suggested-responses'
+import { useAIChatStream, type SuggestedResponse } from '@/hooks/useAIChatStream'
 import type { AgentType } from '@/types/ai'
 import { cn } from '@/lib/utils'
 import {
@@ -30,6 +30,7 @@ interface EnhancedChatInterfaceProps {
   conversationTitle?: string
   onNewConversation?: () => void
   onToggleHistory?: () => void
+  onConversationCreated?: (conversationId: string) => void
 }
 
 const agentConfig: Record<AgentType, { label: string; icon: any; color: string }> = {
@@ -49,11 +50,13 @@ export function EnhancedChatInterface({
   conversationTitle,
   onNewConversation,
   onToggleHistory,
+  onConversationCreated,
 }: EnhancedChatInterfaceProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const [showHistory, setShowHistory] = useState(false)
-  const [suggestedResponses, setSuggestedResponses] = useState<SuggestedResponse[]>([])
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
 
   const {
@@ -64,6 +67,7 @@ export function EnhancedChatInterface({
     conversationId,
     currentAgent,
     isInitializing,
+    suggestedResponses,
     handleInputChange,
     handleSubmit,
     reload,
@@ -79,71 +83,106 @@ export function EnhancedChatInterface({
        activeAgent === 'engineering_assistant' ? 'engineering' :
        activeAgent === 'config_helper' ? 'config' : 'project') : 'project',
     onStreamStart: () => {
-      // Scroll to bottom when streaming starts
-      scrollToBottom()
+      // Force auto-scroll when streaming starts
+      setShouldAutoScroll(true)
+      scrollToBottom(true)
     },
     onStreamEnd: (usage) => {
       console.log('Stream ended with usage:', usage)
+      // Ensure we scroll to bottom when stream ends
+      setTimeout(() => scrollToBottom(true), 100)
     },
+    onConversationCreated,
   })
 
-  // Auto-scroll to bottom
-  const scrollToBottom = () => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+  // Auto-scroll to bottom with smooth scrolling
+  const scrollToBottom = (force = false) => {
+    if (force || shouldAutoScroll) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
     }
   }
 
+  // Check if user is near bottom of scroll area
+  const checkIfNearBottom = () => {
+    if (scrollRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = scrollRef.current
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100
+      setShouldAutoScroll(isNearBottom)
+    }
+  }
+
+  // Handle scroll events to determine if we should auto-scroll
+  const handleScroll = () => {
+    checkIfNearBottom()
+  }
+
+  // Auto-scroll when messages change or loading state changes
   useEffect(() => {
     scrollToBottom()
   }, [messages, isLoading])
 
-  // Extract suggested responses from the latest assistant message
+  // Force scroll on initial load and when conversation changes
   useEffect(() => {
-    if (messages.length > 0 && !isLoading) {
-      const lastMessage = messages[messages.length - 1]
-      
-      // Only process assistant messages from project manager
-      if (lastMessage.role === 'assistant' && 
-          (lastMessage.metadata?.agentType === 'project_manager' || currentAgent === 'project')) {
-        
-        // Extract suggested responses from message content
-        const suggestionsMatch = lastMessage.content.match(/\*\*Suggested responses:\*\*\s*([\s\S]*?)(?:\n\n|$)/)
-        
-        if (suggestionsMatch) {
-          const suggestionsText = suggestionsMatch[1]
-          const suggestionLines = suggestionsText.split('\n').filter(line => line.trim())
-          
-          const extractedSuggestions: SuggestedResponse[] = suggestionLines
-            .map(line => {
-              // Remove list markers (1., 2., 3., -, *, etc.)
-              const cleanedLine = line.replace(/^[\d]+\.\s*|\-\s*|\*\s*/, '').trim()
-              
-              // Determine category based on content
-              let category: 'continuation' | 'clarification' | 'example' = 'continuation'
-              if (cleanedLine.toLowerCase().includes('example') || cleanedLine.includes('...')) {
-                category = 'example'
-              } else if (cleanedLine.includes('?') || cleanedLine.toLowerCase().includes('what') || 
-                        cleanedLine.toLowerCase().includes('how')) {
-                category = 'clarification'
-              }
-              
-              return {
-                text: cleanedLine,
-                category,
-                section: 'prd' // Can be enhanced to detect current section
-              }
-            })
-            .filter(s => s.text.length > 0)
-            .slice(0, 3) // Limit to 3 suggestions
-          
-          setSuggestedResponses(extractedSuggestions)
-        } else {
-          setSuggestedResponses([])
-        }
+    setTimeout(() => scrollToBottom(true), 100)
+  }, [conversationId])
+
+  // Ensure scroll to bottom on component mount (page reload)
+  useEffect(() => {
+    // Wait for DOM to be ready and messages to render
+    const timer = setTimeout(() => {
+      setShouldAutoScroll(true)
+      scrollToBottom(true)
+    }, 200)
+    
+    return () => clearTimeout(timer)
+  }, []) // Empty dependency array - only runs on mount
+
+  // Scroll to bottom when messages are first loaded (after page reload)
+  useEffect(() => {
+    if (messages.length > 0 && !isInitializing) {
+      // This handles the case where messages are loaded from storage/API after mount
+      const isFirstLoad = scrollRef.current?.scrollTop === 0 && scrollRef.current?.scrollHeight > scrollRef.current?.clientHeight
+      if (isFirstLoad) {
+        setShouldAutoScroll(true)
+        setTimeout(() => scrollToBottom(true), 100)
       }
     }
-  }, [messages, isLoading, currentAgent])
+  }, [messages.length, isInitializing])
+
+  // Use MutationObserver to detect when content is added to ensure scroll on page reload
+  useEffect(() => {
+    if (!scrollRef.current) return
+
+    let hasScrolledOnLoad = false
+    const observer = new MutationObserver(() => {
+      if (!hasScrolledOnLoad && messages.length > 0) {
+        hasScrolledOnLoad = true
+        setShouldAutoScroll(true)
+        setTimeout(() => scrollToBottom(true), 50)
+      }
+    })
+
+    const scrollElement = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]')
+    if (scrollElement) {
+      observer.observe(scrollElement, {
+        childList: true,
+        subtree: true,
+      })
+    }
+
+    return () => observer.disconnect()
+  }, [messages.length])
+
+  // Force scroll when agent sends a message (streaming starts/ends)
+  useEffect(() => {
+    if (isLoading) {
+      setShouldAutoScroll(true)
+    }
+    scrollToBottom()
+  }, [isLoading])
+
+  // Suggested responses are now provided by the hook via structured data
+  // No need to extract from message text
 
   // Focus input on mount
   useEffect(() => {
@@ -216,6 +255,9 @@ export function EnhancedChatInterface({
     
     // Focus the input for any additional edits
     inputRef.current?.focus()
+    
+    // Ensure auto-scroll is enabled for the next message
+    setShouldAutoScroll(true)
     
     // Optionally auto-submit (uncomment if desired)
     // setTimeout(() => handleSubmit(), 100)
@@ -351,7 +393,11 @@ export function EnhancedChatInterface({
       </div>
       
       {/* Messages */}
-      <ScrollArea ref={scrollRef} className="flex-1 p-4 overflow-hidden">
+      <ScrollArea 
+        ref={scrollRef} 
+        className="flex-1 p-4 overflow-hidden"
+        onScroll={handleScroll}
+      >
         <div className="space-y-4 w-full max-w-full overflow-wrap-anywhere">
           {messages.length === 0 ? (
             <div className="text-center text-muted-foreground py-8">
@@ -370,6 +416,7 @@ export function EnhancedChatInterface({
                     variant="outline"
                     size="sm"
                     onClick={() => {
+                      setShouldAutoScroll(true)
                       handleInputChange({ target: { value: 'Help me plan my app structure' } } as any)
                       handleSubmit()
                     }}
@@ -380,6 +427,7 @@ export function EnhancedChatInterface({
                     variant="outline"
                     size="sm"
                     onClick={() => {
+                      setShouldAutoScroll(true)
                       handleInputChange({ target: { value: 'Suggest a UI design for my app' } } as any)
                       handleSubmit()
                     }}
@@ -390,6 +438,7 @@ export function EnhancedChatInterface({
                     variant="outline"
                     size="sm"
                     onClick={() => {
+                      setShouldAutoScroll(true)
                       handleInputChange({ target: { value: 'Generate code for a login screen' } } as any)
                       handleSubmit()
                     }}
@@ -405,8 +454,28 @@ export function EnhancedChatInterface({
               {isLoading && <TypingIndicator />}
             </>
           )}
+          {/* Invisible element to mark the end of messages for scrolling */}
+          <div ref={messagesEndRef} />
         </div>
       </ScrollArea>
+      
+      {/* Scroll to bottom button */}
+      {!shouldAutoScroll && messages.length > 0 && (
+        <div className="absolute bottom-36 right-6 z-10">
+          <Button
+            variant="secondary"
+            size="icon"
+            className="rounded-full shadow-lg"
+            onClick={() => {
+              setShouldAutoScroll(true)
+              scrollToBottom(true)
+            }}
+            title="Scroll to bottom"
+          >
+            <ArrowDown className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
       
       {/* Suggested Responses */}
       {suggestedResponses.length > 0 && !isLoading && (
@@ -429,7 +498,10 @@ export function EnhancedChatInterface({
             const event = { target: { value } } as React.ChangeEvent<HTMLTextAreaElement>
             handleInputChange(event)
           }}
-          onSubmit={() => handleSubmit()}
+          onSubmit={() => {
+            setShouldAutoScroll(true)
+            handleSubmit()
+          }}
           disabled={isLoading}
           isLoading={isLoading}
           placeholder={`Ask ${agentConfig[currentAgent].label} anything...`}

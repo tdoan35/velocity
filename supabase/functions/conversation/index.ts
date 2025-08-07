@@ -1,9 +1,37 @@
-// Supabase Edge Function for multi-turn conversation management
+// Supabase Edge Function for multi-turn conversation management with structured responses
 import { createClient } from '@supabase/supabase-js'
 import { corsHeaders } from '../_shared/cors.ts'
 import { requireAuth } from '../_shared/auth.ts'
 import { rateLimiter } from '../_shared/rate-limiter.ts'
 import { logger } from '../_shared/logger.ts'
+import { anthropic } from '@ai-sdk/anthropic'
+import { streamObject } from 'ai'
+import { z } from 'zod'
+
+// Zod schema for structured assistant responses
+const suggestedResponseSchema = z.object({
+  text: z.string().describe('The suggested response text'),
+  category: z.enum(['continuation', 'clarification', 'example'])
+    .optional()
+    .describe('The type of suggestion'),
+  section: z.string().optional().describe('Relevant PRD section if applicable'),
+})
+
+const assistantResponseSchema = z.object({
+  message: z.string().describe('The main response message from the assistant'),
+  suggestedResponses: z.array(suggestedResponseSchema)
+    .max(3)
+    .optional()
+    .describe('Up to 3 suggested follow-up responses'),
+  metadata: z.object({
+    confidence: z.number().min(0).max(1).optional(),
+    sources: z.array(z.string()).optional(),
+    relatedTopics: z.array(z.string()).optional(),
+  }).optional().describe('Additional metadata about the response'),
+})
+
+type AssistantResponse = z.infer<typeof assistantResponseSchema>
+type SuggestedResponse = z.infer<typeof suggestedResponseSchema>
 
 interface ConversationRequest {
   conversationId?: string
@@ -158,91 +186,64 @@ Deno.serve(async (req) => {
       throw new Error('Anthropic API key not configured')
     }
 
-    // Make request to Claude API with streaming
-    const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
-        messages: claudeMessages,
-        temperature: 0.7,
-        max_tokens: 4096,
-        stream: true,
-        system: buildSystemPrompt(action, conversation.context, agentType)
-      })
+    // Use Vercel AI SDK's streamObject for structured responses
+    const { partialObjectStream } = await streamObject({
+      model: anthropic('claude-3-5-sonnet-20241022', {
+        headers: {
+          'x-api-key': ANTHROPIC_API_KEY,
+        },
+      }),
+      schema: assistantResponseSchema,
+      system: buildSystemPrompt(action, conversation.context, agentType),
+      messages: claudeMessages,
+      temperature: 0.7,
+      maxTokens: 4096,
     })
-
-    if (!claudeResponse.ok) {
-      const error = await claudeResponse.text()
-      throw new Error(`Claude API error: ${error}`)
-    }
 
     // Handle streaming response
     const encoder = new TextEncoder()
-    let fullResponse = ''
+    let fullResponse: Partial<AssistantResponse> = {}
     
     const stream = new ReadableStream({
       async start(controller) {
-        const reader = claudeResponse.body!.getReader()
-        const decoder = new TextDecoder()
-        let buffer = ''
-
         try {
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-
-            buffer += decoder.decode(value, { stream: true })
-            const lines = buffer.split('\n')
-            buffer = lines.pop() || ''
-
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const data = line.slice(6).trim()
-                if (data === '[DONE]') {
-                  // Save conversation state
-                  await saveConversationMessage(
-                    conversation.id,
-                    'assistant',
-                    fullResponse,
-                    { action, agentType }
-                  )
-                  
-                  // Send completion event with usage data
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-                    type: 'done',
-                    done: true,
-                    usage: {
-                      totalTokens: fullResponse.length / 4, // Rough estimate
-                      model: 'claude-3-5-sonnet-20241022'
-                    }
-                  })}\n\n`))
-                  
-                  controller.close()
-                  return
-                }
-
-                try {
-                  const parsed = JSON.parse(data)
-                  if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
-                    fullResponse += parsed.delta.text
-                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-                      type: 'text',
-                      content: parsed.delta.text,
-                      conversationId: conversation.id
-                    })}\n\n`))
-                  }
-                } catch (e) {
-                  console.error('Error parsing stream data:', e)
-                }
-              }
-            }
+          for await (const partialObject of partialObjectStream) {
+            fullResponse = partialObject
+            
+            // Send partial update to client
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+              type: 'partial',
+              object: partialObject,
+              conversationId: conversation.id
+            })}\n\n`))
           }
+          
+          // Save the complete message with structured data
+          await saveConversationMessage(
+            conversation.id,
+            'assistant',
+            fullResponse.message || '',
+            { 
+              action, 
+              agentType,
+              suggestedResponses: fullResponse.suggestedResponses,
+              metadata: fullResponse.metadata
+            }
+          )
+          
+          // Send completion event
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+            type: 'done',
+            done: true,
+            finalObject: fullResponse,
+            usage: {
+              model: 'claude-3-5-sonnet-20241022'
+            }
+          })}\n\n`))
+          
+          controller.close()
         } catch (error) {
+          console.error('Streaming error:', error)
           controller.error(error)
         }
       }
@@ -466,14 +467,7 @@ Your goal is to help users create a PRD with these sections:
 - Validate and expand on user inputs constructively
 
 ### Suggested Response Generation
-After each of your messages during PRD creation, provide 3 suggested responses that the user can click to continue the conversation. Format these as:
-
-**Suggested responses:**
-1. [First contextual suggestion]
-2. [Second contextual suggestion]  
-3. [Third contextual suggestion]
-
-Make suggestions specific to the current PRD section and previous context. Examples:
+Generate contextual suggested responses that help the user continue the conversation naturally. These should be specific to the current PRD section and previous context. Examples:
 - For overview: "It's a social app for...", "I want to solve the problem of...", "My target users are..."
 - For features: "Add user authentication", "Include real-time chat", "Implement offline mode"
 - For technical: "Needs to work on iOS and Android", "Should handle 10k+ users", "Must integrate with..."
@@ -575,7 +569,7 @@ You are currently helping the user create a Product Requirements Document (PRD).
 
 Remember to:
 1. Guide the conversation based on the current PRD section
-2. Provide 3 suggested responses after each message
+2. Generate contextual suggested responses (in the suggestedResponses field, not in the message text)
 3. Validate inputs before moving to the next section
 4. Keep track of all information provided across the conversation`
   }

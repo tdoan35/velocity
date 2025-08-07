@@ -4,12 +4,30 @@ import { conversationService } from '../services/conversationService';
 import { supabase, supabaseUrl } from '../lib/supabase';
 import { useToast } from './use-toast';
 
+// Types for structured responses
+export interface SuggestedResponse {
+  text: string;
+  category?: 'continuation' | 'clarification' | 'example';
+  section?: string;
+}
+
+export interface AssistantResponse {
+  message: string;
+  suggestedResponses?: SuggestedResponse[];
+  metadata?: {
+    confidence?: number;
+    sources?: string[];
+    relatedTopics?: string[];
+  };
+}
+
 interface UseAIChatStreamOptions {
   conversationId?: string;
   projectId?: string;
   initialAgent?: AgentType;
   onStreamStart?: () => void;
   onStreamEnd?: (usage: any) => void;
+  onConversationCreated?: (conversationId: string) => void;
 }
 
 // Map internal agent types to backend agent types
@@ -29,6 +47,7 @@ export function useAIChatStream({
   initialAgent = 'project',
   onStreamStart,
   onStreamEnd,
+  onConversationCreated,
 }: UseAIChatStreamOptions = {}) {
   const [conversationId, setConversationId] = useState<string | undefined>(initialConversationId);
   const [messages, setMessages] = useState<AIMessage[]>([]);
@@ -38,6 +57,7 @@ export function useAIChatStream({
   const [isInitializing, setIsInitializing] = useState(false);
   const [context, setContext] = useState<ChatContext>({ projectId });
   const [error, setError] = useState<Error | null>(null);
+  const [suggestedResponses, setSuggestedResponses] = useState<SuggestedResponse[]>([]);
   const { toast } = useToast();
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -141,6 +161,38 @@ export function useAIChatStream({
     
     if (!input.trim() || !conversationId) return;
 
+    // Check if we have a temporary conversation ID and need to create a real one
+    let actualConversationId = conversationId;
+    if (conversationId.startsWith('temp-')) {
+      try {
+        // Create a real conversation
+        const { conversation, error } = await conversationService.createConversation(
+          projectId,
+          'Chat Conversation',
+          currentAgent
+        );
+        
+        if (error || !conversation) {
+          throw error || new Error('Failed to create conversation');
+        }
+        
+        actualConversationId = conversation.id;
+        setConversationId(conversation.id);
+        
+        // Notify parent component of the new conversation ID
+        onConversationCreated?.(conversation.id);
+      } catch (error) {
+        console.error('Error creating conversation:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to create conversation',
+          variant: 'destructive',
+        });
+        setIsLoading(false);
+        return;
+      }
+    }
+
     const userMessage: AIMessage = {
       id: Date.now().toString(),
       role: 'user',
@@ -154,6 +206,7 @@ export function useAIChatStream({
     setInput('');
     setIsLoading(true);
     setError(null);
+    setSuggestedResponses([]); // Clear previous suggestions
 
     // Create abort controller for this request
     abortControllerRef.current = new AbortController();
@@ -163,7 +216,7 @@ export function useAIChatStream({
 
       // Save user message to database
       await conversationService.addMessage(
-        conversationId,
+        actualConversationId,
         'user',
         userMessage.content,
         userMessage.metadata
@@ -181,7 +234,7 @@ export function useAIChatStream({
           'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          conversationId,
+          conversationId: actualConversationId,
           message: userMessage.content,
           context,
           agentType: mapAgentTypeToBackend(currentAgent),
@@ -210,20 +263,65 @@ export function useAIChatStream({
 
       if (reader) {
         let accumulatedContent = '';
+        let buffer = '';
+        let currentStructuredResponse: Partial<AssistantResponse> | null = null;
         
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
+          // Decode the chunk and add to buffer
           const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split('\n');
+          buffer += chunk;
+
+          // Process complete lines only
+          const lines = buffer.split('\n');
+          // Keep the last incomplete line in the buffer
+          buffer = lines.pop() || '';
 
           for (const line of lines) {
+            // Skip empty lines
+            if (line.trim() === '') continue;
+            
             if (line.startsWith('data: ')) {
+              const dataStr = line.slice(6).trim();
+              
+              // Skip empty data
+              if (!dataStr) continue;
+              
               try {
-                const data = JSON.parse(line.slice(6));
+                const data = JSON.parse(dataStr);
                 
-                if (data.type === 'text' && data.content) {
+                // Handle structured response (new format)
+                if (data.type === 'partial' && data.object) {
+                  currentStructuredResponse = data.object as Partial<AssistantResponse>;
+                  
+                  // Update message content
+                  if (currentStructuredResponse.message) {
+                    accumulatedContent = currentStructuredResponse.message;
+                    setMessages(prev => {
+                      const newMessages = [...prev];
+                      const lastMessage = newMessages[newMessages.length - 1];
+                      if (lastMessage && lastMessage.role === 'assistant') {
+                        lastMessage.content = accumulatedContent;
+                        // Store structured data in metadata
+                        lastMessage.metadata = {
+                          ...lastMessage.metadata,
+                          ...currentStructuredResponse.metadata,
+                          suggestedResponses: currentStructuredResponse.suggestedResponses,
+                        };
+                      }
+                      return newMessages;
+                    });
+                  }
+                  
+                  // Update suggested responses
+                  if (currentStructuredResponse.suggestedResponses) {
+                    setSuggestedResponses(currentStructuredResponse.suggestedResponses);
+                  }
+                }
+                // Handle legacy text response (fallback)
+                else if (data.type === 'text' && data.content) {
                   accumulatedContent += data.content;
                   // Update the assistant message in real-time
                   setMessages(prev => {
@@ -236,23 +334,16 @@ export function useAIChatStream({
                   });
                 }
                 
-                if (data.type === 'done' && data.done && data.usage) {
-                  // Save complete assistant message to database
-                  await conversationService.addMessage(
-                    conversationId,
-                    'assistant',
-                    accumulatedContent,
-                    { 
-                      agentType: currentAgent, 
-                      tokensUsed: data.usage.totalTokens,
-                      model: data.usage.model
-                    }
-                  );
+                if (data.type === 'done' && data.done) {
+                  // Clear suggested responses before setting new ones
+                  if (data.finalObject?.suggestedResponses) {
+                    setSuggestedResponses(data.finalObject.suggestedResponses);
+                  }
                   
-                  // Update conversation tokens
-                  if (data.usage.totalTokens) {
+                  // Update conversation tokens if available
+                  if (data.usage?.totalTokens) {
                     await conversationService.updateConversationTokens(
-                      conversationId,
+                      actualConversationId,
                       data.usage.totalTokens
                     );
                   }
@@ -260,8 +351,34 @@ export function useAIChatStream({
                   onStreamEnd?.(data.usage);
                 }
               } catch (error) {
-                console.error('Error parsing SSE data:', error);
+                // Only log if it's not an expected format
+                if (dataStr !== '[DONE]') {
+                  console.error('Error parsing SSE data:', error, 'Data:', dataStr);
+                }
               }
+            }
+          }
+        }
+        
+        // Process any remaining data in buffer
+        if (buffer.trim() && buffer.startsWith('data: ')) {
+          const dataStr = buffer.slice(6).trim();
+          if (dataStr && dataStr !== '[DONE]') {
+            try {
+              const data = JSON.parse(dataStr);
+              if (data.type === 'text' && data.content) {
+                accumulatedContent += data.content;
+                setMessages(prev => {
+                  const newMessages = [...prev];
+                  const lastMessage = newMessages[newMessages.length - 1];
+                  if (lastMessage && lastMessage.role === 'assistant') {
+                    lastMessage.content = accumulatedContent;
+                  }
+                  return newMessages;
+                });
+              }
+            } catch (error) {
+              console.error('Error parsing final SSE data:', error, 'Data:', dataStr);
             }
           }
         }
@@ -354,6 +471,7 @@ export function useAIChatStream({
     currentAgent,
     isInitializing,
     context,
+    suggestedResponses,
     
     // Actions
     handleInputChange,

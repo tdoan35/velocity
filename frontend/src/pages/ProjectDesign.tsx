@@ -316,6 +316,18 @@ export function ProjectDesign() {
                     conversationTitle={currentConversation.title}
                     onNewConversation={() => createNewConversation(undefined, undefined, true)}
                     onToggleHistory={() => setShowHistory(!showHistory)}
+                    onConversationCreated={(newConversationId) => {
+                      // Update the current conversation with the real ID
+                      if (currentConversation.isTemporary) {
+                        setCurrentConversation({
+                          ...currentConversation,
+                          id: newConversationId,
+                          isTemporary: false,
+                        })
+                        // Reload conversation history
+                        loadConversationHistory()
+                      }
+                    }}
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full">
