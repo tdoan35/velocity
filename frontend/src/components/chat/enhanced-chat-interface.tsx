@@ -31,13 +31,14 @@ interface EnhancedChatInterfaceProps {
   onNewConversation?: () => void
   onToggleHistory?: () => void
   onConversationCreated?: (conversationId: string) => void
+  onTitleGenerated?: (title: string) => void
 }
 
 const agentConfig: Record<AgentType, { label: string; icon: any; color: string }> = {
-  project: { label: 'Project Manager', icon: '📊', color: 'bg-blue-500' },
-  ui: { label: 'UI/UX Designer', icon: '🎨', color: 'bg-purple-500' },
-  engineering: { label: 'Engineering Assistant', icon: '💻', color: 'bg-green-500' },
-  config: { label: 'Config Helper', icon: '⚙️', color: 'bg-orange-500' },
+  project_manager: { label: 'Project Manager', icon: '📊', color: 'bg-blue-500' },
+  design_assistant: { label: 'UI/UX Designer', icon: '🎨', color: 'bg-purple-500' },
+  engineering_assistant: { label: 'Engineering Assistant', icon: '💻', color: 'bg-green-500' },
+  config_helper: { label: 'Config Helper', icon: '⚙️', color: 'bg-orange-500' },
 }
 
 export function EnhancedChatInterface({
@@ -51,6 +52,7 @@ export function EnhancedChatInterface({
   onNewConversation,
   onToggleHistory,
   onConversationCreated,
+  onTitleGenerated,
 }: EnhancedChatInterfaceProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -77,11 +79,7 @@ export function EnhancedChatInterface({
   } = useAIChatStream({
     conversationId: initialConversationId,
     projectId,
-    initialAgent: activeAgent ? 
-      (activeAgent === 'project_manager' ? 'project' :
-       activeAgent === 'design_assistant' ? 'ui' :
-       activeAgent === 'engineering_assistant' ? 'engineering' :
-       activeAgent === 'config_helper' ? 'config' : 'project') : 'project',
+    initialAgent: activeAgent || 'project_manager',
     onStreamStart: () => {
       // Force auto-scroll when streaming starts
       setShouldAutoScroll(true)
@@ -93,6 +91,7 @@ export function EnhancedChatInterface({
       setTimeout(() => scrollToBottom(true), 100)
     },
     onConversationCreated,
+    onTitleGenerated,
   })
 
   // Auto-scroll to bottom with smooth scrolling
@@ -192,13 +191,7 @@ export function EnhancedChatInterface({
   // Handle agent changes from parent
   useEffect(() => {
     if (activeAgent && onAgentChange) {
-      const mappedAgent = 
-        activeAgent === 'project_manager' ? 'project' :
-        activeAgent === 'design_assistant' ? 'ui' :
-        activeAgent === 'engineering_assistant' ? 'engineering' :
-        activeAgent === 'config_helper' ? 'config' : 'project'
-      
-      switchAgent(mappedAgent as AgentType)
+      switchAgent(activeAgent as AgentType)
     }
   }, [activeAgent, switchAgent, onAgentChange])
 
@@ -250,8 +243,7 @@ export function EnhancedChatInterface({
     // Set the input value to the suggestion text
     handleInputChange({ target: { value: suggestion.text } } as any)
     
-    // Clear suggestions after selection
-    setSuggestedResponses([])
+    // Suggestions will be cleared automatically by the hook after submission
     
     // Focus the input for any additional edits
     inputRef.current?.focus()
@@ -263,52 +255,71 @@ export function EnhancedChatInterface({
     // setTimeout(() => handleSubmit(), 100)
   }
 
-  const renderMessage = (message: any) => {
+  const renderMessage = (message: any, index: number) => {
     const isAssistant = message.role === 'assistant'
     const agentType = message.metadata?.agentType || currentAgent
-    const agent = agentConfig[agentType as AgentType] || agentConfig.project
+    const agent = agentConfig[agentType as AgentType] || agentConfig.project_manager
+    
+    // Check if this is the last assistant message and has suggested responses
+    const isLastAssistantMessage = isAssistant && 
+      index === messages.length - 1 && 
+      !isLoading &&
+      suggestedResponses.length > 0
 
     return (
-      <div
-        key={message.id}
-        className={cn(
-          'flex gap-3 w-full',
-          !isAssistant && 'flex-row-reverse'
-        )}
-      >
-        <div className={cn(
-          'flex-1 space-y-1 min-w-0',
-          !isAssistant && 'flex flex-col items-end'
-        )}>
-          {isAssistant && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-medium text-muted-foreground">
-                {agent.label}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {new Date(message.createdAt).toLocaleTimeString()}
-              </span>
-            </div>
+      <div key={message.id} className="space-y-2">
+        <div
+          className={cn(
+            'flex gap-3 w-full',
+            !isAssistant && 'flex-row-reverse'
           )}
-          
+        >
           <div className={cn(
-            'rounded-lg p-2 max-w-full',
-            isAssistant ? 'bg-transparent' : 'bg-muted'
+            'flex-1 space-y-1 min-w-0',
+            !isAssistant && 'flex flex-col items-end'
           )}>
-            {isAssistant && message.content.includes('```') ? (
-              <MarkdownMessage
-                content={message.content}
-                onApplyCode={onApplyCode}
-                className="text-sm"
-              />
-            ) : (
-              <p className={cn(
-                "whitespace-pre-wrap break-words overflow-wrap-anywhere",
-                "text-sm"
-              )}>{message.content}</p>
+            {isAssistant && (
+              <div className="flex items-center gap-2 px-2 flex-wrap">
+                <span className="text-xs font-medium text-muted-foreground">
+                  {agent.label}
+                </span>
+              </div>
             )}
+            
+            <div className={cn(
+              'rounded-lg p-2 max-w-full',
+              isAssistant ? 'bg-transparent' : 'bg-muted'
+            )}>
+              {isAssistant && message.content.includes('```') ? (
+                <MarkdownMessage
+                  content={message.content}
+                  onApplyCode={onApplyCode}
+                  className="text-sm"
+                />
+              ) : (
+                <p className={cn(
+                  "whitespace-pre-wrap break-words overflow-wrap-anywhere",
+                  "text-sm"
+                )}>{message.content}</p>
+              )}
+            </div>
           </div>
         </div>
+        
+        {/* Show suggested responses right below the last assistant message */}
+        {isLastAssistantMessage && (
+          <div className="mt-2">
+            <SuggestedResponses
+              suggestions={suggestedResponses.map(s => ({
+                ...s,
+                category: s.category || 'continuation'
+              }))}
+              onSelectSuggestion={handleSelectSuggestion}
+              disabled={isLoading}
+              isLoading={isLoading}
+            />
+          </div>
+        )}
       </div>
     )
   }
@@ -328,16 +339,12 @@ export function EnhancedChatInterface({
   const getAgentInfo = (agentType?: string) => {
     switch (agentType) {
       case 'project_manager':
-      case 'project':
         return { icon: Users, color: 'emerald', bgColor: 'bg-emerald-500/10', textColor: 'text-emerald-500', label: 'Project Manager' }
       case 'design_assistant':
-      case 'ui':
         return { icon: Sparkles, color: 'blue', bgColor: 'bg-blue-500/10', textColor: 'text-blue-500', label: 'Design Assistant' }
       case 'engineering_assistant':
-      case 'engineering':
         return { icon: Code2, color: 'purple', bgColor: 'bg-purple-500/10', textColor: 'text-purple-500', label: 'Engineering Assistant' }
       case 'config_helper':
-      case 'config':
         return { icon: Settings, color: 'orange', bgColor: 'bg-orange-500/10', textColor: 'text-orange-500', label: 'Config Helper' }
       default:
         return { icon: MessageSquarePlus, color: 'gray', bgColor: 'bg-gray-500/10', textColor: 'text-gray-500', label: 'AI Assistant' }
@@ -450,7 +457,7 @@ export function EnhancedChatInterface({
             </div>
           ) : (
             <>
-              {messages.map(renderMessage)}
+              {messages.map((message, index) => renderMessage(message, index))}
               {isLoading && <TypingIndicator />}
             </>
           )}
@@ -474,18 +481,6 @@ export function EnhancedChatInterface({
           >
             <ArrowDown className="h-4 w-4" />
           </Button>
-        </div>
-      )}
-      
-      {/* Suggested Responses */}
-      {suggestedResponses.length > 0 && !isLoading && (
-        <div className="px-4 pb-2 flex-shrink-0">
-          <SuggestedResponses
-            suggestions={suggestedResponses}
-            onSelectSuggestion={handleSelectSuggestion}
-            disabled={isLoading}
-            isLoading={isLoading}
-          />
         </div>
       )}
       

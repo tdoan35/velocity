@@ -13,6 +13,7 @@ export interface SuggestedResponse {
 
 export interface AssistantResponse {
   message: string;
+  conversationTitle?: string;
   suggestedResponses?: SuggestedResponse[];
   metadata?: {
     confidence?: number;
@@ -28,26 +29,17 @@ interface UseAIChatStreamOptions {
   onStreamStart?: () => void;
   onStreamEnd?: (usage: any) => void;
   onConversationCreated?: (conversationId: string) => void;
-}
-
-// Map internal agent types to backend agent types
-function mapAgentTypeToBackend(agentType: AgentType): string {
-  const agentMap: Record<AgentType, string> = {
-    'project': 'project_manager',
-    'ui': 'design_assistant',
-    'engineering': 'engineering_assistant',
-    'config': 'config_helper'
-  };
-  return agentMap[agentType] || 'project_manager';
+  onTitleGenerated?: (title: string) => void;
 }
 
 export function useAIChatStream({
   conversationId: initialConversationId,
   projectId,
-  initialAgent = 'project',
+  initialAgent = 'project_manager',
   onStreamStart,
   onStreamEnd,
   onConversationCreated,
+  onTitleGenerated,
 }: UseAIChatStreamOptions = {}) {
   const [conversationId, setConversationId] = useState<string | undefined>(initialConversationId);
   const [messages, setMessages] = useState<AIMessage[]>([]);
@@ -75,6 +67,18 @@ export function useAIChatStream({
           metadata: msg.metadata,
         }));
         setMessages(formattedMessages);
+        
+        // Extract suggested responses from the last assistant message
+        const lastAssistantMessage = formattedMessages
+          .filter(m => m.role === 'assistant')
+          .pop();
+        
+        if (lastAssistantMessage?.metadata?.suggestedResponses) {
+          setSuggestedResponses(lastAssistantMessage.metadata.suggestedResponses);
+        } else {
+          // Clear suggestions if none found
+          setSuggestedResponses([]);
+        }
       }
     } catch (error) {
       console.error('Error loading messages:', error);
@@ -129,6 +133,17 @@ export function useAIChatStream({
             metadata: msg.metadata,
           }));
           setMessages(formattedMessages);
+          
+          // Extract suggested responses from the last assistant message
+          const lastAssistantMessage = formattedMessages
+            .filter(m => m.role === 'assistant')
+            .pop();
+          
+          if (lastAssistantMessage?.metadata?.suggestedResponses) {
+            setSuggestedResponses(lastAssistantMessage.metadata.suggestedResponses);
+          } else {
+            setSuggestedResponses([]);
+          }
         }
       } else {
         // Create new conversation
@@ -237,7 +252,7 @@ export function useAIChatStream({
           conversationId: actualConversationId,
           message: userMessage.content,
           context,
-          agentType: mapAgentTypeToBackend(currentAgent),
+          agentType: currentAgent,
           action: 'continue',
         }),
         signal: abortControllerRef.current.signal,
@@ -301,18 +316,26 @@ export function useAIChatStream({
                     accumulatedContent = currentStructuredResponse.message;
                     setMessages(prev => {
                       const newMessages = [...prev];
-                      const lastMessage = newMessages[newMessages.length - 1];
-                      if (lastMessage && lastMessage.role === 'assistant') {
-                        lastMessage.content = accumulatedContent;
-                        // Store structured data in metadata
-                        lastMessage.metadata = {
-                          ...lastMessage.metadata,
-                          ...currentStructuredResponse.metadata,
-                          suggestedResponses: currentStructuredResponse.suggestedResponses,
+                      const lastMessageIndex = newMessages.length - 1;
+                      if (lastMessageIndex >= 0 && newMessages[lastMessageIndex].role === 'assistant') {
+                        // Create a new message object instead of mutating
+                        newMessages[lastMessageIndex] = {
+                          ...newMessages[lastMessageIndex],
+                          content: accumulatedContent,
+                          metadata: {
+                            ...newMessages[lastMessageIndex].metadata,
+                            ...currentStructuredResponse.metadata,
+                            suggestedResponses: currentStructuredResponse.suggestedResponses,
+                          },
                         };
                       }
                       return newMessages;
                     });
+                  }
+                  
+                  // Handle conversation title (for new conversations)
+                  if (currentStructuredResponse.conversationTitle && onTitleGenerated) {
+                    onTitleGenerated(currentStructuredResponse.conversationTitle);
                   }
                   
                   // Update suggested responses
@@ -326,9 +349,13 @@ export function useAIChatStream({
                   // Update the assistant message in real-time
                   setMessages(prev => {
                     const newMessages = [...prev];
-                    const lastMessage = newMessages[newMessages.length - 1];
-                    if (lastMessage && lastMessage.role === 'assistant') {
-                      lastMessage.content = accumulatedContent;
+                    const lastMessageIndex = newMessages.length - 1;
+                    if (lastMessageIndex >= 0 && newMessages[lastMessageIndex].role === 'assistant') {
+                      // Create a new message object instead of mutating
+                      newMessages[lastMessageIndex] = {
+                        ...newMessages[lastMessageIndex],
+                        content: accumulatedContent,
+                      };
                     }
                     return newMessages;
                   });
@@ -370,9 +397,13 @@ export function useAIChatStream({
                 accumulatedContent += data.content;
                 setMessages(prev => {
                   const newMessages = [...prev];
-                  const lastMessage = newMessages[newMessages.length - 1];
-                  if (lastMessage && lastMessage.role === 'assistant') {
-                    lastMessage.content = accumulatedContent;
+                  const lastMessageIndex = newMessages.length - 1;
+                  if (lastMessageIndex >= 0 && newMessages[lastMessageIndex].role === 'assistant') {
+                    // Create a new message object instead of mutating
+                    newMessages[lastMessageIndex] = {
+                      ...newMessages[lastMessageIndex],
+                      content: accumulatedContent,
+                    };
                   }
                   return newMessages;
                 });

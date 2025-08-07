@@ -4,13 +4,15 @@ import { corsHeaders } from '../_shared/cors.ts'
 import { requireAuth } from '../_shared/auth.ts'
 import { rateLimiter } from '../_shared/rate-limiter.ts'
 import { logger } from '../_shared/logger.ts'
-import { anthropic } from '@ai-sdk/anthropic'
+import { createAnthropic } from '@ai-sdk/anthropic'
 import { streamObject } from 'ai'
 import { z } from 'zod'
 
 // Zod schema for structured assistant responses
 const suggestedResponseSchema = z.object({
-  text: z.string().describe('The suggested response text'),
+  text: z.string()
+    .max(50) // Roughly 5-8 words character limit
+    .describe('Short suggested response (5-8 words maximum)'),
   category: z.enum(['continuation', 'clarification', 'example'])
     .optional()
     .describe('The type of suggestion'),
@@ -19,6 +21,10 @@ const suggestedResponseSchema = z.object({
 
 const assistantResponseSchema = z.object({
   message: z.string().describe('The main response message from the assistant'),
+  conversationTitle: z.string()
+    .max(50)
+    .optional()
+    .describe('A brief, descriptive title for the conversation (only for first message in new conversations)'),
   suggestedResponses: z.array(suggestedResponseSchema)
     .max(3)
     .optional()
@@ -58,6 +64,7 @@ interface ConversationMessage {
 interface ConversationState {
   id: string
   userId: string
+  title?: string
   messages: ConversationMessage[]
   context: any
   metadata: {
@@ -121,10 +128,18 @@ Deno.serve(async (req) => {
 
     // Load or create conversation
     let conversation: ConversationState
+    let shouldGenerateTitle = false
     if (conversationId) {
       conversation = await loadConversation(conversationId, authResult.userId)
+      // Check if this needs a title: either first message OR has a placeholder title
+      const needsTitle = !conversation.title || 
+                         conversation.title === 'New Conversation' || 
+                         conversation.title === 'Chat Conversation' ||
+                         conversation.title === 'Untitled Conversation'
+      shouldGenerateTitle = conversation.messages.length === 0 || needsTitle
     } else {
       conversation = await createConversation(authResult.userId)
+      shouldGenerateTitle = true
     }
 
     // Add user message
@@ -186,15 +201,16 @@ Deno.serve(async (req) => {
       throw new Error('Anthropic API key not configured')
     }
 
+    // Create Anthropic client with API key
+    const anthropic = createAnthropic({
+      apiKey: ANTHROPIC_API_KEY,
+    })
+
     // Use Vercel AI SDK's streamObject for structured responses
     const { partialObjectStream } = await streamObject({
-      model: anthropic('claude-3-5-sonnet-20241022', {
-        headers: {
-          'x-api-key': ANTHROPIC_API_KEY,
-        },
-      }),
+      model: anthropic('claude-3-5-sonnet-20241022'),
       schema: assistantResponseSchema,
-      system: buildSystemPrompt(action, conversation.context, agentType),
+      system: buildSystemPrompt(action, conversation.context, agentType, shouldGenerateTitle),
       messages: claudeMessages,
       temperature: 0.7,
       maxTokens: 4096,
@@ -230,6 +246,17 @@ Deno.serve(async (req) => {
               metadata: fullResponse.metadata
             }
           )
+          
+          // Update conversation title if provided (for new conversations or conversations with placeholder titles)
+          if (fullResponse.conversationTitle && shouldGenerateTitle) {
+            console.log('Updating conversation title:', {
+              conversationId: conversation.id,
+              newTitle: fullResponse.conversationTitle,
+              shouldGenerateTitle,
+              previousTitle: conversation.title
+            })
+            await updateConversationTitle(conversation.id, fullResponse.conversationTitle)
+          }
           
           // Send completion event
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({
@@ -298,6 +325,7 @@ async function loadConversation(conversationId: string, userId: string): Promise
   return {
     id: conv.id,
     userId: conv.user_id,
+    title: conv.title,
     messages: messages?.map(m => ({
       role: m.role,
       content: m.content,
@@ -341,9 +369,28 @@ async function createConversation(userId: string): Promise<ConversationState> {
   return {
     id: data.id,
     userId: data.user_id,
+    title: data.title,
     messages: [],
     context: data.context,
     metadata: data.metadata
+  }
+}
+
+async function updateConversationTitle(conversationId: string, title: string) {
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  )
+  
+  const { error } = await supabase
+    .from('conversations')
+    .update({ title })
+    .eq('id', conversationId)
+  
+  if (error) {
+    console.error('Failed to update conversation title:', error)
+  } else {
+    console.log('Successfully updated conversation title to:', title)
   }
 }
 
@@ -437,7 +484,7 @@ async function prepareClaudeMessages(
   }))
 }
 
-function buildSystemPrompt(action: string, context: any, agentType: string = 'project_manager'): string {
+function buildSystemPrompt(action: string, context: any, agentType: string = 'project_manager', shouldGenerateTitle: boolean = false): string {
   let systemPrompt = ''
 
   // Agent-specific base prompts
@@ -467,10 +514,14 @@ Your goal is to help users create a PRD with these sections:
 - Validate and expand on user inputs constructively
 
 ### Suggested Response Generation
-Generate contextual suggested responses that help the user continue the conversation naturally. These should be specific to the current PRD section and previous context. Examples:
-- For overview: "It's a social app for...", "I want to solve the problem of...", "My target users are..."
-- For features: "Add user authentication", "Include real-time chat", "Implement offline mode"
-- For technical: "Needs to work on iOS and Android", "Should handle 10k+ users", "Must integrate with..."
+Generate SHORT suggested responses (5-8 words MAXIMUM) that help continue the conversation:
+- Keep responses concise and action-oriented
+- Use simple, direct language without filler words
+- Focus on key information only
+- Examples:
+  - For overview: "Target fitness beginners", "Focus on accountability", "Social workout challenges"
+  - For features: "Add progress tracking", "Include friend system", "Create workout plans"
+  - For technical: "Support offline mode", "Need push notifications", "Integrate with wearables"
 
 ### PRD Creation Flow
 1. **Initialization**: Detect when user wants to create a PRD or starts describing their app
@@ -503,7 +554,11 @@ Key responsibilities:
 5. Animation and gesture interactions
 6. Color schemes and typography
 7. Design system development
-8. Platform-specific design guidelines (iOS/Android)`
+8. Platform-specific design guidelines (iOS/Android)
+
+### Suggested Response Generation
+Generate SHORT suggested responses (5-8 words MAX):
+- Examples: "Show color schemes", "Create wireframe mockup", "Design navigation flow", "Add dark mode", "Improve button styles"`
       break
 
     case 'engineering_assistant':
@@ -517,7 +572,11 @@ Key principles:
 5. Use performance-optimized patterns
 6. Include accessibility features
 7. Write clean, maintainable code with comments
-8. Implement proper testing strategies`
+8. Implement proper testing strategies
+
+### Suggested Response Generation
+Generate SHORT suggested responses (5-8 words MAX):
+- Examples: "Generate login screen", "Add API integration", "Create navigation structure", "Implement state management", "Setup authentication flow"`
       break
 
     case 'config_helper':
@@ -531,7 +590,11 @@ Key responsibilities:
 5. Native module configuration
 6. CI/CD pipeline setup
 7. App store deployment configuration
-8. Performance optimization settings`
+8. Performance optimization settings
+
+### Suggested Response Generation
+Generate SHORT suggested responses (5-8 words MAX):
+- Examples: "Setup CI/CD pipeline", "Configure app permissions", "Add environment variables", "Setup build process", "Deploy to stores"`
       break
 
     default:
@@ -569,13 +632,27 @@ You are currently helping the user create a Product Requirements Document (PRD).
 
 Remember to:
 1. Guide the conversation based on the current PRD section
-2. Generate contextual suggested responses (in the suggestedResponses field, not in the message text)
+2. Generate SHORT contextual suggested responses (5-8 words MAX) in the suggestedResponses field
 3. Validate inputs before moving to the next section
 4. Keep track of all information provided across the conversation`
   }
 
   // Add general guidelines
   systemPrompt += '\n\nAlways be helpful, accurate, and provide practical solutions. When generating code, ensure it is complete and ready to use.'
+  
+  // Add title generation instruction for new conversations or conversations needing titles
+  if (shouldGenerateTitle) {
+    systemPrompt += `\n\n## Conversation Title Generation
+IMPORTANT: You MUST generate a conversationTitle in your response.
+- Create a brief, descriptive title (maximum 50 characters) based on the user's request
+- Make it specific to what the user is asking for
+- Use the perspective of your current role (${agentType})
+- Examples by agent type:
+  - Project Manager: "E-commerce App Planning", "Fitness Tracker PRD", "Social Media Feature Design"
+  - Design Assistant: "Dark Mode UI Design", "Login Screen Mockup", "Navigation Flow Design"
+  - Engineering Assistant: "Auth Flow Implementation", "API Integration Setup", "State Management Code"
+  - Config Helper: "Firebase Configuration", "CI/CD Pipeline Setup", "App Store Deployment"`
+  }
 
   return systemPrompt
 }

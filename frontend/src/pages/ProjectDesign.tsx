@@ -64,16 +64,12 @@ export function ProjectDesign() {
   const getAgentInfo = (agentType?: string) => {
     switch (agentType) {
       case 'project_manager':
-      case 'project':
         return { icon: Users, color: 'emerald', bgColor: 'bg-emerald-500/10', textColor: 'text-emerald-500', label: 'Project Manager' }
       case 'design_assistant':
-      case 'ui':
         return { icon: Sparkles, color: 'blue', bgColor: 'bg-blue-500/10', textColor: 'text-blue-500', label: 'Design Assistant' }
       case 'engineering_assistant':
-      case 'engineering':
         return { icon: Code2, color: 'purple', bgColor: 'bg-purple-500/10', textColor: 'text-purple-500', label: 'Engineering Assistant' }
       case 'config_helper':
-      case 'config':
         return { icon: Settings, color: 'orange', bgColor: 'bg-orange-500/10', textColor: 'text-orange-500', label: 'Config Helper' }
       default:
         return { icon: MessageSquare, color: 'gray', bgColor: 'bg-gray-500/10', textColor: 'text-gray-500', label: 'AI Assistant' }
@@ -306,7 +302,6 @@ export function ProjectDesign() {
             <Card className="h-full flex flex-col bg-transparent">
                 {currentConversation ? (
                   <EnhancedChatInterface
-                    key={currentConversation.id}
                     projectId={projectId || ''}
                     conversationId={currentConversation.id}
                     onApplyCode={handleApplyCode}
@@ -327,6 +322,21 @@ export function ProjectDesign() {
                         // Reload conversation history
                         loadConversationHistory()
                       }
+                    }}
+                    onTitleGenerated={(generatedTitle) => {
+                      // Update the conversation title with the AI-generated title
+                      setCurrentConversation(prev => ({
+                        ...prev,
+                        title: generatedTitle
+                      }))
+                      // Also update in conversation history if it exists
+                      setConversationHistory(prev => 
+                        prev.map(conv => 
+                          conv.id === currentConversation.id 
+                            ? { ...conv, title: generatedTitle } 
+                            : conv
+                        )
+                      )
                     }}
                   />
                 ) : (
