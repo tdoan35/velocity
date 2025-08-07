@@ -59,7 +59,9 @@ export function ProjectDesign() {
       lastAgent?: string;
     }
   }>>([])
-  
+  const [initialPromptSubmitted, setInitialPromptSubmitted] = useState(false)
+  const [isFirstVisit, setIsFirstVisit] = useState(false)
+  const initialPromptRef = useRef<string | null>(null)
   // Helper function to get agent info
   const getAgentInfo = (agentType?: string) => {
     switch (agentType) {
@@ -229,14 +231,20 @@ export function ProjectDesign() {
 
       setProject(loadedProject)
       
+      // Extract initial prompt from app_config
+      const initialPrompt = loadedProject.app_config?.initialPrompt
+      if (initialPrompt) {
+        initialPromptRef.current = initialPrompt
+      }
+      
       // Set the current project in the app store
       setCurrentProject({
         id: loadedProject.id,
-        name: loadedProject.title || loadedProject.name || 'Untitled Project',
+        name: loadedProject.name || loadedProject.title || 'Untitled Project',
         description: loadedProject.description || '',
         createdAt: new Date(loadedProject.created_at || Date.now()),
         updatedAt: new Date(loadedProject.updated_at || Date.now()),
-        template: loadedProject.template || 'react-native',
+        template: loadedProject.template_type || loadedProject.template || 'react-native',
         status: loadedProject.status || 'ready'
       })
       
@@ -244,9 +252,21 @@ export function ProjectDesign() {
       const { conversation: existingConv } = await conversationService.getConversationByProjectId(projectId)
       
       if (existingConv) {
+        // Load existing conversation
         await createNewConversation(existingConv.title || loadedProject.title, existingConv.id)
+        
+        // Check if the conversation has any messages
+        const { messages } = await conversationService.getConversationMessages(existingConv.id)
+        if (messages.length === 0 && initialPrompt && !initialPromptSubmitted) {
+          // Existing conversation but no messages - this is essentially a first visit
+          setIsFirstVisit(true)
+        }
       } else {
-        await createNewConversation(loadedProject.title)
+        // No existing conversation - this is definitely a first visit
+        await createNewConversation(loadedProject.title || loadedProject.name)
+        if (initialPrompt && !initialPromptSubmitted) {
+          setIsFirstVisit(true)
+        }
       }
     } catch (error) {
       console.error('Error loading project:', error)
@@ -311,6 +331,17 @@ export function ProjectDesign() {
                     conversationTitle={currentConversation.title}
                     onNewConversation={() => createNewConversation(undefined, undefined, true)}
                     onToggleHistory={() => setShowHistory(!showHistory)}
+                    initialMessage={isFirstVisit && initialPromptRef.current ? initialPromptRef.current : undefined}
+                    projectContext={project ? {
+                      name: project.name || project.title,
+                      description: project.description,
+                      template: project.template_type || project.template,
+                      initialPrompt: initialPromptRef.current
+                    } : undefined}
+                    onInitialMessageSent={() => {
+                      setIsFirstVisit(false)
+                      setInitialPromptSubmitted(true)
+                    }}
                     onConversationCreated={(newConversationId) => {
                       // Update the current conversation with the real ID
                       if (currentConversation.isTemporary) {

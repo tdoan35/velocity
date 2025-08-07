@@ -24,17 +24,37 @@ export interface ConversationMessage {
   created_at: string
 }
 
+export interface ProjectContext {
+  id: string
+  name: string
+  description?: string
+  initialPrompt?: string
+  template?: string
+  keyDecisions?: string[]
+  techStack?: string[]
+  createdAt?: string
+  updatedAt?: string
+}
+
 export const conversationService = {
   async createConversation(
     projectId: string, 
     title?: string,
-    initialAgent: string = 'project_manager'
+    initialAgent: string = 'project_manager',
+    projectContext?: ProjectContext
   ): Promise<{ conversation: Conversation | null; error: Error | null }> {
     try {
       const { data: { user }, error: authError } = await supabase.auth.getUser()
       
       if (authError || !user) {
         return { conversation: null, error: new Error('User not authenticated') }
+      }
+
+      // Use provided context or fetch it
+      let contextToUse = projectContext
+      if (!contextToUse) {
+        const { context: fetchedContext } = await this.getProjectContext(projectId)
+        contextToUse = fetchedContext
       }
 
       const { data: conversation, error } = await supabase
@@ -45,7 +65,8 @@ export const conversationService = {
           title: title || 'New Design Conversation',
           context: {
             type: 'project_design',
-            createdFrom: 'project_design_page'
+            createdFrom: 'project_design_page',
+            projectContext: contextToUse || undefined
           },
           metadata: {
             primaryAgent: initialAgent,
@@ -140,6 +161,36 @@ export const conversationService = {
     }
   },
 
+  async updateConversationContext(conversationId: string, projectId: string): Promise<{ error: Error | null }> {
+    try {
+      // Get project context
+      const { context: projectContext } = await this.getProjectContext(projectId)
+      
+      if (!projectContext) {
+        return { error: null } // Silently continue if context can't be fetched
+      }
+
+      // Update conversation with project context
+      const { error } = await supabase
+        .from('conversations')
+        .update({
+          'context.projectContext': projectContext,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', conversationId)
+
+      if (error) {
+        console.error('Error updating conversation context:', error)
+        return { error: error as Error }
+      }
+
+      return { error: null }
+    } catch (error) {
+      console.error('Unexpected error updating conversation context:', error)
+      return { error: error as Error }
+    }
+  },
+
   async updateConversationTokens(conversationId: string, tokensToAdd: number): Promise<{ error: Error | null }> {
     try {
       // First get current token count
@@ -175,6 +226,74 @@ export const conversationService = {
     } catch (error) {
       console.error('Unexpected error updating tokens:', error)
       return { error: error as Error }
+    }
+  },
+
+  async getProjectContext(projectId: string): Promise<{ context: ProjectContext | null; error: Error | null }> {
+    try {
+      // Fetch project details
+      const { data: project, error: projectError } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', projectId)
+        .single()
+
+      if (projectError || !project) {
+        console.error('Error fetching project context:', projectError)
+        return { context: null, error: projectError as Error || new Error('Project not found') }
+      }
+
+      // Build project context
+      const context: ProjectContext = {
+        id: project.id,
+        name: project.name || project.title || 'Untitled Project',
+        description: project.description,
+        initialPrompt: project.app_config?.initialPrompt,
+        template: project.template_type || project.template || 'blank',
+        keyDecisions: project.app_config?.keyDecisions || [],
+        techStack: project.app_config?.techStack || [],
+        createdAt: project.created_at,
+        updatedAt: project.updated_at
+      }
+
+      // Cache the context for performance (optional - using sessionStorage)
+      if (typeof window !== 'undefined') {
+        const cacheKey = `project_context_${projectId}`
+        sessionStorage.setItem(cacheKey, JSON.stringify({
+          context,
+          timestamp: Date.now()
+        }))
+      }
+
+      return { context, error: null }
+    } catch (error) {
+      console.error('Unexpected error fetching project context:', error)
+      return { context: null, error: error as Error }
+    }
+  },
+
+  async getCachedProjectContext(projectId: string): Promise<ProjectContext | null> {
+    if (typeof window === 'undefined') return null
+    
+    try {
+      const cacheKey = `project_context_${projectId}`
+      const cached = sessionStorage.getItem(cacheKey)
+      
+      if (!cached) return null
+      
+      const { context, timestamp } = JSON.parse(cached)
+      const cacheAge = Date.now() - timestamp
+      
+      // Cache is valid for 5 minutes
+      if (cacheAge < 5 * 60 * 1000) {
+        return context
+      }
+      
+      // Clear expired cache
+      sessionStorage.removeItem(cacheKey)
+      return null
+    } catch {
+      return null
     }
   }
 }

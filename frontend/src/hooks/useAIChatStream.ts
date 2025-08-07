@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { AgentType, ChatContext, AIMessage } from '../types/ai';
-import { conversationService } from '../services/conversationService';
+import { conversationService, type ProjectContext } from '../services/conversationService';
 import { supabase, supabaseUrl } from '../lib/supabase';
 import { useToast } from './use-toast';
 
@@ -26,6 +26,7 @@ interface UseAIChatStreamOptions {
   conversationId?: string;
   projectId?: string;
   initialAgent?: AgentType;
+  projectContext?: ProjectContext;
   onStreamStart?: () => void;
   onStreamEnd?: (usage: any) => void;
   onConversationCreated?: (conversationId: string) => void;
@@ -36,6 +37,7 @@ export function useAIChatStream({
   conversationId: initialConversationId,
   projectId,
   initialAgent = 'project_manager',
+  projectContext,
   onStreamStart,
   onStreamEnd,
   onConversationCreated,
@@ -146,11 +148,12 @@ export function useAIChatStream({
           }
         }
       } else {
-        // Create new conversation
+        // Create new conversation with project context
         const { conversation, error } = await conversationService.createConversation(
           projectId,
           'AI Design Assistant',
-          currentAgent
+          currentAgent,
+          projectContext
         );
         
         if (error || !conversation) {
@@ -171,20 +174,22 @@ export function useAIChatStream({
     }
   };
 
-  const handleSubmit = useCallback(async (e?: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = useCallback(async (e?: React.FormEvent<HTMLFormElement> | null, overrideMessage?: string) => {
     e?.preventDefault();
     
-    if (!input.trim() || !conversationId) return;
+    const messageToSend = overrideMessage || input;
+    if (!messageToSend.trim() || !conversationId) return;
 
     // Check if we have a temporary conversation ID and need to create a real one
     let actualConversationId = conversationId;
     if (conversationId.startsWith('temp-')) {
       try {
-        // Create a real conversation
+        // Create a real conversation with project context
         const { conversation, error } = await conversationService.createConversation(
           projectId,
           'Chat Conversation',
-          currentAgent
+          currentAgent,
+          projectContext
         );
         
         if (error || !conversation) {
@@ -211,14 +216,17 @@ export function useAIChatStream({
     const userMessage: AIMessage = {
       id: Date.now().toString(),
       role: 'user',
-      content: input.trim(),
+      content: messageToSend.trim(),
       createdAt: new Date(),
       metadata: { agentType: currentAgent },
     };
 
     // Add user message to UI immediately
     setMessages(prev => [...prev, userMessage]);
-    setInput('');
+    // Only clear input if not using override message
+    if (!overrideMessage) {
+      setInput('');
+    }
     setIsLoading(true);
     setError(null);
     setSuggestedResponses([]); // Clear previous suggestions
@@ -228,6 +236,13 @@ export function useAIChatStream({
 
     try {
       onStreamStart?.();
+      
+      // Debug: Log the project context being sent
+      console.log('🔍 Project context being sent to API:', {
+        projectContext,
+        hasProjectContext: !!projectContext,
+        projectContextKeys: projectContext ? Object.keys(projectContext) : [],
+      });
 
       // Save user message to database
       await conversationService.addMessage(
@@ -251,9 +266,13 @@ export function useAIChatStream({
         body: JSON.stringify({
           conversationId: actualConversationId,
           message: userMessage.content,
-          context,
+          context: {
+            ...context,
+            projectContext: projectContext || undefined
+          },
           agentType: currentAgent,
           action: 'continue',
+          projectId: projectId || undefined,
         }),
         signal: abortControllerRef.current.signal,
       });

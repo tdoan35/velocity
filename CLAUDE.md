@@ -20,6 +20,10 @@ This project is in the **initial planning phase** with no source code files yet.
 
 ## Development Commands
 
+### Supabase Edge Functions
+- **List edge functions**: Use `npx supabase functions list` instead of the MCP tool `mcp__supabase__list_edge_functions` as it exceeds token limits
+- **Deploy edge functions**: Use `npx supabase functions deploy <function-name>` instead of the MCP tool `mcp__supabase__deploy_edge_function` as it fails with internal errors
+
 ### Taskmaster Management
 - **List tasks**: `task-master list` 
 - **Show next task**: `task-master next`

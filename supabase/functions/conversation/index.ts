@@ -110,6 +110,18 @@ Deno.serve(async (req) => {
     const body: ConversationRequest = await req.json()
     const { conversationId, message, context, action = 'continue', agentType = 'project_manager', projectId } = body
 
+    // Debug: Log the context being received
+    console.log('🔍 Edge function received context:', {
+      hasContext: !!context,
+      contextKeys: context ? Object.keys(context) : [],
+      hasProjectContext: !!context?.projectContext,
+      projectContext: context?.projectContext ? {
+        name: context.projectContext.name,
+        description: context.projectContext.description?.substring(0, 100) + '...',
+        template: context.projectContext.template
+      } : null
+    });
+
     if (!message) {
       return new Response(JSON.stringify({ error: 'Message is required' }), {
         status: 400,
@@ -486,11 +498,29 @@ async function prepareClaudeMessages(
 
 function buildSystemPrompt(action: string, context: any, agentType: string = 'project_manager', shouldGenerateTitle: boolean = false): string {
   let systemPrompt = ''
+  
+  // Extract project context if available
+  const projectContext = context?.projectContext
+  let projectContextPrompt = ''
+  
+  if (projectContext) {
+    projectContextPrompt = `
+## Project Context
+You are working on the following project:
+- **Project Name**: ${projectContext.name || 'Untitled Project'}
+- **Description**: ${projectContext.description || 'No description provided'}
+- **Initial Vision**: ${projectContext.initialPrompt || 'No initial prompt provided'}
+- **Template**: ${projectContext.template || 'react-native'}
+
+IMPORTANT: Keep all responses and suggestions aligned with this project vision. Do not suggest features or changes that would deviate from the original project idea.
+`
+  }
 
   // Agent-specific base prompts
   switch (agentType) {
     case 'project_manager':
       systemPrompt = `You are a Project Manager specializing in mobile app development planning and management. Your role is to help users plan, organize, and manage their React Native/Expo projects effectively.
+${projectContextPrompt}
 
 Key responsibilities:
 1. Project planning and feature prioritization
@@ -545,6 +575,7 @@ Generate SHORT suggested responses (5-8 words MAXIMUM) that help continue the co
 
     case 'design_assistant':
       systemPrompt = `You are a Design Assistant specializing in mobile UI/UX design for React Native applications. Your expertise covers visual design, user experience, and mobile-specific design patterns.
+${projectContextPrompt}
 
 Key responsibilities:
 1. UI/UX design patterns and best practices
@@ -563,6 +594,7 @@ Generate SHORT suggested responses (5-8 words MAX):
 
     case 'engineering_assistant':
       systemPrompt = `You are an Engineering Assistant specializing in React Native and Expo development. Your role is to generate clean, efficient, and production-ready code.
+${projectContextPrompt}
 
 Key principles:
 1. Always use TypeScript with proper type definitions
@@ -581,6 +613,7 @@ Generate SHORT suggested responses (5-8 words MAX):
 
     case 'config_helper':
       systemPrompt = `You are a Config Helper specializing in React Native/Expo app configuration and deployment. Your expertise covers build configuration, environment setup, and deployment processes.
+${projectContextPrompt}
 
 Key responsibilities:
 1. Expo and React Native CLI configuration

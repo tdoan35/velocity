@@ -32,8 +32,7 @@ import { ProjectDesign } from './pages/ProjectDesign'
 import { 
   Lightbulb,
   Layers,
-  Play,
-  Sparkles
+  Play
 } from 'lucide-react'
 import { Navbar } from './components/navigation'
 import { AuthDebug } from './components/AuthDebug'
@@ -108,6 +107,7 @@ function HomePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
   const [isHovering, setIsHovering] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { isAuthenticated } = useAuthStore()
+  const { addProject } = useAppStore()
   const navigate = useNavigate()
 
   const handleSubmit = async () => {
@@ -141,6 +141,17 @@ function HomePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
         }
         
         if (project) {
+          // Add the project to the app store
+          addProject({
+            id: project.id,
+            name: project.name || 'Untitled Project',
+            description: project.description || '',
+            createdAt: new Date(project.created_at || Date.now()),
+            updatedAt: new Date(project.updated_at || Date.now()),
+            template: project.template_type || 'react-native',
+            status: project.status || 'ready'
+          })
+          
           // Navigate to the project design page
           navigate(`/project/${project.id}`)
         }

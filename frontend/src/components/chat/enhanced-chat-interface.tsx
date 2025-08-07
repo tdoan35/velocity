@@ -20,6 +20,13 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 
+interface ProjectContext {
+  name?: string
+  description?: string
+  template?: string
+  initialPrompt?: string | null
+}
+
 interface EnhancedChatInterfaceProps {
   projectId: string
   conversationId?: string
@@ -32,6 +39,9 @@ interface EnhancedChatInterfaceProps {
   onToggleHistory?: () => void
   onConversationCreated?: (conversationId: string) => void
   onTitleGenerated?: (title: string) => void
+  initialMessage?: string
+  projectContext?: ProjectContext
+  onInitialMessageSent?: () => void
 }
 
 const agentConfig: Record<AgentType, { label: string; icon: any; color: string }> = {
@@ -53,6 +63,9 @@ export function EnhancedChatInterface({
   onToggleHistory,
   onConversationCreated,
   onTitleGenerated,
+  initialMessage,
+  projectContext,
+  onInitialMessageSent,
 }: EnhancedChatInterfaceProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -60,6 +73,7 @@ export function EnhancedChatInterface({
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
+  const [hasSubmittedInitial, setHasSubmittedInitial] = useState(false)
 
   const {
     messages,
@@ -80,6 +94,7 @@ export function EnhancedChatInterface({
     conversationId: initialConversationId,
     projectId,
     initialAgent: activeAgent || 'project_manager',
+    projectContext,
     onStreamStart: () => {
       // Force auto-scroll when streaming starts
       setShouldAutoScroll(true)
@@ -124,6 +139,21 @@ export function EnhancedChatInterface({
   useEffect(() => {
     setTimeout(() => scrollToBottom(true), 100)
   }, [conversationId])
+
+  // Auto-submit initial message if provided and not already submitted
+  useEffect(() => {
+    if (initialMessage && !hasSubmittedInitial && !isLoading && !isInitializing && conversationId) {
+      // Delay slightly to ensure everything is ready
+      const timer = setTimeout(() => {
+        console.log('Auto-submitting initial message:', initialMessage)
+        handleSubmit(null, initialMessage)
+        setHasSubmittedInitial(true)
+        onInitialMessageSent?.()
+      }, 1000)
+      
+      return () => clearTimeout(timer)
+    }
+  }, [initialMessage, hasSubmittedInitial, isLoading, isInitializing, conversationId, handleSubmit, onInitialMessageSent])
 
   // Ensure scroll to bottom on component mount (page reload)
   useEffect(() => {

@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase'
 import type { Project } from '../types/store'
+import { generateProjectTitle, sanitizeTitle } from './titleGenerationService'
 
 export interface CreateProjectData {
   name: string
@@ -23,11 +24,27 @@ export const projectService = {
         return { project: null, error: new Error('User not authenticated') }
       }
 
+      // Generate a concise title from the initial prompt
+      let projectTitle = data.name
+      try {
+        const titleResult = await generateProjectTitle(data.initialPrompt)
+        projectTitle = sanitizeTitle(titleResult.title)
+        console.log('Generated project title:', {
+          original: data.initialPrompt,
+          generated: projectTitle,
+          method: titleResult.method,
+          confidence: titleResult.confidence
+        })
+      } catch (titleError) {
+        console.warn('Failed to generate title, using original name:', titleError)
+        // Continue with original name as fallback
+      }
+
       // First, insert without select to avoid RLS recursion
       const { error: insertError } = await supabase
         .from('projects')
         .insert({
-          name: data.name,
+          name: projectTitle,
           description: data.description || '',
           owner_id: user.id,
           team_id: null, // Explicitly set to null to avoid RLS issues
