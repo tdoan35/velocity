@@ -5,6 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { EnhancedTextarea } from '@/components/ui/enhanced-textarea'
 import { MarkdownMessage } from './markdown-message'
 import { TypingIndicator } from './typing-indicator'
+import { SuggestedResponses, type SuggestedResponse } from './suggested-responses'
 import { useAIChatStream } from '@/hooks/useAIChatStream'
 import type { AgentType } from '@/types/ai'
 import { cn } from '@/lib/utils'
@@ -52,6 +53,7 @@ export function EnhancedChatInterface({
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const [showHistory, setShowHistory] = useState(false)
+  const [suggestedResponses, setSuggestedResponses] = useState<SuggestedResponse[]>([])
   const { toast } = useToast()
 
   const {
@@ -95,6 +97,53 @@ export function EnhancedChatInterface({
   useEffect(() => {
     scrollToBottom()
   }, [messages, isLoading])
+
+  // Extract suggested responses from the latest assistant message
+  useEffect(() => {
+    if (messages.length > 0 && !isLoading) {
+      const lastMessage = messages[messages.length - 1]
+      
+      // Only process assistant messages from project manager
+      if (lastMessage.role === 'assistant' && 
+          (lastMessage.metadata?.agentType === 'project_manager' || currentAgent === 'project')) {
+        
+        // Extract suggested responses from message content
+        const suggestionsMatch = lastMessage.content.match(/\*\*Suggested responses:\*\*\s*([\s\S]*?)(?:\n\n|$)/)
+        
+        if (suggestionsMatch) {
+          const suggestionsText = suggestionsMatch[1]
+          const suggestionLines = suggestionsText.split('\n').filter(line => line.trim())
+          
+          const extractedSuggestions: SuggestedResponse[] = suggestionLines
+            .map(line => {
+              // Remove list markers (1., 2., 3., -, *, etc.)
+              const cleanedLine = line.replace(/^[\d]+\.\s*|\-\s*|\*\s*/, '').trim()
+              
+              // Determine category based on content
+              let category: 'continuation' | 'clarification' | 'example' = 'continuation'
+              if (cleanedLine.toLowerCase().includes('example') || cleanedLine.includes('...')) {
+                category = 'example'
+              } else if (cleanedLine.includes('?') || cleanedLine.toLowerCase().includes('what') || 
+                        cleanedLine.toLowerCase().includes('how')) {
+                category = 'clarification'
+              }
+              
+              return {
+                text: cleanedLine,
+                category,
+                section: 'prd' // Can be enhanced to detect current section
+              }
+            })
+            .filter(s => s.text.length > 0)
+            .slice(0, 3) // Limit to 3 suggestions
+          
+          setSuggestedResponses(extractedSuggestions)
+        } else {
+          setSuggestedResponses([])
+        }
+      }
+    }
+  }, [messages, isLoading, currentAgent])
 
   // Focus input on mount
   useEffect(() => {
@@ -156,6 +205,20 @@ export function EnhancedChatInterface({
       title: 'Agent Switched',
       description: `Now talking to ${agentConfig[agent].label}`,
     })
+  }
+
+  const handleSelectSuggestion = (suggestion: SuggestedResponse) => {
+    // Set the input value to the suggestion text
+    handleInputChange({ target: { value: suggestion.text } } as any)
+    
+    // Clear suggestions after selection
+    setSuggestedResponses([])
+    
+    // Focus the input for any additional edits
+    inputRef.current?.focus()
+    
+    // Optionally auto-submit (uncomment if desired)
+    // setTimeout(() => handleSubmit(), 100)
   }
 
   const renderMessage = (message: any) => {
@@ -344,6 +407,18 @@ export function EnhancedChatInterface({
           )}
         </div>
       </ScrollArea>
+      
+      {/* Suggested Responses */}
+      {suggestedResponses.length > 0 && !isLoading && (
+        <div className="px-4 pb-2 flex-shrink-0">
+          <SuggestedResponses
+            suggestions={suggestedResponses}
+            onSelectSuggestion={handleSelectSuggestion}
+            disabled={isLoading}
+            isLoading={isLoading}
+          />
+        </div>
+      )}
       
       {/* Input */}
       <div className="border-t p-4 flex-shrink-0">

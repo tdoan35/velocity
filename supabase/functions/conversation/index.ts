@@ -12,9 +12,12 @@ interface ConversationRequest {
     currentCode?: string
     fileContext?: string
     projectState?: any
+    prdId?: string
+    prdSection?: string
   }
   action?: 'continue' | 'refine' | 'explain' | 'debug'
   agentType?: 'project_manager' | 'design_assistant' | 'engineering_assistant' | 'config_helper'
+  projectId?: string
 }
 
 interface ConversationMessage {
@@ -70,7 +73,7 @@ Deno.serve(async (req) => {
 
     // Parse request body
     const body: ConversationRequest = await req.json()
-    const { conversationId, message, context, action = 'continue', agentType = 'project_manager' } = body
+    const { conversationId, message, context, action = 'continue', agentType = 'project_manager', projectId } = body
 
     if (!message) {
       return new Response(JSON.stringify({ error: 'Message is required' }), {
@@ -107,6 +110,43 @@ Deno.serve(async (req) => {
     // Update conversation context
     if (context) {
       conversation.context = { ...conversation.context, ...context }
+    }
+
+    // Check for PRD-related intent and handle PRD context
+    let prdContext = null
+    if (agentType === 'project_manager' && projectId) {
+      // Check if this is a PRD-related conversation
+      const isPRDRelated = detectPRDIntent(message) || context?.prdId
+      
+      if (isPRDRelated) {
+        // Get or create PRD for this project
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+        const prdResponse = await fetch(`${supabaseUrl}/functions/v1/prd-management`, {
+          method: 'POST',
+          headers: {
+            'Authorization': req.headers.get('Authorization')!,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            action: context?.prdId ? 'get' : 'create',
+            projectId,
+            conversationId: conversation.id,
+            prdId: context?.prdId
+          })
+        })
+        
+        if (prdResponse.ok) {
+          const prdData = await prdResponse.json()
+          prdContext = prdData.prd || { prdId: prdData.prdId }
+          
+          // Update conversation context with PRD info
+          conversation.context = {
+            ...conversation.context,
+            prdId: prdContext.prdId || prdContext.id,
+            prdSection: prdContext.conversationState?.current_section || 'initialization'
+          }
+        }
+      }
     }
 
     // Prepare messages for Claude API
@@ -406,12 +446,56 @@ function buildSystemPrompt(action: string, context: any, agentType: string = 'pr
 
 Key responsibilities:
 1. Project planning and feature prioritization
-2. Task breakdown and milestone planning  
-3. Technical architecture decisions
-4. Development workflow optimization
-5. Team collaboration strategies
-6. Project timeline estimation
-7. Risk assessment and mitigation`
+2. **Product Requirements Document (PRD) Creation** - Guide users through comprehensive PRD development
+
+## PRD Creation Guidelines
+
+When helping users create a PRD, follow this conversational approach:
+
+### PRD Structure
+Your goal is to help users create a PRD with these sections:
+1. **Product Overview** - Vision, problem statement, target users
+2. **Core Features** (minimum 3) - Essential functionality 
+3. **Additional Features** - Nice-to-have enhancements
+
+### Conversational Approach
+- Start by asking about their app idea in a friendly, approachable way
+- Use follow-up questions to extract details naturally
+- Provide examples when users seem unsure
+- Suggest common patterns relevant to their app type
+- Validate and expand on user inputs constructively
+
+### Suggested Response Generation
+After each of your messages during PRD creation, provide 3 suggested responses that the user can click to continue the conversation. Format these as:
+
+**Suggested responses:**
+1. [First contextual suggestion]
+2. [Second contextual suggestion]  
+3. [Third contextual suggestion]
+
+Make suggestions specific to the current PRD section and previous context. Examples:
+- For overview: "It's a social app for...", "I want to solve the problem of...", "My target users are..."
+- For features: "Add user authentication", "Include real-time chat", "Implement offline mode"
+- For technical: "Needs to work on iOS and Android", "Should handle 10k+ users", "Must integrate with..."
+
+### PRD Creation Flow
+1. **Initialization**: Detect when user wants to create a PRD or starts describing their app
+2. **Overview Section**: Guide through vision, problem, and target users
+3. **Core Features**: Ensure at least 3 essential features are defined
+4. **Additional Features**: Capture nice-to-have enhancements
+5. **Review & Finalization**: Summarize and confirm the complete PRD
+
+### Quality Checks
+- Ensure product overview clearly states the problem being solved
+- Verify each core feature has clear description and value proposition  
+- Confirm technical requirements are realistic and well-defined
+- Validate that success metrics are measurable
+
+### Context Awareness
+- Remember all previous inputs throughout the PRD creation
+- Reference earlier answers when asking follow-up questions
+- Maintain consistency across all PRD sections
+- Adapt your language to match the user's technical level`
       break
 
     case 'design_assistant':
@@ -482,6 +566,20 @@ Key responsibilities:
     systemPrompt += '\n\nProject state information is available. Ensure your suggestions align with the existing project structure.'
   }
 
+  // Add PRD context if available
+  if (context?.prdId && agentType === 'project_manager') {
+    systemPrompt += `\n\n## Active PRD Context
+You are currently helping the user create a Product Requirements Document (PRD).
+- PRD ID: ${context.prdId}
+- Current Section: ${context.prdSection || 'initialization'}
+
+Remember to:
+1. Guide the conversation based on the current PRD section
+2. Provide 3 suggested responses after each message
+3. Validate inputs before moving to the next section
+4. Keep track of all information provided across the conversation`
+  }
+
   // Add general guidelines
   systemPrompt += '\n\nAlways be helpful, accurate, and provide practical solutions. When generating code, ensure it is complete and ready to use.'
 
@@ -495,4 +593,16 @@ async function summarizeMessages(messages: ConversationMessage[]): Promise<strin
     .join('\n')
   
   return `Summary of ${messages.length} messages:\n${summary}`
+}
+
+function detectPRDIntent(message: string): boolean {
+  const prdKeywords = [
+    'prd', 'product requirements', 'app idea', 'build an app', 'create an app',
+    'mobile app', 'application', 'want to build', 'need to create', 'project planning',
+    'feature list', 'requirements document', 'product spec', 'app specification',
+    'describe my app', 'plan my app', 'design my app'
+  ]
+  
+  const lowerMessage = message.toLowerCase()
+  return prdKeywords.some(keyword => lowerMessage.includes(keyword))
 }
