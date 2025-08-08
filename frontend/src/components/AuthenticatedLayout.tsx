@@ -52,6 +52,7 @@ export function AuthenticatedLayout() {
   const [selectedProject, setSelectedProject] = useState<any>(null);
   const [newProjectName, setNewProjectName] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
   
   // Check if we're on a project page
   const isProjectPage = location.pathname.startsWith('/project/');
@@ -309,11 +310,13 @@ export function AuthenticatedLayout() {
                         <div
                           key={project.id}
                           className={cn(
-                            "transition-colors py-1 px-3 rounded-xl relative group flex items-center",
+                            "transition-colors py-1 px-3 rounded-xl relative flex items-center",
                             isProjectPage && currentProject?.id === project.id 
                               ? "bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-white"
                               : "text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-50 dark:hover:bg-neutral-900"
                           )}
+                          onMouseEnter={() => setHoveredProjectId(project.id)}
+                          onMouseLeave={() => setHoveredProjectId(null)}
                         >
                           <Link
                             to={`/project/${project.id}`}
@@ -343,9 +346,11 @@ export function AuthenticatedLayout() {
                           {/* Menu button - only visible on hover and when sidebar is open */}
                           <motion.div
                             initial={{ opacity: 0 }}
-                            animate={{ opacity: open ? 1 : 0 }}
+                            animate={{ 
+                              opacity: open && hoveredProjectId === project.id ? 1 : 0 
+                            }}
                             transition={{ duration: 0.2 }}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                            className="flex-shrink-0"
                           >
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
