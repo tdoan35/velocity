@@ -55,6 +55,7 @@ export function AuthenticatedLayout() {
   const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [tempPinned, setTempPinned] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
   
   // Check if we're on a project page
   const isProjectPage = location.pathname.startsWith('/project/');
@@ -80,6 +81,11 @@ export function AuthenticatedLayout() {
     } else {
       // Remove temporary pinning when dropdown closes
       setTempPinned(false);
+      
+      // State reconciliation: if sidebar should be closed (not hovered, not permanently pinned), close it
+      if (!isHovered && !pinned) {
+        setOpen(false);
+      }
     }
   };
 
@@ -234,19 +240,23 @@ export function AuthenticatedLayout() {
       {/* Main content area with padding for fixed header */}
       <div className="flex h-screen pt-14">
         {/* Sidebar */}
-        <Sidebar 
-          open={open} 
-          setOpen={(newOpen) => {
-            // Prevent closing when dropdown is open
-            if (!newOpen && dropdownOpen) {
-              return;
-            }
-            setOpen(newOpen);
-          }} 
-          pinned={pinned || tempPinned} 
-          setPinned={setPinned} 
-          animate={true}
+        <div
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
         >
+          <Sidebar 
+            open={open} 
+            setOpen={(newOpen) => {
+              // Prevent closing when dropdown is open
+              if (!newOpen && dropdownOpen) {
+                return;
+              }
+              setOpen(newOpen);
+            }} 
+            pinned={pinned || tempPinned} 
+            setPinned={setPinned} 
+            animate={true}
+          >
           <SidebarBody className="justify-between gap-10 overflow-hidden">
           <div className="flex flex-1 flex-col overflow-hidden">
             {/* Fixed top section - no scrolling */}
@@ -518,6 +528,7 @@ export function AuthenticatedLayout() {
           </div>
         </SidebarBody>
       </Sidebar>
+      </div>
       
       {/* Spacer for sidebar */}
       <div className={cn(
