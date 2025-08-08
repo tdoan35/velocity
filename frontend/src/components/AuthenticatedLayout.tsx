@@ -53,6 +53,8 @@ export function AuthenticatedLayout() {
   const [newProjectName, setNewProjectName] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [tempPinned, setTempPinned] = useState(false);
   
   // Check if we're on a project page
   const isProjectPage = location.pathname.startsWith('/project/');
@@ -62,12 +64,24 @@ export function AuthenticatedLayout() {
     navigate("/");
   };
 
-  // Keep sidebar open when pinned
+  // Keep sidebar open when pinned or temporarily pinned
   useEffect(() => {
-    if (pinned) {
+    if (pinned || tempPinned) {
       setOpen(true);
     }
-  }, [pinned]);
+  }, [pinned, tempPinned]);
+
+  // Handle dropdown state changes
+  const handleDropdownOpenChange = (open: boolean) => {
+    setDropdownOpen(open);
+    if (open) {
+      // Temporarily pin the sidebar when dropdown opens
+      setTempPinned(true);
+    } else {
+      // Remove temporary pinning when dropdown closes
+      setTempPinned(false);
+    }
+  };
 
   // Set mounted state
   useEffect(() => {
@@ -220,7 +234,19 @@ export function AuthenticatedLayout() {
       {/* Main content area with padding for fixed header */}
       <div className="flex h-screen pt-14">
         {/* Sidebar */}
-        <Sidebar open={open} setOpen={setOpen} pinned={pinned} setPinned={setPinned} animate={true}>
+        <Sidebar 
+          open={open} 
+          setOpen={(newOpen) => {
+            // Prevent closing when dropdown is open
+            if (!newOpen && dropdownOpen) {
+              return;
+            }
+            setOpen(newOpen);
+          }} 
+          pinned={pinned || tempPinned} 
+          setPinned={setPinned} 
+          animate={true}
+        >
           <SidebarBody className="justify-between gap-10 overflow-hidden">
           <div className="flex flex-1 flex-col overflow-hidden">
             {/* Fixed top section - no scrolling */}
@@ -352,7 +378,7 @@ export function AuthenticatedLayout() {
                             transition={{ duration: 0.2 }}
                             className="flex-shrink-0"
                           >
-                            <DropdownMenu>
+                            <DropdownMenu onOpenChange={handleDropdownOpenChange}>
                               <DropdownMenuTrigger asChild>
                                 <Button
                                   variant="ghost"
