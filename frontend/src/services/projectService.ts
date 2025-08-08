@@ -151,5 +151,24 @@ export const projectService = {
       console.error('Unexpected error fetching projects:', error)
       return { projects: null, error: error as Error }
     }
+  },
+
+  async deleteProject(projectId: string): Promise<{ success: boolean; error: Error | null }> {
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .delete()
+        .eq('id', projectId)
+
+      if (error) {
+        console.error('Error deleting project:', error)
+        return { success: false, error: error as Error }
+      }
+
+      return { success: true, error: null }
+    } catch (error) {
+      console.error('Unexpected error deleting project:', error)
+      return { success: false, error: error as Error }
+    }
   }
 }

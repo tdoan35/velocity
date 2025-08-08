@@ -16,18 +16,42 @@ import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useAppStore } from "@/stores/useAppStore";
-import { ChevronRight, FolderOpen } from "lucide-react";
+import { ChevronRight, FolderOpen, MoreHorizontal, Edit, Trash2 } from "lucide-react";
 import { Navbar } from "./navigation";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 
 export function AuthenticatedLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuthStore();
-  const { currentProject, projects, setProjects } = useAppStore();
+  const { currentProject, projects, setProjects, updateProject, deleteProject } = useAppStore();
   const [pinned, setPinned] = useState(false);
   const [open, setOpen] = useState(pinned);
   const [mounted, setMounted] = useState(false);
   const [projectsExpanded, setProjectsExpanded] = useState(false);
+  
+  // Project menu state
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedProject, setSelectedProject] = useState<any>(null);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
   
   // Check if we're on a project page
   const isProjectPage = location.pathname.startsWith('/project/');
@@ -72,6 +96,76 @@ export function AuthenticatedLayout() {
       fetchProjects();
     }
   }, [user, setProjects]);
+
+  // Project menu handlers
+  const handleRenameProject = (project: any) => {
+    setSelectedProject(project);
+    setNewProjectName(project.name);
+    setRenameDialogOpen(true);
+  };
+
+  const handleDeleteProject = (project: any) => {
+    setSelectedProject(project);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmRename = async () => {
+    if (!selectedProject || !newProjectName.trim() || isUpdating) return;
+    
+    setIsUpdating(true);
+    try {
+      // Update in backend
+      const { error } = await projectService.updateProject(selectedProject.id, {
+        name: newProjectName.trim()
+      });
+      
+      if (error) {
+        console.error('Error renaming project:', error);
+        return;
+      }
+      
+      // Update in store
+      updateProject(selectedProject.id, { name: newProjectName.trim() });
+      
+      setRenameDialogOpen(false);
+      setSelectedProject(null);
+      setNewProjectName('');
+    } catch (error) {
+      console.error('Unexpected error renaming project:', error);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!selectedProject || isUpdating) return;
+    
+    setIsUpdating(true);
+    try {
+      // Delete from backend
+      const { error } = await projectService.deleteProject(selectedProject.id);
+      
+      if (error) {
+        console.error('Error deleting project:', error);
+        return;
+      }
+      
+      // Remove from store
+      deleteProject(selectedProject.id);
+      
+      // If we're currently viewing this project, navigate away
+      if (currentProject?.id === selectedProject.id) {
+        navigate('/dashboard');
+      }
+      
+      setDeleteDialogOpen(false);
+      setSelectedProject(null);
+    } catch (error) {
+      console.error('Unexpected error deleting project:', error);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
 
   const animate = mounted;
 
@@ -212,36 +306,83 @@ export function AuthenticatedLayout() {
                   <div className="overflow-y-auto flex flex-col gap-1 min-h-0">
                     {projects.length > 0 ? (
                       projects.map((project) => (
-                        <Link
+                        <div
                           key={project.id}
-                          to={`/project/${project.id}`}
                           className={cn(
-                            "transition-colors py-1 px-3 rounded-xl block relative",
+                            "transition-colors py-1 px-3 rounded-xl relative group flex items-center",
                             isProjectPage && currentProject?.id === project.id 
                               ? "bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-white"
                               : "text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-50 dark:hover:bg-neutral-900"
                           )}
                         >
-                          <motion.span
-                            initial={{
-                              opacity: open ? 1 : 0,
-                              width: open ? "auto" : 0,
-                            }}
-                            animate={{
-                              opacity: open ? 1 : 0,
-                              width: open ? "auto" : 0,
-                            }}
-                            transition={{
-                              duration: 0.2,
-                              ease: "easeInOut",
-                            }}
-                            className="text-sm whitespace-nowrap overflow-hidden text-ellipsis block"
-                            style={{ originX: 0 }}
-                            title={project.name}
+                          <Link
+                            to={`/project/${project.id}`}
+                            className="flex-1 min-w-0 mr-2"
                           >
-                            {project.name}
-                          </motion.span>
-                        </Link>
+                            <motion.span
+                              initial={{
+                                opacity: open ? 1 : 0,
+                                width: open ? "auto" : 0,
+                              }}
+                              animate={{
+                                opacity: open ? 1 : 0,
+                                width: open ? "auto" : 0,
+                              }}
+                              transition={{
+                                duration: 0.2,
+                                ease: "easeInOut",
+                              }}
+                              className="text-sm whitespace-nowrap overflow-hidden text-ellipsis block"
+                              style={{ originX: 0 }}
+                              title={project.name}
+                            >
+                              {project.name}
+                            </motion.span>
+                          </Link>
+                          
+                          {/* Menu button - only visible on hover and when sidebar is open */}
+                          <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: open ? 1 : 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                          >
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 hover:bg-neutral-200 dark:hover:bg-neutral-700"
+                                  onClick={(e) => e.preventDefault()}
+                                >
+                                  <MoreHorizontal className="h-3 w-3" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-40">
+                                <DropdownMenuItem
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    handleRenameProject(project);
+                                  }}
+                                  className="cursor-pointer"
+                                >
+                                  <Edit className="mr-2 h-3 w-3" />
+                                  Rename
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    handleDeleteProject(project);
+                                  }}
+                                  className="cursor-pointer text-red-600 focus:text-red-600 dark:text-red-400 dark:focus:text-red-400"
+                                >
+                                  <Trash2 className="mr-2 h-3 w-3" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </motion.div>
+                        </div>
                       ))
                     ) : (
                       <motion.span
@@ -360,6 +501,84 @@ export function AuthenticatedLayout() {
         </div>
       </div>
       </div>
+      
+      {/* Rename Project Dialog */}
+      <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Rename Project</DialogTitle>
+            <DialogDescription>
+              Enter a new name for your project "{selectedProject?.name}".
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="projectName" className="text-right">
+                Name
+              </Label>
+              <Input
+                id="projectName"
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                className="col-span-3"
+                placeholder="Enter project name..."
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !isUpdating) {
+                    confirmRename();
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setRenameDialogOpen(false)}
+              disabled={isUpdating}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={confirmRename}
+              disabled={!newProjectName.trim() || isUpdating}
+            >
+              {isUpdating ? "Renaming..." : "Rename"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Delete Project Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Delete Project</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{selectedProject?.name}"? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={isUpdating}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={isUpdating}
+            >
+              {isUpdating ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
