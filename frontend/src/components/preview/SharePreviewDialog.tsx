@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { previewSharingService } from '../../services/previewSharingService'
 import type { CreateShareOptions } from '../../services/previewSharingService'
 import {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Outlet, useNavigate, useLocation, Link } from "react-router-dom";
 import { Sidebar, SidebarBody, SidebarLink } from "./ui/sidebar";
 import { projectService } from "@/services/projectService";
@@ -151,6 +151,16 @@ export function AuthenticatedLayout() {
       setRenameDialogOpen(false);
       setSelectedProject(null);
       setNewProjectName('');
+      
+      // Reset sidebar state after rename
+      setDropdownOpen(false);
+      setTempPinned(false);
+      setHoveredProjectId(null);
+      
+      // If sidebar should be closed (not permanently pinned), close it
+      if (!pinned) {
+        setOpen(false);
+      }
     } catch (error) {
       console.error('Unexpected error renaming project:', error);
     } finally {
@@ -181,6 +191,16 @@ export function AuthenticatedLayout() {
       
       setDeleteDialogOpen(false);
       setSelectedProject(null);
+      
+      // Reset sidebar state after deletion
+      setDropdownOpen(false);
+      setTempPinned(false);
+      setHoveredProjectId(null);
+      
+      // If sidebar should be closed (not permanently pinned), close it
+      if (!pinned) {
+        setOpen(false);
+      }
     } catch (error) {
       console.error('Unexpected error deleting project:', error);
     } finally {
@@ -545,7 +565,18 @@ export function AuthenticatedLayout() {
       </div>
       
       {/* Rename Project Dialog */}
-      <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+      <Dialog open={renameDialogOpen} onOpenChange={(open) => {
+        setRenameDialogOpen(open);
+        if (!open) {
+          // Reset sidebar state when dialog closes
+          setDropdownOpen(false);
+          setTempPinned(false);
+          setHoveredProjectId(null);
+          if (!pinned) {
+            setOpen(false);
+          }
+        }
+      }}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Rename Project</DialogTitle>
@@ -593,7 +624,18 @@ export function AuthenticatedLayout() {
       </Dialog>
       
       {/* Delete Project Dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+      <Dialog open={deleteDialogOpen} onOpenChange={(open) => {
+        setDeleteDialogOpen(open);
+        if (!open) {
+          // Reset sidebar state when dialog closes
+          setDropdownOpen(false);
+          setTempPinned(false);
+          setHoveredProjectId(null);
+          if (!pinned) {
+            setOpen(false);
+          }
+        }
+      }}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Delete Project</DialogTitle>

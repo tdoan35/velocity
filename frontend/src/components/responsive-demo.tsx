@@ -150,7 +150,7 @@ export function ResponsiveDemo() {
 // The actual editor would be rendered here
 // with responsive dimensions
 
-import React from 'react'
+
 
 export function App() {
   return (

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -15,8 +15,6 @@ import {
 import {
   LineChart,
   Line,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -29,7 +27,6 @@ import {
   Zap,
   TrendingUp,
   AlertCircle,
-  Settings,
   RefreshCw,
   Flame,
   Clock,
@@ -85,7 +82,7 @@ export function PerformanceMonitor({ projectId, className, compact = false }: Pe
       session_allocation: { good: 1000, warning: 3000 }
     }
 
-    const threshold = thresholds[type] || { good: 1000, warning: 3000 }
+    const threshold = thresholds[type as keyof typeof thresholds] || { good: 1000, warning: 3000 }
     
     if (value <= threshold.good) return 'text-green-500'
     if (value <= threshold.warning) return 'text-yellow-500'
@@ -99,7 +96,7 @@ export function PerformanceMonitor({ projectId, className, compact = false }: Pe
       fair: <Wifi className="w-4 h-4 text-yellow-500" />,
       poor: <Wifi className="w-4 h-4 text-red-500" />
     }
-    return icons[networkQuality] || icons.good
+    return icons[networkQuality as keyof typeof icons] || icons.good
   }
 
   if (compact) {

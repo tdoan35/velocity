@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { MobilePreview } from '@/components/preview/MobilePreview';
 import { SnackIntegrationDemo } from '@/components/preview/SnackIntegrationDemo';
 import { Button } from '@/components/ui/button';

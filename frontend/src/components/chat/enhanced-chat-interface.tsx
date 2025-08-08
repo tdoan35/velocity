@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { MessageSquarePlus, History, FileCode, Bot, Settings, Send, Users, Sparkles, Code2, Plus, ArrowDown } from 'lucide-react'
+import { MessageSquarePlus, History, Bot, Settings, Send, Users, Sparkles, Code2, Plus, ArrowDown, Edit, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { EnhancedTextarea } from '@/components/ui/enhanced-textarea'
@@ -9,23 +9,16 @@ import { SuggestedResponses } from './suggested-responses'
 import { useAIChatStream, type SuggestedResponse } from '@/hooks/useAIChatStream'
 import type { AgentType } from '@/types/ai'
 import { cn } from '@/lib/utils'
+import type { ProjectContext } from '@/services/conversationService'
+import { conversationService } from '@/services/conversationService'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Badge } from '@/components/ui/badge'
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
-
-interface ProjectContext {
-  name?: string
-  description?: string
-  template?: string
-  initialPrompt?: string | null
-}
 
 interface EnhancedChatInterfaceProps {
   projectId: string
@@ -37,8 +30,10 @@ interface EnhancedChatInterfaceProps {
   conversationTitle?: string
   onNewConversation?: () => void
   onToggleHistory?: () => void
+  isHistoryOpen?: boolean
   onConversationCreated?: (conversationId: string) => void
   onTitleGenerated?: (title: string) => void
+  onConversationTitleUpdated?: (title: string) => void
   initialMessage?: string
   projectContext?: ProjectContext
   onInitialMessageSent?: () => void
@@ -61,19 +56,24 @@ export function EnhancedChatInterface({
   conversationTitle,
   onNewConversation,
   onToggleHistory,
+  isHistoryOpen = false,
   onConversationCreated,
   onTitleGenerated,
+  onConversationTitleUpdated,
   initialMessage,
   projectContext,
   onInitialMessageSent,
 }: EnhancedChatInterfaceProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
-  const [showHistory, setShowHistory] = useState(false)
+  const titleInputRef = useRef<HTMLInputElement>(null)
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
   const [hasSubmittedInitial, setHasSubmittedInitial] = useState(false)
+  const [isEditingTitle, setIsEditingTitle] = useState(false)
+  const [titleInput, setTitleInput] = useState("")
+  const [isSavingTitle, setIsSavingTitle] = useState(false)
 
   const {
     messages,
@@ -89,7 +89,6 @@ export function EnhancedChatInterface({
     reload,
     stop,
     switchAgent,
-    updateContext,
   } = useAIChatStream({
     conversationId: initialConversationId,
     projectId,
@@ -233,22 +232,11 @@ export function EnhancedChatInterface({
         e.preventDefault()
         inputRef.current?.focus()
       }
-      
-      // Ctrl/Cmd + H to toggle history
-      if ((e.ctrlKey || e.metaKey) && e.key === 'h') {
-        e.preventDefault()
-        setShowHistory(prev => !prev)
-      }
-      
-      // Escape to close history
-      if (e.key === 'Escape' && showHistory) {
-        setShowHistory(false)
-      }
     }
     
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [showHistory])
+  }, [])
 
   // Handle errors
   useEffect(() => {
@@ -261,13 +249,6 @@ export function EnhancedChatInterface({
     }
   }, [error, toast])
 
-  const handleAgentSwitch = (agent: AgentType) => {
-    switchAgent(agent)
-    toast({
-      title: 'Agent Switched',
-      description: `Now talking to ${agentConfig[agent].label}`,
-    })
-  }
 
   const handleSelectSuggestion = (suggestion: SuggestedResponse) => {
     // Set the input value to the suggestion text
@@ -283,6 +264,58 @@ export function EnhancedChatInterface({
     
     // Optionally auto-submit (uncomment if desired)
     // setTimeout(() => handleSubmit(), 100)
+  }
+
+  // Handle conversation title editing
+  const handleTitleEdit = () => {
+    if (conversationTitle) {
+      setTitleInput(conversationTitle)
+      setIsEditingTitle(true)
+      // Focus input and set cursor at end after popover opens
+      setTimeout(() => {
+        if (titleInputRef.current) {
+          titleInputRef.current.focus()
+          const length = titleInputRef.current.value.length
+          titleInputRef.current.setSelectionRange(length, length)
+        }
+      }, 100)
+    }
+  }
+
+  const handleTitleSave = async () => {
+    if (!conversationId || !titleInput.trim() || titleInput === conversationTitle || conversationId.startsWith('temp-')) {
+      setIsEditingTitle(false)
+      return
+    }
+
+    setIsSavingTitle(true)
+    try {
+      const { conversation, error } = await conversationService.updateConversationTitle(conversationId, titleInput.trim())
+      
+      if (!error && conversation) {
+        onConversationTitleUpdated?.(titleInput.trim())
+        toast({
+          title: 'Success',
+          description: 'Conversation title updated',
+        })
+      } else {
+        toast({
+          title: 'Error',
+          description: 'Failed to update conversation title',
+          variant: 'destructive',
+        })
+      }
+    } catch (error) {
+      console.error('Error updating conversation title:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to update conversation title',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsSavingTitle(false)
+      setIsEditingTitle(false)
+    }
   }
 
   const renderMessage = (message: any, index: number) => {
@@ -387,15 +420,64 @@ export function EnhancedChatInterface({
   return (
     <div className={cn('flex flex-col h-full overflow-hidden', className)}>
       {/* Header */}
-      <div className="p-4 pl-5 border-b bg-transparent flex-shrink-0">
+      <div className="p-4 pl-5 border-b border-gray-300  dark:border-gray-700 bg-transparent flex-shrink-0">
         <div className="flex items-center justify-between w-full">
           <div className="flex items-center gap-2">
             <div className={`w-8 h-8 rounded-full ${agentInfo.bgColor} flex items-center justify-center flex-shrink-0`}>
               <AgentIcon className={`w-4 h-4 ${agentInfo.textColor}`} />
             </div>
-            <h2 className="text-lg font-semibold">
-              {conversationTitle || 'Chat Conversation'}
-            </h2>
+            {/* Make conversation title clickable with popover */}
+            {conversationId && !conversationId.startsWith('temp-') ? (
+              <Popover open={isEditingTitle} onOpenChange={setIsEditingTitle}>
+                <PopoverTrigger asChild>
+                  <button 
+                    onClick={handleTitleEdit}
+                    className="group text-left cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md px-2 py-0.5 transition-colors flex items-center gap-1.5"
+                  >
+                    <h2 className="text-lg font-semibold">
+                      {conversationTitle || 'Chat Conversation'}
+                    </h2>
+                    <Edit className="w-3.5 h-3.5 opacity-0 group-hover:opacity-60 transition-opacity" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 px-3 pt-1">
+                  <div className="space-y-1">
+                    <Label htmlFor="conversation-title" className="text-xs text-muted-foreground">Conversation title</Label>
+                    <div className="flex gap-1.5 items-center">
+                      <Input
+                        id="conversation-title"
+                        ref={titleInputRef}
+                        value={titleInput}
+                        onChange={(e) => setTitleInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleTitleSave()
+                          } else if (e.key === 'Escape') {
+                            setIsEditingTitle(false)
+                          }
+                        }}
+                        placeholder="Enter conversation title"
+                        className="flex-1 bg-background h-8 text-sm"
+                        disabled={isSavingTitle}
+                      />
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={handleTitleSave}
+                        disabled={isSavingTitle || !titleInput.trim() || titleInput === conversationTitle}
+                        className="h-8 w-8"
+                      >
+                        <Check className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            ) : (
+              <h2 className="text-lg font-semibold">
+                {conversationTitle || 'Chat Conversation'}
+              </h2>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <div className={`px-2 py-1 rounded-md ${agentInfo.bgColor} flex items-center gap-1`}>
@@ -420,9 +502,13 @@ export function EnhancedChatInterface({
                 size="icon"
                 className="h-8 w-8"
                 onClick={onToggleHistory}
-                title="Show Chat History"
+                title={isHistoryOpen ? "Show AI Agents" : "Show Chat History"}
               >
-                <History className="w-4 h-4" />
+                {isHistoryOpen ? (
+                  <Users className="w-4 h-4" />
+                ) : (
+                  <History className="w-4 h-4" />
+                )}
               </Button>
             )}
           </div>
@@ -515,7 +601,7 @@ export function EnhancedChatInterface({
       )}
       
       {/* Input */}
-      <div className="border-t p-4 flex-shrink-0">
+      <div className="border-t border-gray-300 dark:border-gray-700 p-4 flex-shrink-0">
         <EnhancedTextarea
           ref={inputRef}
           value={input}
@@ -562,30 +648,6 @@ export function EnhancedChatInterface({
           </div>
         )}
       </div>
-      
-      {/* Session history sidebar */}
-      {showHistory && (
-        <div className="absolute right-0 top-0 h-full w-64 border-l bg-background shadow-lg z-50">
-          <div className="p-4 border-b flex items-center justify-between">
-            <h3 className="font-semibold">Chat History</h3>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setShowHistory(false)}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-          <ScrollArea className="flex-1">
-            <div className="p-4 text-center text-sm text-muted-foreground">
-              <p>Chat history coming soon</p>
-            </div>
-          </ScrollArea>
-        </div>
-      )}
     </div>
   )
 }
-
-// Import X icon
-import { X } from 'lucide-react'

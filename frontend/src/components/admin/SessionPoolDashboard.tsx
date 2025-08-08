@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react'
-import { sessionPoolService, SessionMetrics, PoolStatus } from '@/services/sessionPoolService'
+import { useState, useEffect } from 'react'
+import { sessionPoolService } from '@/services/sessionPoolService'
+import type { SessionMetrics, PoolStatus } from '@/services/sessionPoolService'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
@@ -33,14 +34,14 @@ import {
 export function SessionPoolDashboard() {
   const [metrics, setMetrics] = useState<SessionMetrics | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [refreshInterval, setRefreshInterval] = useState<NodeJS.Timer | null>(null)
+  const [, setRefreshInterval] = useState<NodeJS.Timer | null>(null)
 
   useEffect(() => {
     loadMetrics()
     
     // Auto-refresh every 30 seconds
     const interval = setInterval(loadMetrics, 30000)
-    setRefreshInterval(interval)
+    setRefreshInterval(interval as any)
     
     return () => {
       if (interval) clearInterval(interval)

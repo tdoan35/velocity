@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 interface ChatInputProps {
   value?: string
   onChange?: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
-  onSubmit: (message?: string) => void
+  onSubmit: (message: string) => void
   disabled?: boolean
   placeholder?: string
   className?: string

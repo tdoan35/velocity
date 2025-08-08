@@ -33,6 +33,11 @@ export default defineConfig(({ mode }) => {
       
       // PWA plugin for offline support
       isProduction && VitePWA({
+        workbox: {
+          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+          globIgnores: ['**/monaco-vendor-*.js'], // Ignore large Monaco files
+        },
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'robots.txt', 'apple-touch-icon.png'],
         manifest: {
@@ -49,22 +54,6 @@ export default defineConfig(({ mode }) => {
               src: '/pwa-512x512.png',
               sizes: '512x512',
               type: 'image/png',
-            },
-          ],
-        },
-        workbox: {
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-          runtimeCaching: [
-            {
-              urlPattern: /^https:\/\/cdn\.jsdelivr\.net/,
-              handler: 'CacheFirst',
-              options: {
-                cacheName: 'cdn-cache',
-                expiration: {
-                  maxEntries: 50,
-                  maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
-                },
-              },
             },
           ],
         },
@@ -126,7 +115,7 @@ export default defineConfig(({ mode }) => {
         },
         format: {
           comments: false,
-          ecma: 2022,
+          ecma: 2020,
         },
       } : undefined,
       
@@ -172,7 +161,7 @@ export default defineConfig(({ mode }) => {
           
           // Asset file naming for better caching
           assetFileNames: (assetInfo) => {
-            const info = assetInfo.name.split('.')
+            const info = (assetInfo.name || 'asset').split('.')
             const ext = info[info.length - 1]
             if (/png|jpe?g|svg|gif|tiff|bmp|ico/i.test(ext)) {
               return `assets/images/[name]-[hash][extname]`

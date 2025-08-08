@@ -61,7 +61,14 @@
       "mcp__playwright__browser_type",
       "mcp__playwright__browser_drag",
       "mcp__supabase__get_project_url",
-      "mcp__playwright__browser_network_requests"
+      "mcp__playwright__browser_network_requests",
+      "Bash(grep:*)",
+      "Bash(sed:*)",
+      "Bash(for file in src/components/preview/*.tsx src/components/navigation/*.tsx)",
+      "Bash(do if [ -f \"$file\" ])",
+      "Bash(then sed -i \"s/^import React\\b[^;]*$//\" \"$file\")",
+      "Bash(fi)",
+      "Bash(done)"
     ]
   },
   "enableAllProjectMcpServers": true,

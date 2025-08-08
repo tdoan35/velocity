@@ -295,5 +295,60 @@ export const conversationService = {
     } catch {
       return null
     }
+  },
+
+  async updateConversationTitle(conversationId: string, title: string): Promise<{ conversation: Conversation | null; error: Error | null }> {
+    try {
+      const { data: conversation, error } = await supabase
+        .from('conversations')
+        .update({
+          title: title.trim(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', conversationId)
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error updating conversation title:', error)
+        return { conversation: null, error: error as Error }
+      }
+
+      return { conversation, error: null }
+    } catch (error) {
+      console.error('Unexpected error updating conversation title:', error)
+      return { conversation: null, error: error as Error }
+    }
+  },
+
+  async deleteConversation(conversationId: string): Promise<{ error: Error | null }> {
+    try {
+      // First delete all messages associated with the conversation
+      const { error: messagesError } = await supabase
+        .from('conversation_messages')
+        .delete()
+        .eq('conversation_id', conversationId)
+
+      if (messagesError) {
+        console.error('Error deleting conversation messages:', messagesError)
+        return { error: messagesError as Error }
+      }
+
+      // Then delete the conversation itself
+      const { error: conversationError } = await supabase
+        .from('conversations')
+        .delete()
+        .eq('id', conversationId)
+
+      if (conversationError) {
+        console.error('Error deleting conversation:', conversationError)
+        return { error: conversationError as Error }
+      }
+
+      return { error: null }
+    } catch (error) {
+      console.error('Unexpected error deleting conversation:', error)
+      return { error: error as Error }
+    }
   }
 }

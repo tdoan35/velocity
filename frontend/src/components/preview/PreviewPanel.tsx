@@ -1,4 +1,4 @@
-import React from 'react'
+
 import { useAppetizePreview } from '@/hooks/useAppetizePreview'
 import { HotReloadIndicator } from './HotReloadIndicator'
 import { Button } from '@/components/ui/button'

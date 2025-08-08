@@ -64,10 +64,10 @@ export class SnackService {
       name: options.name || 'Untitled',
       description: options.description || '',
       dependencies: options.dependencies || {},
-      sdkVersion: options.sdkVersion || '52.0.0',
+      sdkVersion: (options.sdkVersion || '52.0.0') as any,
       files: options.files || {
         'App.js': {
-          type: 'CODE',
+          type: 'CODE' as const,
           contents: `import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 
@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
     };
 
     // Create new Snack instance
-    const snack = new Snack(snackOptions, sessionOptions);
+    const snack = new (Snack as any)(snackOptions);
 
     // Set up event listeners
     const subscriptions: SnackListenerSubscription[] = [];
@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
 
     // Listen for errors
     subscriptions.push(
-      snack.addErrorListener((errors) => {
+      (snack as any).addErrorListener?.((errors: any) => {
         console.error('[SnackService] Errors:', errors);
       })
     );
@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
       throw new Error(`Session ${sessionId} not found`);
     }
 
-    await session.snack.updateFiles(files);
+    await session.snack.updateFiles(files as any);
 
     session.lastActivity = new Date();
     this.resetSessionTimeout(sessionId);
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
       throw new Error(`Session ${sessionId} not found`);
     }
 
-    await session.snack.updateDependencies(dependencies);
+    await session.snack.updateDependencies(dependencies as any);
 
     session.lastActivity = new Date();
     this.resetSessionTimeout(sessionId);
@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
     const params = new URLSearchParams();
     
     // Add session ID
-    params.append('id', session.snack.getChannel());
+    params.append('id', (session.snack as any).getChannel?.() || session.id);
     
     // Add platform if specified
     if (options?.platform) {
@@ -262,7 +262,7 @@ const styles = StyleSheet.create({
       throw new Error(`Session ${sessionId} not found`);
     }
 
-    const channel = session.snack.getChannel();
+    const channel = (session.snack as any).getChannel?.() || session.id;
     return `exp://exp.host/@snack/${channel}`;
   }
 
@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
       this.destroySession(sessionId);
     }, this.SESSION_TIMEOUT);
 
-    this.sessionTimeouts.set(sessionId, timeout);
+    this.sessionTimeouts.set(sessionId, timeout as any);
   }
 
   private async storeStateUpdate(

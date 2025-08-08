@@ -3,12 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useAppStore } from '@/stores/useAppStore'
 import { projectService } from '@/services/projectService'
-import { conversationService, type ConversationMessage } from '@/services/conversationService'
+import { conversationService } from '@/services/conversationService'
 import { EnhancedChatInterface } from '@/components/chat/enhanced-chat-interface'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { motion, AnimatePresence } from 'motion/react'
+import { cn } from '@/lib/utils'
 import { 
   ArrowLeft, 
   Loader2,
@@ -19,10 +20,46 @@ import {
   History,
   Plus,
   ChevronLeft,
-  MessageSquare
+  MessageSquare,
+  MoreVertical,
+  Edit,
+  Trash2,
+  Check
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { supabase } from '@/lib/supabase'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+// AlertDialog component not yet implemented
+// import {
+//   AlertDialog,
+//   AlertDialogAction,
+//   AlertDialogCancel,
+//   AlertDialogContent,
+//   AlertDialogDescription,
+//   AlertDialogFooter,
+//   AlertDialogHeader,
+//   AlertDialogTitle,
+// } from '@/components/ui/alert-dialog'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 interface ConversationTab {
   id: string
@@ -62,6 +99,11 @@ export function ProjectDesign() {
   const [initialPromptSubmitted, setInitialPromptSubmitted] = useState(false)
   const [isFirstVisit, setIsFirstVisit] = useState(false)
   const initialPromptRef = useRef<string | null>(null)
+  const [editingConversationId, setEditingConversationId] = useState<string | null>(null)
+  const [editingTitle, setEditingTitle] = useState('')
+  const [deletingConversationId, setDeletingConversationId] = useState<string | null>(null)
+  const [isSavingTitle, setIsSavingTitle] = useState(false)
+  const titleInputRef = useRef<HTMLInputElement>(null)
   // Helper function to get agent info
   const getAgentInfo = (agentType?: string) => {
     switch (agentType) {
@@ -111,7 +153,7 @@ export function ProjectDesign() {
       
       setCurrentConversation(newConversation)
       
-      // Close history panel when creating a new conversation
+      // Only close history panel when creating a truly new conversation (not loading from history)
       if (forceNew && showHistory) {
         setShowHistory(false)
       }
@@ -131,6 +173,107 @@ export function ProjectDesign() {
     }
   }
   
+  // Handle conversation rename
+  const handleConversationRename = async (conversationId: string, newTitle: string) => {
+    if (!newTitle.trim()) {
+      setEditingConversationId(null)
+      return
+    }
+
+    setIsSavingTitle(true)
+    try {
+      const { conversation, error } = await conversationService.updateConversationTitle(conversationId, newTitle.trim())
+      
+      if (!error && conversation) {
+        // Update in conversation history
+        setConversationHistory(prev => 
+          prev.map(conv => 
+            conv.id === conversationId 
+              ? { ...conv, title: newTitle.trim() } 
+              : conv
+          )
+        )
+        
+        // Update current conversation if it's the one being renamed
+        if (currentConversation?.id === conversationId) {
+          setCurrentConversation(prev => prev ? { ...prev, title: newTitle.trim() } : null)
+        }
+        
+        toast({
+          title: 'Success',
+          description: 'Conversation renamed successfully',
+        })
+      } else {
+        toast({
+          title: 'Error',
+          description: 'Failed to rename conversation',
+          variant: 'destructive',
+        })
+      }
+    } catch (error) {
+      console.error('Error renaming conversation:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to rename conversation',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsSavingTitle(false)
+      setEditingConversationId(null)
+    }
+  }
+
+  // Handle conversation delete
+  const handleConversationDelete = async (conversationId: string) => {
+    try {
+      const { error } = await conversationService.deleteConversation(conversationId)
+      
+      if (!error) {
+        // Remove from conversation history
+        setConversationHistory(prev => prev.filter(conv => conv.id !== conversationId))
+        
+        // If the deleted conversation is the current one, clear it
+        if (currentConversation?.id === conversationId) {
+          setCurrentConversation(null)
+        }
+        
+        toast({
+          title: 'Success',
+          description: 'Conversation deleted successfully',
+        })
+      } else {
+        toast({
+          title: 'Error',
+          description: 'Failed to delete conversation',
+          variant: 'destructive',
+        })
+      }
+    } catch (error) {
+      console.error('Error deleting conversation:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to delete conversation',
+        variant: 'destructive',
+      })
+    } finally {
+      setDeletingConversationId(null)
+    }
+  }
+
+  // Start editing a conversation title
+  const startEditingTitle = (conversationId: string, currentTitle: string) => {
+    setEditingConversationId(conversationId)
+    setEditingTitle(currentTitle)
+    // Focus input after popover opens
+    setTimeout(() => {
+      if (titleInputRef.current) {
+        titleInputRef.current.focus()
+        const length = titleInputRef.current.value.length
+        titleInputRef.current.setSelectionRange(length, length)
+      }
+    }, 100)
+  }
+
   // Load conversation history
   const loadConversationHistory = async () => {
     if (!user?.id || !projectId) return
@@ -319,47 +462,64 @@ export function ProjectDesign() {
         {/* Left Panel - Enhanced Chat Interface */}
         <ResizablePanel defaultSize={65} minSize={40}>
           <div className="h-full p-2">
-            <Card className="h-full flex flex-col bg-transparent">
-                {currentConversation ? (
-                  <EnhancedChatInterface
-                    projectId={projectId || ''}
-                    conversationId={currentConversation.id}
-                    onApplyCode={handleApplyCode}
-                    className="flex-1"
-                    activeAgent={currentConversation.activeAgent}
-                    onAgentChange={updateActiveAgent}
-                    conversationTitle={currentConversation.title}
-                    onNewConversation={() => createNewConversation(undefined, undefined, true)}
-                    onToggleHistory={() => setShowHistory(!showHistory)}
-                    initialMessage={isFirstVisit && initialPromptRef.current ? initialPromptRef.current : undefined}
-                    projectContext={project ? {
-                      name: project.name || project.title,
-                      description: project.description,
-                      template: project.template_type || project.template,
-                      initialPrompt: initialPromptRef.current
-                    } : undefined}
-                    onInitialMessageSent={() => {
-                      setIsFirstVisit(false)
-                      setInitialPromptSubmitted(true)
-                    }}
-                    onConversationCreated={(newConversationId) => {
-                      // Update the current conversation with the real ID
-                      if (currentConversation.isTemporary) {
-                        setCurrentConversation({
-                          ...currentConversation,
-                          id: newConversationId,
-                          isTemporary: false,
-                        })
-                        // Reload conversation history
-                        loadConversationHistory()
-                      }
-                    }}
-                    onTitleGenerated={(generatedTitle) => {
-                      // Update the conversation title with the AI-generated title
-                      setCurrentConversation(prev => ({
+            <Card className="h-full flex flex-col bg-transparent border-gray-300">
+                <EnhancedChatInterface
+                  projectId={projectId || ''}
+                  conversationId={currentConversation?.id}
+                  onApplyCode={handleApplyCode}
+                  className="flex-1"
+                  activeAgent={currentConversation?.activeAgent || activeAgent}
+                  onAgentChange={updateActiveAgent}
+                  conversationTitle={currentConversation?.title}
+                  onNewConversation={() => createNewConversation(undefined, undefined, true)}
+                  onToggleHistory={() => setShowHistory(!showHistory)}
+                  isHistoryOpen={showHistory}
+                  initialMessage={isFirstVisit && initialPromptRef.current ? initialPromptRef.current : undefined}
+                  projectContext={project ? {
+                    id: project.id,
+                    name: project.name || project.title || 'Untitled Project',
+                    description: project.description,
+                    template: project.template_type || project.template,
+                    initialPrompt: initialPromptRef.current || undefined
+                  } : undefined}
+                  onInitialMessageSent={() => {
+                    setIsFirstVisit(false)
+                    setInitialPromptSubmitted(true)
+                  }}
+                  onConversationCreated={(newConversationId) => {
+                    // Update the current conversation with the real ID
+                    if (currentConversation?.isTemporary) {
+                      setCurrentConversation({
+                        ...currentConversation,
+                        id: newConversationId,
+                        isTemporary: false,
+                      })
+                      // Reload conversation history
+                      loadConversationHistory()
+                    } else if (!currentConversation) {
+                      // Create a new conversation state when none exists
+                      setCurrentConversation({
+                        id: newConversationId,
+                        title: 'New Conversation',
+                        isLoading: false,
+                        activeAgent: activeAgent,
+                        isTemporary: false,
+                        metadata: {
+                          primaryAgent: activeAgent,
+                          agentsUsed: [activeAgent],
+                          lastAgent: activeAgent
+                        }
+                      })
+                      loadConversationHistory()
+                    }
+                  }}
+                  onTitleGenerated={(generatedTitle) => {
+                    // Update the conversation title with the AI-generated title
+                    if (currentConversation) {
+                      setCurrentConversation(prev => prev ? {
                         ...prev,
                         title: generatedTitle
-                      }))
+                      } : null)
                       // Also update in conversation history if it exists
                       setConversationHistory(prev => 
                         prev.map(conv => 
@@ -368,18 +528,26 @@ export function ProjectDesign() {
                             : conv
                         )
                       )
-                    }}
-                  />
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full">
-                    <MessageSquare className="w-12 h-12 text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground text-sm mb-4">No active conversations</p>
-                    <Button onClick={() => createNewConversation(undefined, undefined, true)}>
-                      <Plus className="w-4 h-4 mr-2" />
-                      Start New Conversation
-                    </Button>
-                  </div>
-                )}
+                    }
+                  }}
+                  onConversationTitleUpdated={(updatedTitle) => {
+                    // Update the conversation title when manually renamed
+                    if (currentConversation) {
+                      setCurrentConversation(prev => prev ? {
+                        ...prev,
+                        title: updatedTitle
+                      } : null)
+                      // Also update in conversation history if it exists
+                      setConversationHistory(prev => 
+                        prev.map(conv => 
+                          conv.id === currentConversation.id 
+                            ? { ...conv, title: updatedTitle } 
+                            : conv
+                        )
+                      )
+                    }
+                  }}
+                />
               </Card>
             </div>
           </ResizablePanel>
@@ -389,8 +557,8 @@ export function ProjectDesign() {
           {/* Right Panel - Agents List or History */}
           <ResizablePanel defaultSize={35} minSize={25}>
             <div className="h-full p-2">
-              <Card className="h-full flex flex-col">
-                <CardHeader className="p-4 pl-5 border-b">
+              <Card className="h-full flex flex-col bg-transparent border-gray-300 dark:border-gray-700/50">
+                <CardHeader className="p-4 pl-5 border-b border-gray-300">
                   <div className="flex items-center gap-2">
                     {showHistory ? (
                       <>
@@ -420,23 +588,115 @@ export function ProjectDesign() {
                           const AgentIcon = agentInfo.icon
                           const hasMultipleAgents = (conv.metadata?.agentsUsed?.length || 0) > 1
                           
+                          const isCurrentConversation = currentConversation?.id === conv.id;
+                          
                           return (
                             <div
                               key={conv.id}
-                              className="p-3 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors"
-                              onClick={async () => {
-                                // Load this conversation
-                                await createNewConversation(conv.title, conv.id)
-                                setShowHistory(false)
-                              }}
+                              className={cn(
+                                "group relative p-3 rounded-lg border transition-all",
+                                isCurrentConversation 
+                                  ? "bg-card border-primary/50 ring-1 ring-primary/30 shadow-sm" 
+                                  : "bg-card hover:bg-accent/50 border-gray-200 dark:border-gray-700"
+                              )}
                             >
-                              <div className="flex items-start gap-3">
+                              {/* Dropdown menu - positioned at top-right corner */}
+                              <div className="absolute top-2 right-2 z-10">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <MoreVertical className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-40">
+                                    <DropdownMenuItem
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        startEditingTitle(conv.id, conv.title)
+                                      }}
+                                    >
+                                      <Edit className="w-3.5 h-3.5 mr-2" />
+                                      Rename
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setDeletingConversationId(conv.id)
+                                      }}
+                                      className="text-destructive focus:text-destructive"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5 mr-2" />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                              
+                              <div 
+                                className="flex items-start gap-3 cursor-pointer"
+                                onClick={async () => {
+                                  // Load this conversation without closing history
+                                  await createNewConversation(conv.title, conv.id)
+                                  // Keep history panel open when selecting a conversation
+                                }}
+                              >
                                 <div className={`w-8 h-8 rounded-full ${agentInfo.bgColor} flex items-center justify-center flex-shrink-0`}>
                                   <AgentIcon className={`w-4 h-4 ${agentInfo.textColor}`} />
                                 </div>
-                                <div className="flex-1 min-w-0">
+                                <div className="flex-1 min-w-0 ">
                                   <div className="flex items-center gap-2">
-                                    <h3 className="font-medium text-sm truncate flex-1">{conv.title}</h3>
+                                    {editingConversationId === conv.id ? (
+                                      <Popover open={editingConversationId === conv.id} onOpenChange={(open) => !open && setEditingConversationId(null)}>
+                                        <PopoverTrigger asChild>
+                                          <div className="flex-1" />
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-56 px-3 pt-1" align="start" side="bottom">
+                                          <div className="space-y-1">
+                                            <Label htmlFor={`conv-title-${conv.id}`} className="text-xs text-muted-foreground">Conversation title</Label>
+                                            <div className="flex gap-1.5 items-center">
+                                              <Input
+                                                id={`conv-title-${conv.id}`}
+                                                ref={titleInputRef}
+                                                value={editingTitle}
+                                                onChange={(e) => setEditingTitle(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                  e.stopPropagation()
+                                                  if (e.key === 'Enter') {
+                                                    handleConversationRename(conv.id, editingTitle)
+                                                  } else if (e.key === 'Escape') {
+                                                    setEditingConversationId(null)
+                                                  }
+                                                }}
+                                                onClick={(e) => e.stopPropagation()}
+                                                placeholder="Enter conversation title"
+                                                className="flex-1 bg-background h-8 text-sm"
+                                                disabled={isSavingTitle}
+                                                autoFocus
+                                              />
+                                              <Button
+                                                size="icon"
+                                                variant="ghost"
+                                                onClick={(e) => {
+                                                  e.stopPropagation()
+                                                  handleConversationRename(conv.id, editingTitle)
+                                                }}
+                                                disabled={isSavingTitle || !editingTitle.trim() || editingTitle === conv.title}
+                                                className="h-8 w-8"
+                                              >
+                                                <Check className="h-4 w-4" />
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        </PopoverContent>
+                                      </Popover>
+                                    ) : (
+                                      <h3 className="font-medium text-sm truncate flex-1">{conv.title}</h3>
+                                    )}
                                     {hasMultipleAgents && (
                                       <div className="flex -space-x-2">
                                         {conv.metadata?.agentsUsed?.slice(0, 3).map((agent, idx) => {
@@ -456,12 +716,12 @@ export function ProjectDesign() {
                                     )}
                                   </div>
                                   <div className="flex items-center justify-between mt-1">
-                                    <p className="text-xs text-muted-foreground">
-                                      {new Date(conv.created_at).toLocaleDateString()}
-                                    </p>
                                     <span className="text-xs text-muted-foreground">
                                       {conv.message_count} messages
                                     </span>
+                                    <p className="text-xs text-muted-foreground">
+                                      {new Date(conv.created_at).toLocaleDateString()}
+                                    </p>
                                   </div>
                                 </div>
                               </div>
@@ -475,7 +735,7 @@ export function ProjectDesign() {
                     <div className="space-y-3">
                       {/* Project Manager */}
                       <div 
-                        className={`p-3 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors ${
+                        className={`p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-card hover:bg-accent/50 cursor-pointer transition-colors ${
                           activeAgent === 'project_manager' ? 'ring-2 ring-emerald-500' : ''
                         }`}
                         onClick={() => updateActiveAgent('project_manager')}
@@ -498,7 +758,7 @@ export function ProjectDesign() {
 
                       {/* Design Assistant */}
                       <div 
-                        className={`p-3 rounded-lg border bg-card opacity-50 cursor-not-allowed transition-colors ${
+                        className={`p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-card opacity-50 cursor-not-allowed transition-colors ${
                           activeAgent === 'design_assistant' ? 'ring-2 ring-blue-500' : ''
                         }`}
                       >
@@ -520,7 +780,7 @@ export function ProjectDesign() {
 
                       {/* Engineering Assistant */}
                       <div 
-                        className={`p-3 rounded-lg border bg-card opacity-50 cursor-not-allowed transition-colors ${
+                        className={`p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-card opacity-50 cursor-not-allowed transition-colors ${
                           activeAgent === 'engineering_assistant' ? 'ring-2 ring-purple-500' : ''
                         }`}
                       >
@@ -542,7 +802,7 @@ export function ProjectDesign() {
 
                       {/* Config Helper */}
                       <div 
-                        className={`p-3 rounded-lg border bg-card opacity-50 cursor-not-allowed transition-colors ${
+                        className={`p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-card opacity-50 cursor-not-allowed transition-colors ${
                           activeAgent === 'config_helper' ? 'ring-2 ring-orange-500' : ''
                         }`}
                       >
@@ -568,6 +828,36 @@ export function ProjectDesign() {
             </div>
           </ResizablePanel>
         </ResizablePanelGroup>
+        
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={!!deletingConversationId} onOpenChange={(open) => !open && setDeletingConversationId(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Conversation</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete this conversation? This action cannot be undone and will permanently delete all messages in this conversation.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setDeletingConversationId(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  if (deletingConversationId) {
+                    handleConversationDelete(deletingConversationId)
+                  }
+                }}
+              >
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
     </div>
   )
 }

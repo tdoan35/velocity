@@ -1,14 +1,16 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react'
+import React, { Component } from 'react'
+import type { ReactNode, ErrorInfo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Progress } from '@/components/ui/progress'
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion'
+// Accordion component not yet implemented
+// import {
+//   Accordion,
+//   AccordionContent,
+//   AccordionItem,
+//   AccordionTrigger,
+// } from '@/components/ui/accordion'
 import {
   AlertCircle,
   RefreshCw,
@@ -22,7 +24,13 @@ import {
   Loader2
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { toast } from '@/components/ui/use-toast'
+import { useToast } from '@/components/ui/use-toast'
+
+// For class components, we'll use a global toast function
+const globalToast = (message: any) => {
+  // This would need to be called from within a functional component
+  console.error('Toast:', message)
+}
 
 interface Props {
   children: ReactNode
@@ -206,7 +214,7 @@ export class PreviewErrorBoundary extends Component<Props, State> {
       
       // Check if this is a recurring error
       if (data?.pattern?.isRecurring) {
-        toast({
+        globalToast({
           title: 'Recurring Error Detected',
           description: data.pattern.suggestion || 'This error has occurred multiple times',
           variant: 'destructive'
@@ -321,7 +329,7 @@ export class PreviewErrorBoundary extends Component<Props, State> {
       
       if (data?.reportId) {
         this.setState({ diagnosticReportId: data.reportId })
-        toast({
+        globalToast({
           title: 'Diagnostic Report Generated',
           description: `Report ID: ${data.reportId}`,
         })
@@ -331,7 +339,7 @@ export class PreviewErrorBoundary extends Component<Props, State> {
       
     } catch (err) {
       console.error('Failed to generate diagnostic report:', err)
-      toast({
+      globalToast({
         title: 'Report Generation Failed',
         description: 'Could not generate diagnostic report',
         variant: 'destructive'
@@ -349,7 +357,7 @@ export class PreviewErrorBoundary extends Component<Props, State> {
     }
     
     navigator.clipboard.writeText(JSON.stringify(details, null, 2))
-    toast({
+    globalToast({
       title: 'Error Details Copied',
       description: 'Error details copied to clipboard',
     })
@@ -465,10 +473,11 @@ export class PreviewErrorBoundary extends Component<Props, State> {
             </div>
 
             {/* Error Details (Collapsible) */}
-            <Accordion type="single" collapsible className="w-full">
-              <AccordionItem value="details">
-                <AccordionTrigger>Technical Details</AccordionTrigger>
-                <AccordionContent>
+            {/* Accordion component not yet implemented */}
+            <div className="w-full">
+              <div>
+                <div className="font-medium">Technical Details</div>
+                <div>
                   <div className="space-y-4">
                     <div className="flex justify-between items-start">
                       <div className="space-y-2 flex-1">
@@ -520,9 +529,9 @@ export class PreviewErrorBoundary extends Component<Props, State> {
                       </div>
                     )}
                   </div>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>

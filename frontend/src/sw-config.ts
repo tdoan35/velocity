@@ -105,7 +105,7 @@ export const cacheConfig = {
 
 // Cache versioning strategy
 export const getCacheVersion = () => {
-  return `v${__APP_VERSION__}-${__BUILD_TIME__}`
+  return `v${(globalThis as any).__APP_VERSION__ || '1.0.0'}-${(globalThis as any).__BUILD_TIME__ || Date.now()}`
 }
 
 // Clear old caches

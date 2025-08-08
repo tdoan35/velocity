@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { initializeStoreSubscriptions } from './stores'
 import { useAuthStore } from './stores/useAuthStore'
@@ -7,7 +7,6 @@ import { authService } from './services/auth'
 import { projectService } from './services/projectService'
 import { useNavigate } from 'react-router-dom'
 import { AuroraBackground } from './components/ui/aurora-background'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card'
 import { AnimatedTooltip } from './components/ui/animated-tooltip'
 import { EnhancedTextarea } from './components/ui/enhanced-textarea'
 import {

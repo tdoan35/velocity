@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import { useState, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'

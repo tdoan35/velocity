@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { editor as MonacoEditor } from 'monaco-editor';
 import { useSnackSession } from '../../hooks/useSnackSession';
 import { useToast } from '../../hooks/use-toast';

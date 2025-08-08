@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
@@ -8,7 +8,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAppetizePreview } from '@/hooks/useAppetizePreview';
 import { 
   Smartphone, 
@@ -16,7 +15,6 @@ import {
   RotateCw, 
   RefreshCw, 
   Share2, 
-  Download,
   Maximize2,
   Minimize2,
   Wifi,
@@ -50,7 +48,7 @@ export function MobilePreview({ className, onShare }: MobilePreviewProps) {
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected'>('connected');
+  const [connectionStatus] = useState<'connected' | 'disconnected'>('connected');
 
   // Group devices by type
   const deviceGroups = devices.reduce((acc, device) => {

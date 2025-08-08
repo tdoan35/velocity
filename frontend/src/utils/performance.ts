@@ -104,7 +104,7 @@ class PerformanceMonitor {
 
   // Measure custom timing
   measureTiming(name: string, startMark: string, endMark: string) {
-    if (performance.mark && performance.measure) {
+    if (typeof performance.mark === 'function' && typeof performance.measure === 'function') {
       try {
         performance.measure(name, startMark, endMark)
         const measures = performance.getEntriesByName(name, 'measure')
@@ -179,7 +179,7 @@ export function measureLazyLoad(chunkName: string) {
 export function reportWebVitals(metric: any) {
   const { name, value, rating } = metric
   
-  const formattedMetric: PerformanceMetric = {
+  const _formattedMetric: PerformanceMetric = {
     name,
     value: Math.round(value),
     rating: rating || 'needs-improvement',
@@ -202,8 +202,4 @@ export function reportWebVitals(metric: any) {
 }
 
 // Extend Window interface
-declare global {
-  interface Window {
-    gtag?: (...args: any[]) => void
-  }
-}
+// Global Window interface is declared in main.tsx

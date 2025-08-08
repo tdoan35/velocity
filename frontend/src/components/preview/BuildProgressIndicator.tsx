@@ -1,4 +1,4 @@
-import React from 'react'
+
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, CheckCircle, XCircle, Package, Zap, Upload, FileCode } from 'lucide-react'
