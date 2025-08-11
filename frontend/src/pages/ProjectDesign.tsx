@@ -4,7 +4,9 @@ import { useAuthStore } from '@/stores/useAuthStore'
 import { useAppStore } from '@/stores/useAppStore'
 import { projectService } from '@/services/projectService'
 import { conversationService } from '@/services/conversationService'
+import { prdService } from '@/services/prdService'
 import { EnhancedChatInterface } from '@/components/chat/enhanced-chat-interface'
+import { PRDEditor } from '@/components/prd/PRDEditor'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
@@ -24,7 +26,8 @@ import {
   MoreVertical,
   Edit,
   Trash2,
-  Check
+  Check,
+  FileText
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { supabase } from '@/lib/supabase'
@@ -104,6 +107,8 @@ export function ProjectDesign() {
   const [deletingConversationId, setDeletingConversationId] = useState<string | null>(null)
   const [isSavingTitle, setIsSavingTitle] = useState(false)
   const titleInputRef = useRef<HTMLInputElement>(null)
+  const [showPRD, setShowPRD] = useState(false)
+  const [hasPRD, setHasPRD] = useState(false)
   // Helper function to get agent info
   const getAgentInfo = (agentType?: string) => {
     switch (agentType) {
@@ -374,6 +379,10 @@ export function ProjectDesign() {
 
       setProject(loadedProject)
       
+      // Check if PRD exists for this project
+      const { prd } = await prdService.getPRDByProject(projectId)
+      setHasPRD(!!prd)
+      
       // Extract initial prompt from app_config
       const initialPrompt = loadedProject.app_config?.initialPrompt
       if (initialPrompt) {
@@ -459,10 +468,18 @@ export function ProjectDesign() {
   return (
     <div className="flex flex-col h-full mx-2 mb-2 rounded-lg overflow-hidden bg-white/30 dark:bg-gray-900/30 backdrop-blur-lg border border-gray-200/50 dark:border-gray-700/50 shadow-xl">
       <ResizablePanelGroup direction="horizontal" className="h-full">
-        {/* Left Panel - Enhanced Chat Interface */}
+        {/* Left Panel - Enhanced Chat Interface or PRD Editor */}
         <ResizablePanel defaultSize={65} minSize={40}>
           <div className="h-full p-2">
             <Card className="h-full flex flex-col bg-transparent border-gray-300">
+              {showPRD ? (
+                <PRDEditor
+                  projectId={projectId || ''}
+                  conversationId={currentConversation?.id}
+                  onClose={() => setShowPRD(false)}
+                  className="flex-1"
+                />
+              ) : (
                 <EnhancedChatInterface
                   projectId={projectId || ''}
                   conversationId={currentConversation?.id}
@@ -548,9 +565,10 @@ export function ProjectDesign() {
                     }
                   }}
                 />
-              </Card>
-            </div>
-          </ResizablePanel>
+              )}
+            </Card>
+          </div>
+        </ResizablePanel>
 
           <ResizableHandle withHandle />
 
@@ -734,26 +752,44 @@ export function ProjectDesign() {
                     // AI Agents View
                     <div className="space-y-3">
                       {/* Project Manager */}
-                      <div 
-                        className={`p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-card hover:bg-accent/50 cursor-pointer transition-colors ${
-                          activeAgent === 'project_manager' ? 'ring-2 ring-emerald-500' : ''
-                        }`}
-                        onClick={() => updateActiveAgent('project_manager')}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
-                            <Users className="w-5 h-5 text-emerald-500" />
+                      <div className="space-y-2">
+                        <div 
+                          className={`p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-card hover:bg-accent/50 cursor-pointer transition-colors ${
+                            activeAgent === 'project_manager' ? 'ring-2 ring-emerald-500' : ''
+                          }`}
+                          onClick={() => updateActiveAgent('project_manager')}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
+                              <Users className="w-5 h-5 text-emerald-500" />
+                            </div>
+                            <div className="flex-1">
+                              <h3 className="font-medium text-sm">Project Manager</h3>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Manages project planning and coordination
+                              </p>
+                            </div>
+                            {activeAgent === 'project_manager' && (
+                              <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                            )}
                           </div>
-                          <div className="flex-1">
-                            <h3 className="font-medium text-sm">Project Manager</h3>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Manages project planning and coordination
-                            </p>
-                          </div>
-                          {activeAgent === 'project_manager' && (
-                            <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                          )}
                         </div>
+                        
+                        {/* PRD Button for Project Manager */}
+                        {activeAgent === 'project_manager' && (
+                          <Button
+                            variant={showPRD ? "default" : "outline"}
+                            size="sm"
+                            className="w-full"
+                            onClick={() => setShowPRD(!showPRD)}
+                          >
+                            <FileText className="w-4 h-4 mr-2" />
+                            {showPRD ? 'Show Chat' : 'View PRD'}
+                            {hasPRD && !showPRD && (
+                              <div className="ml-auto w-2 h-2 rounded-full bg-green-500" />
+                            )}
+                          </Button>
+                        )}
                       </div>
 
                       {/* Design Assistant */}
