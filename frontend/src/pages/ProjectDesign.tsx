@@ -6,9 +6,9 @@ import { projectService } from '@/services/projectService'
 import { conversationService } from '@/services/conversationService'
 import { prdService } from '@/services/prdService'
 import { EnhancedChatInterface } from '@/components/chat/enhanced-chat-interface'
-import { PRDEditor } from '@/components/prd/PRDEditor'
+import { NotionPRDEditor } from '@/components/prd/NotionPRDEditor'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { motion, AnimatePresence } from 'motion/react'
 import { cn } from '@/lib/utils'
@@ -471,16 +471,40 @@ export function ProjectDesign() {
         {/* Left Panel - Enhanced Chat Interface or PRD Editor */}
         <ResizablePanel defaultSize={65} minSize={40}>
           <div className="h-full p-2">
-            <Card className="h-full flex flex-col bg-transparent border-gray-300">
-              {showPRD ? (
-                <PRDEditor
-                  projectId={projectId || ''}
-                  conversationId={currentConversation?.id}
-                  onClose={() => setShowPRD(false)}
-                  className="flex-1"
-                />
-              ) : (
-                <EnhancedChatInterface
+            <Card className="h-full flex flex-col bg-transparent border-gray-300 relative overflow-hidden">
+              <AnimatePresence mode="wait">
+                {showPRD ? (
+                  <motion.div
+                    key="prd-editor"
+                    className="flex-1 flex flex-col absolute inset-0"
+                    initial={{ opacity: 0, x: 100, scale: 0.95 }}
+                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                    exit={{ opacity: 0, x: -100, scale: 0.95 }}
+                    transition={{ 
+                      duration: 0.3,
+                      ease: [0.4, 0, 0.2, 1] 
+                    }}
+                  >
+                    <NotionPRDEditor
+                      projectId={projectId || ''}
+                      conversationId={currentConversation?.id}
+                      onClose={() => setShowPRD(false)}
+                      className="flex-1"
+                    />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="chat-interface"
+                    className="flex-1 flex flex-col absolute inset-0"
+                    initial={{ opacity: 0, x: -100, scale: 0.95 }}
+                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                    exit={{ opacity: 0, x: 100, scale: 0.95 }}
+                    transition={{ 
+                      duration: 0.3,
+                      ease: [0.4, 0, 0.2, 1]
+                    }}
+                  >
+                    <EnhancedChatInterface
                   projectId={projectId || ''}
                   conversationId={currentConversation?.id}
                   onApplyCode={handleApplyCode}
@@ -564,8 +588,10 @@ export function ProjectDesign() {
                       )
                     }
                   }}
-                />
-              )}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </Card>
           </div>
         </ResizablePanel>
@@ -577,25 +603,42 @@ export function ProjectDesign() {
             <div className="h-full p-2">
               <Card className="h-full flex flex-col bg-transparent border-gray-300 dark:border-gray-700/50">
                 <CardHeader className="p-4 pl-5 border-b border-gray-300">
-                  <div className="flex items-center gap-2">
-                    {showHistory ? (
-                      <>
-                        <History className="w-5 h-5" />
-                        <CardTitle className="text-lg">Chat History</CardTitle>
-                      </>
-                    ) : (
-                      <>
-                        <Users className="w-5 h-5" />
-                        <CardTitle className="text-lg">AI Agents</CardTitle>
-                      </>
-                    )}
-                  </div>
+                  <AnimatePresence mode="wait">
+                    <motion.div 
+                      key={showHistory ? 'history' : 'agents'}
+                      className="flex items-center gap-2"
+                      initial={{ opacity: 0, x: showHistory ? 10 : -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: showHistory ? -10 : 10 }}
+                      transition={{ duration: 0.2, ease: "easeInOut" }}
+                    >
+                      {showHistory ? (
+                        <>
+                          <History className="w-5 h-5" />
+                          <CardTitle className="text-lg">Chat History</CardTitle>
+                        </>
+                      ) : (
+                        <>
+                          <Users className="w-5 h-5" />
+                          <CardTitle className="text-lg">AI Agents</CardTitle>
+                        </>
+                      )}
+                    </motion.div>
+                  </AnimatePresence>
                 </CardHeader>
                 <CardContent className="p-4 flex-1 overflow-y-auto">
-                  {showHistory ? (
-                    // Conversation History View
-                    <div className="space-y-2">
-                      {conversationHistory.length === 0 ? (
+                  <AnimatePresence mode="wait">
+                    {showHistory ? (
+                      // Conversation History View
+                      <motion.div 
+                        key="history-content"
+                        className="space-y-2"
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -20 }}
+                        transition={{ duration: 0.25, ease: "easeInOut" }}
+                      >
+                        {conversationHistory.length === 0 ? (
                         <div className="text-center py-8">
                           <History className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
                           <p className="text-sm text-muted-foreground">No conversation history yet</p>
@@ -747,12 +790,24 @@ export function ProjectDesign() {
                           )
                         })
                       )}
-                    </div>
-                  ) : (
-                    // AI Agents View
-                    <div className="space-y-3">
-                      {/* Project Manager */}
-                      <div className="space-y-2">
+                      </motion.div>
+                    ) : (
+                      // AI Agents View
+                      <motion.div 
+                        key="agents-content"
+                        className="space-y-3"
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 20 }}
+                        transition={{ duration: 0.25, ease: "easeInOut" }}
+                      >
+                        {/* Project Manager */}
+                      <motion.div 
+                        className="space-y-2"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1, duration: 0.2 }}
+                      >
                         <div 
                           className={`p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-card hover:bg-accent/50 cursor-pointer transition-colors ${
                             activeAgent === 'project_manager' ? 'ring-2 ring-emerald-500' : ''
@@ -774,92 +829,115 @@ export function ProjectDesign() {
                             )}
                           </div>
                         </div>
-                        
-                        {/* PRD Button for Project Manager */}
-                        {activeAgent === 'project_manager' && (
-                          <Button
-                            variant={showPRD ? "default" : "outline"}
-                            size="sm"
-                            className="w-full"
-                            onClick={() => setShowPRD(!showPRD)}
-                          >
-                            <FileText className="w-4 h-4 mr-2" />
-                            {showPRD ? 'Show Chat' : 'View PRD'}
-                            {hasPRD && !showPRD && (
-                              <div className="ml-auto w-2 h-2 rounded-full bg-green-500" />
-                            )}
-                          </Button>
-                        )}
-                      </div>
+                      </motion.div>
 
                       {/* Design Assistant */}
-                      <div 
-                        className={`p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-card opacity-50 cursor-not-allowed transition-colors ${
-                          activeAgent === 'design_assistant' ? 'ring-2 ring-blue-500' : ''
-                        }`}
+                      <motion.div 
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.15, duration: 0.2 }}
                       >
-                        <div className="flex items-start gap-3">
-                          <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-                            <Sparkles className="w-5 h-5 text-blue-500" />
+                        <div 
+                          className={`p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 cursor-not-allowed transition-colors relative ${
+                            activeAgent === 'design_assistant' ? 'ring-2 ring-blue-500' : ''
+                          }`}
+                        >
+                          <div className="absolute inset-0 bg-gray-100/20 dark:bg-gray-900/20 rounded-lg" />
+                          <div className="flex items-start gap-3 relative opacity-60">
+                            <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                              <Sparkles className="w-5 h-5 text-blue-500" />
+                            </div>
+                            <div className="flex-1">
+                              <h3 className="font-medium text-sm">Design Assistant</h3>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Helps with UI/UX design and app layout
+                              </p>
+                            </div>
+                            {activeAgent === 'design_assistant' && (
+                              <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                            )}
                           </div>
-                          <div className="flex-1">
-                            <h3 className="font-medium text-sm">Design Assistant</h3>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Helps with UI/UX design and app layout
-                            </p>
-                          </div>
-                          {activeAgent === 'design_assistant' && (
-                            <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                          )}
                         </div>
-                      </div>
+                      </motion.div>
 
                       {/* Engineering Assistant */}
-                      <div 
-                        className={`p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-card opacity-50 cursor-not-allowed transition-colors ${
-                          activeAgent === 'engineering_assistant' ? 'ring-2 ring-purple-500' : ''
-                        }`}
+                      <motion.div 
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2, duration: 0.2 }}
                       >
-                        <div className="flex items-start gap-3">
-                          <div className="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center flex-shrink-0">
-                            <Code2 className="w-5 h-5 text-purple-500" />
+                        <div 
+                          className={`p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 cursor-not-allowed transition-colors relative ${
+                            activeAgent === 'engineering_assistant' ? 'ring-2 ring-purple-500' : ''
+                          }`}
+                        >
+                          <div className="absolute inset-0 bg-gray-100/20 dark:bg-gray-900/20 rounded-lg" />
+                          <div className="flex items-start gap-3 relative opacity-60">
+                            <div className="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center flex-shrink-0">
+                              <Code2 className="w-5 h-5 text-purple-500" />
+                            </div>
+                            <div className="flex-1">
+                              <h3 className="font-medium text-sm">Engineering Assistant</h3>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Generates React Native code for your app
+                              </p>
+                            </div>
+                            {activeAgent === 'engineering_assistant' && (
+                              <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                            )}
                           </div>
-                          <div className="flex-1">
-                            <h3 className="font-medium text-sm">Engineering Assistant</h3>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Generates React Native code for your app
-                            </p>
-                          </div>
-                          {activeAgent === 'engineering_assistant' && (
-                            <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                          )}
                         </div>
-                      </div>
+                      </motion.div>
 
                       {/* Config Helper */}
-                      <div 
-                        className={`p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-card opacity-50 cursor-not-allowed transition-colors ${
-                          activeAgent === 'config_helper' ? 'ring-2 ring-orange-500' : ''
-                        }`}
+                      <motion.div 
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.25, duration: 0.2 }}
                       >
-                        <div className="flex items-start gap-3">
-                          <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">
-                            <Settings className="w-5 h-5 text-orange-500" />
+                        <div 
+                          className={`p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 cursor-not-allowed transition-colors relative ${
+                            activeAgent === 'config_helper' ? 'ring-2 ring-orange-500' : ''
+                          }`}
+                        >
+                          <div className="absolute inset-0 bg-gray-100/20 dark:bg-gray-900/20 rounded-lg" />
+                          <div className="flex items-start gap-3 relative opacity-60">
+                            <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">
+                              <Settings className="w-5 h-5 text-orange-500" />
+                            </div>
+                            <div className="flex-1">
+                              <h3 className="font-medium text-sm">Config Helper</h3>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Assists with app configuration and deployment
+                              </p>
+                            </div>
+                            {activeAgent === 'config_helper' && (
+                              <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                            )}
                           </div>
-                          <div className="flex-1">
-                            <h3 className="font-medium text-sm">Config Helper</h3>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Assists with app configuration and deployment
-                            </p>
-                          </div>
-                          {activeAgent === 'config_helper' && (
-                            <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                          )}
                         </div>
-                      </div>
-                    </div>
-                  )}
+                      </motion.div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </CardContent>
+                {/* Card Footer with View PRD Button */}
+                {!showHistory && activeAgent === 'project_manager' && (
+                  <CardFooter className="p-4 border-t border-gray-300">
+                    <Button
+                      variant={showPRD ? "default" : "outline"}
+                      size="sm"
+                      className="w-full"
+                      onClick={() => setShowPRD(!showPRD)}
+                    >
+                      <FileText className="w-4 h-4 mr-2" />
+                      {showPRD ? 'Show Chat' : 'View PRD'}
+                      {hasPRD && !showPRD && (
+                        <div className="ml-auto w-2 h-2 rounded-full bg-green-500" />
+                      )}
+                    </Button>
+                  </CardFooter>
+                )}
               </Card>
             </div>
           </ResizablePanel>

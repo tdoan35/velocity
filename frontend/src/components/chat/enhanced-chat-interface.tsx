@@ -619,8 +619,8 @@ export function EnhancedChatInterface({
           submitIcon={Send}
           minHeight="60px"
           showAttachButton={false}
-          showHelperText={true}
-          showCommands={true}
+          showHelperText={false}
+          showCommands={false}
         />
         {isLoading && (
           <Button
