@@ -7,10 +7,7 @@ import Highlight from '@tiptap/extension-highlight'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Progress } from '@/components/ui/progress'
-import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import { prdService, type PRD, type PRDSection, type PRDFeature } from '@/services/prdService'
 import { PRDToolbar } from './PRDToolbar'
@@ -312,12 +309,12 @@ export function PRDEditor({
   }
 
   return (
-    <div className={cn('flex flex-col h-full', className)}>
-      {/* Header */}
-      <Card className="border-0 shadow-none rounded-none">
-        <CardHeader className="p-4 border-b">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+    <div className={cn('flex flex-col h-full overflow-hidden', className)}>
+      {/* Header - matching EnhancedChatInterface style */}
+      <div className="relative border-b border-gray-300 dark:border-gray-700 bg-transparent flex-shrink-0">
+        <div className="p-4 pl-5">
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-2">
               {onClose && (
                 <Button
                   variant="ghost"
@@ -328,92 +325,100 @@ export function PRDEditor({
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
               )}
-              <FileText className="h-5 w-5 text-primary" />
-              <CardTitle className="text-lg">Product Requirements Document</CardTitle>
-              <PRDStatusBadge status={prd.status} />
+              <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
+                <FileText className="w-4 h-4 text-emerald-500" />
+              </div>
+              <h2 className="text-lg font-semibold">Product Requirements Document</h2>
             </div>
             <div className="flex items-center gap-2">
               {hasUnsavedChanges && (
-                <Badge variant="outline" className="text-yellow-600">
-                  Unsaved changes
-                </Badge>
+                <div className="px-2 py-1 rounded-md bg-yellow-500/10 flex items-center gap-1">
+                  <span className="text-xs font-medium text-yellow-600 dark:text-yellow-500">
+                    Unsaved changes
+                  </span>
+                </div>
               )}
+              <PRDStatusBadge status={prd.status} />
               <Button
-                variant="outline"
-                size="sm"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
                 onClick={handleSave}
                 disabled={isSaving || !hasUnsavedChanges}
+                title="Save PRD"
               >
                 {isSaving ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Save className="h-4 w-4" />
                 )}
-                Save
               </Button>
               <Button
-                variant="outline"
-                size="sm"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
                 onClick={handleExportMarkdown}
+                title="Export as Markdown"
               >
                 <Download className="h-4 w-4" />
-                Export
               </Button>
             </div>
           </div>
-          
-          {/* Progress Bar */}
-          <div className="mt-4 space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Completion</span>
-              <span className="font-medium">{prd.completion_percentage || 0}%</span>
-            </div>
-            <Progress value={prd.completion_percentage || 0} className="h-2" />
-          </div>
-        </CardHeader>
+        </div>
+        
+        {/* Progress Bar as bottom border */}
+        <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200 dark:bg-gray-700">
+          <div 
+            className="h-full bg-emerald-500 transition-all duration-300 ease-out"
+            style={{ width: `${prd.completion_percentage || 0}%` }}
+          />
+        </div>
+      </div>
 
-        <CardContent className="p-0 flex-1 overflow-hidden">
-          <Tabs value={activeSection} onValueChange={(v) => setActiveSection(v as PRDSectionType)} className="h-full flex flex-col">
-            <TabsList className="w-full justify-start rounded-none border-b h-auto p-0">
-              {[
-                { id: 'overview', label: 'Overview', icon: FileText },
-                { id: 'core_features', label: 'Core Features', icon: CheckCircle2 },
-                { id: 'additional_features', label: 'Additional Features', icon: Circle },
-                { id: 'technical_requirements', label: 'Technical', icon: Settings },
-                { id: 'success_metrics', label: 'Success Metrics', icon: Target }
-              ].map((tab) => {
-                const isComplete = getSectionCompletionStatus(tab.id as PRDSectionType)
-                return (
-                  <TabsTrigger
-                    key={tab.id}
-                    value={tab.id}
-                    className="rounded-none border-r last:border-r-0 data-[state=active]:bg-muted"
-                  >
-                    <div className="flex items-center gap-2">
-                      {isComplete ? (
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <Circle className="h-4 w-4 text-muted-foreground" />
-                      )}
-                      <span>{tab.label}</span>
-                    </div>
-                  </TabsTrigger>
-                )
-              })}
-            </TabsList>
+      {/* Content area with tabs */}
+      <div className="flex-1 overflow-hidden flex flex-col">
+        <Tabs value={activeSection} onValueChange={(v) => setActiveSection(v as PRDSectionType)} className="h-full flex flex-col">
+          <TabsList className="w-full justify-start rounded-none border-b border-gray-300 dark:border-gray-700 h-auto p-0 bg-transparent">
+            {[
+              { id: 'overview', label: 'Overview', icon: FileText },
+              { id: 'core_features', label: 'Core Features', icon: CheckCircle2 },
+              { id: 'additional_features', label: 'Additional Features', icon: Circle },
+              { id: 'technical_requirements', label: 'Technical', icon: Settings },
+              { id: 'success_metrics', label: 'Success Metrics', icon: Target }
+            ].map((tab) => {
+              const isComplete = getSectionCompletionStatus(tab.id as PRDSectionType)
+              return (
+                <TabsTrigger
+                  key={tab.id}
+                  value={tab.id}
+                  className="rounded-none border-r border-gray-200 dark:border-gray-700 last:border-r-0 data-[state=active]:bg-muted/50"
+                >
+                  <div className="flex items-center gap-2">
+                    {isComplete ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Circle className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    <span>{tab.label}</span>
+                  </div>
+                </TabsTrigger>
+              )
+            })}
+          </TabsList>
 
-            <div className="flex-1 overflow-hidden">
-              {/* Toolbar */}
-              <PRDToolbar editor={editor} />
-              
-              {/* Editor Content */}
-              <div className="h-full overflow-y-auto">
+          <div className="flex-1 overflow-hidden bg-transparent">
+            {/* Toolbar */}
+            <PRDToolbar editor={editor} />
+            
+            {/* Editor Content */}
+            <div className="h-full overflow-y-auto p-4 bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm">
+              <div className="max-w-4xl mx-auto">
                 <EditorContent editor={editor} className="h-full" />
               </div>
             </div>
-          </Tabs>
-        </CardContent>
-      </Card>
+          </div>
+        </Tabs>
+      </div>
     </div>
   )
 }

@@ -1,4 +1,3 @@
-import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
 interface PRDStatusBadgeProps {
@@ -12,38 +11,38 @@ export function PRDStatusBadge({ status, className }: PRDStatusBadgeProps) {
       case 'draft':
         return {
           label: 'Draft',
-          variant: 'secondary' as const,
-          className: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+          bgColor: 'bg-gray-500/10',
+          textColor: 'text-gray-600 dark:text-gray-400'
         }
       case 'in_progress':
         return {
           label: 'In Progress',
-          variant: 'default' as const,
-          className: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+          bgColor: 'bg-blue-500/10',
+          textColor: 'text-blue-600 dark:text-blue-400'
         }
       case 'review':
         return {
           label: 'Review',
-          variant: 'default' as const,
-          className: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
+          bgColor: 'bg-yellow-500/10',
+          textColor: 'text-yellow-600 dark:text-yellow-400'
         }
       case 'finalized':
         return {
           label: 'Finalized',
-          variant: 'default' as const,
-          className: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+          bgColor: 'bg-green-500/10',
+          textColor: 'text-green-600 dark:text-green-400'
         }
       case 'archived':
         return {
           label: 'Archived',
-          variant: 'outline' as const,
-          className: 'text-muted-foreground'
+          bgColor: 'bg-gray-500/10',
+          textColor: 'text-muted-foreground'
         }
       default:
         return {
           label: 'Unknown',
-          variant: 'outline' as const,
-          className: ''
+          bgColor: 'bg-gray-500/10',
+          textColor: 'text-muted-foreground'
         }
     }
   }
@@ -51,11 +50,10 @@ export function PRDStatusBadge({ status, className }: PRDStatusBadgeProps) {
   const config = getStatusConfig()
 
   return (
-    <Badge
-      variant={config.variant}
-      className={cn(config.className, className)}
-    >
-      {config.label}
-    </Badge>
+    <div className={cn(`px-2 py-1 rounded-md ${config.bgColor} flex items-center gap-1`, className)}>
+      <span className={`text-xs font-medium ${config.textColor}`}>
+        {config.label}
+      </span>
+    </div>
   )
 }
