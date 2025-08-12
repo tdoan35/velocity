@@ -1,23 +1,46 @@
-// Supabase Edge Function for PRD management
+// Supabase Edge Function for PRD management with flexible sections
 import { createClient } from '@supabase/supabase-js'
 import { corsHeaders } from '../_shared/cors.ts'
 import { requireAuth } from '../_shared/auth.ts'
 import { logger } from '../_shared/logger.ts'
+import {
+  PRDSection,
+  AgentType,
+  initializePRDSections,
+  getCurrentAgentFromSections,
+  getSectionById,
+  updateSectionContent,
+  updateSectionStatus,
+  addCustomSection,
+  reorderSections,
+  calculatePRDCompletion,
+  getNextAgent,
+  areAgentSectionsComplete,
+  getAgentPrompts,
+  AGENT_SECTION_CONFIGS
+} from '../shared/prd-sections-config.ts'
 
 interface PRDRequest {
-  action: 'create' | 'update' | 'get' | 'finalize' | 'generateSuggestions' | 'validateSection'
+  action: 'create' | 'update' | 'get' | 'finalize' | 'generateSuggestions' | 'validateSection' | 
+          'updateSection' | 'addSection' | 'removeSection' | 'reorderSections' | 'getAgentStatus'
   conversationId?: string
   projectId?: string
   prdId?: string
-  section?: 'overview' | 'core_features' | 'additional_features' | 'technical_requirements' | 'success_metrics'
+  sectionId?: string
+  section?: string // For backward compatibility
   data?: any
   context?: any
+  agent?: AgentType
+  title?: string
+  required?: boolean
+  newOrder?: number
 }
 
 interface PRDSuggestion {
   text: string
   category: 'continuation' | 'clarification' | 'example'
   section: string
+  agent?: AgentType
 }
 
 Deno.serve(async (req) => {
@@ -38,7 +61,7 @@ Deno.serve(async (req) => {
 
     // Parse request body
     const body: PRDRequest = await req.json()
-    const { action, conversationId, projectId, prdId, section, data, context } = body
+    const { action, conversationId, projectId, prdId, sectionId, section, data, context, agent, title, required, newOrder } = body
 
     // Log request
     await logger.info('PRD management request', {
@@ -47,7 +70,7 @@ Deno.serve(async (req) => {
       conversationId,
       projectId,
       prdId,
-      section
+      sectionId
     })
 
     const supabase = createClient(
@@ -63,11 +86,32 @@ Deno.serve(async (req) => {
         break
 
       case 'update':
-        response = await updatePRDSection(supabase, authResult.userId, prdId!, section!, data)
+        // Backward compatibility for old section updates
+        if (section && !sectionId) {
+          response = await updatePRDSectionLegacy(supabase, authResult.userId, prdId!, section, data)
+        } else {
+          response = await updatePRDSectionFlexible(supabase, authResult.userId, prdId!, sectionId!, data)
+        }
+        break
+
+      case 'updateSection':
+        response = await updatePRDSectionFlexible(supabase, authResult.userId, prdId!, sectionId!, data)
+        break
+
+      case 'addSection':
+        response = await addPRDSection(supabase, authResult.userId, prdId!, title!, agent!, required)
+        break
+
+      case 'removeSection':
+        response = await removePRDSection(supabase, authResult.userId, prdId!, sectionId!)
+        break
+
+      case 'reorderSections':
+        response = await reorderPRDSections(supabase, authResult.userId, prdId!, sectionId!, newOrder!)
         break
 
       case 'get':
-        response = await getPRD(supabase, authResult.userId, prdId || conversationId)
+        response = await getPRD(supabase, authResult.userId, prdId || conversationId, projectId)
         break
 
       case 'finalize':
@@ -75,11 +119,15 @@ Deno.serve(async (req) => {
         break
 
       case 'generateSuggestions':
-        response = await generateSuggestions(supabase, conversationId!, section!, context)
+        response = await generateSuggestions(supabase, prdId!, sectionId || section!, agent, context)
         break
 
       case 'validateSection':
-        response = await validatePRDSection(section!, data)
+        response = await validatePRDSectionFlexible(prdId!, sectionId!, data, supabase)
+        break
+
+      case 'getAgentStatus':
+        response = await getAgentStatus(supabase, authResult.userId, prdId!, agent)
         break
 
       default:
@@ -87,6 +135,22 @@ Deno.serve(async (req) => {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
+    }
+
+    // Broadcast PRD update via Supabase Realtime if PRD was modified
+    if (['update', 'updateSection', 'addSection', 'removeSection', 'reorderSections'].includes(action) && projectId) {
+      const channel = supabase.channel(`prd_changes:${projectId}`)
+      await channel.send({
+        type: 'broadcast',
+        event: 'prd_updated',
+        payload: {
+          prdId,
+          action,
+          sectionId,
+          userId: authResult.userId,
+          timestamp: new Date().toISOString()
+        }
+      })
     }
 
     return new Response(JSON.stringify(response), {
@@ -114,16 +178,22 @@ async function createPRD(
   // Check if a PRD already exists for this project
   const { data: existingPRD } = await supabase
     .from('prds')
-    .select('id')
+    .select('id, sections')
     .eq('project_id', projectId)
     .eq('status', 'draft')
     .single()
 
   if (existingPRD) {
-    return { prdId: existingPRD.id, existing: true }
+    return { 
+      prdId: existingPRD.id, 
+      existing: true,
+      sections: existingPRD.sections || []
+    }
   }
 
-  // Create new PRD
+  // Create new PRD with default sections
+  const defaultSections = initializePRDSections()
+  
   const { data: newPRD, error } = await supabase
     .from('prds')
     .insert({
@@ -132,7 +202,9 @@ async function createPRD(
       conversation_id: conversationId,
       title: 'Untitled PRD',
       status: 'draft',
-      creation_flow_state: 'initialization'
+      creation_flow_state: 'initialization',
+      sections: defaultSections,
+      completion_percentage: 0
     })
     .select()
     .single()
@@ -148,18 +220,23 @@ async function createPRD(
       .insert({
         prd_id: newPRD.id,
         conversation_id: conversationId,
-        current_section: 'initialization'
+        current_section: 'overview'
       })
   }
 
-  return { prdId: newPRD.id, created: true }
+  return { 
+    prdId: newPRD.id, 
+    created: true,
+    sections: defaultSections,
+    currentAgent: 'project_manager'
+  }
 }
 
-async function updatePRDSection(
+async function updatePRDSectionFlexible(
   supabase: any,
   userId: string,
   prdId: string,
-  section: string,
+  sectionId: string,
   data: any
 ) {
   // Verify user owns the PRD
@@ -174,22 +251,32 @@ async function updatePRDSection(
     throw new Error('PRD not found or access denied')
   }
 
-  // Update the specific section
-  const updateData: any = {
-    [section]: data,
-    last_section_completed: section,
+  const sections: PRDSection[] = prd.sections || []
+  const section = getSectionById(sections, sectionId)
+  
+  if (!section) {
+    throw new Error(`Section ${sectionId} not found`)
+  }
+
+  // Update section content and mark as completed
+  const updatedSections = updateSectionContent(sections, sectionId, data)
+  const completionPercentage = calculatePRDCompletion(updatedSections)
+  const currentAgent = getCurrentAgentFromSections(updatedSections)
+  const nextAgent = getNextAgent(currentAgent)
+
+  // Update PRD with new sections
+  const updateData = {
+    sections: updatedSections,
+    completion_percentage: completionPercentage,
+    last_section_completed: sectionId,
     updated_at: new Date().toISOString()
   }
 
-  // Calculate completion percentage
-  const tempPRD = { ...prd, [section]: data }
-  updateData.completion_percentage = calculateCompletion(tempPRD)
-
   // Update PRD status based on completion
-  if (updateData.completion_percentage === 100 && prd.status === 'draft') {
-    updateData.status = 'review'
+  if (completionPercentage === 100 && prd.status === 'draft') {
+    updateData['status'] = 'review'
   } else if (prd.status === 'draft') {
-    updateData.status = 'in_progress'
+    updateData['status'] = 'in_progress'
   }
 
   const { data: updatedPRD, error: updateError } = await supabase
@@ -203,32 +290,189 @@ async function updatePRDSection(
     throw new Error(`Failed to update PRD: ${updateError.message}`)
   }
 
-  // Update conversation state
-  if (prd.conversation_id) {
-    await supabase
-      .from('prd_conversation_states')
-      .update({
-        current_section: getNextSection(section),
-        section_progress: {
-          ...prd.section_progress,
-          [section]: true
-        }
-      })
-      .eq('conversation_id', prd.conversation_id)
+  // Check if current agent's required sections are complete
+  const agentComplete = areAgentSectionsComplete(updatedSections, section.agent)
+
+  return { 
+    prd: updatedPRD,
+    section: section,
+    completionPercentage,
+    currentAgent,
+    nextAgent,
+    agentComplete,
+    handoffPrompt: agentComplete ? AGENT_SECTION_CONFIGS[section.agent].handoffPrompt : null
+  }
+}
+
+async function addPRDSection(
+  supabase: any,
+  userId: string,
+  prdId: string,
+  title: string,
+  agent: AgentType,
+  required?: boolean
+) {
+  // Verify user owns the PRD
+  const { data: prd, error: prdError } = await supabase
+    .from('prds')
+    .select('*')
+    .eq('id', prdId)
+    .eq('user_id', userId)
+    .single()
+
+  if (prdError || !prd) {
+    throw new Error('PRD not found or access denied')
+  }
+
+  const sections: PRDSection[] = prd.sections || []
+  const updatedSections = addCustomSection(sections, title, agent, required)
+
+  const { data: updatedPRD, error: updateError } = await supabase
+    .from('prds')
+    .update({
+      sections: updatedSections,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', prdId)
+    .select()
+    .single()
+
+  if (updateError) {
+    throw new Error(`Failed to add section: ${updateError.message}`)
   }
 
   return { 
     prd: updatedPRD,
-    nextSection: getNextSection(section),
-    completionPercentage: updateData.completion_percentage
+    newSection: updatedSections[updatedSections.length - 1]
+  }
+}
+
+async function removePRDSection(
+  supabase: any,
+  userId: string,
+  prdId: string,
+  sectionId: string
+) {
+  // Verify user owns the PRD
+  const { data: prd, error: prdError } = await supabase
+    .from('prds')
+    .select('*')
+    .eq('id', prdId)
+    .eq('user_id', userId)
+    .single()
+
+  if (prdError || !prd) {
+    throw new Error('PRD not found or access denied')
+  }
+
+  const sections: PRDSection[] = prd.sections || []
+  const section = getSectionById(sections, sectionId)
+  
+  if (!section) {
+    throw new Error(`Section ${sectionId} not found`)
+  }
+
+  if (section.required && !section.isCustom) {
+    throw new Error('Cannot remove required default sections')
+  }
+
+  // Remove the section
+  const updatedSections = sections.filter(s => s.id !== sectionId)
+  const completionPercentage = calculatePRDCompletion(updatedSections)
+
+  const { data: updatedPRD, error: updateError } = await supabase
+    .from('prds')
+    .update({
+      sections: updatedSections,
+      completion_percentage: completionPercentage,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', prdId)
+    .select()
+    .single()
+
+  if (updateError) {
+    throw new Error(`Failed to remove section: ${updateError.message}`)
+  }
+
+  return { 
+    prd: updatedPRD,
+    removed: true
+  }
+}
+
+async function reorderPRDSections(
+  supabase: any,
+  userId: string,
+  prdId: string,
+  sectionId: string,
+  newOrder: number
+) {
+  // Verify user owns the PRD
+  const { data: prd, error: prdError } = await supabase
+    .from('prds')
+    .select('*')
+    .eq('id', prdId)
+    .eq('user_id', userId)
+    .single()
+
+  if (prdError || !prd) {
+    throw new Error('PRD not found or access denied')
+  }
+
+  const sections: PRDSection[] = prd.sections || []
+  const updatedSections = reorderSections(sections, sectionId, newOrder)
+
+  const { data: updatedPRD, error: updateError } = await supabase
+    .from('prds')
+    .update({
+      sections: updatedSections,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', prdId)
+    .select()
+    .single()
+
+  if (updateError) {
+    throw new Error(`Failed to reorder sections: ${updateError.message}`)
+  }
+
+  return { 
+    prd: updatedPRD,
+    reordered: true
   }
 }
 
 async function getPRD(
   supabase: any,
   userId: string,
-  identifier?: string
+  identifier?: string,
+  projectId?: string
 ) {
+  // If projectId is provided, get PRD by project
+  if (projectId && !identifier) {
+    const { data: prd, error } = await supabase
+      .from('prds')
+      .select('*')
+      .eq('project_id', projectId)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (error || !prd) {
+      return { prd: null }
+    }
+
+    const currentAgent = prd.sections ? getCurrentAgentFromSections(prd.sections) : 'project_manager'
+    
+    return { 
+      prd,
+      currentAgent,
+      agentPrompts: getAgentPrompts(currentAgent)
+    }
+  }
+
   if (!identifier) {
     // Get all PRDs for user
     const { data, error } = await supabase
@@ -281,7 +525,51 @@ async function getPRD(
     conversationState = data
   }
 
-  return { prd, conversationState }
+  const currentAgent = prd.sections ? getCurrentAgentFromSections(prd.sections) : 'project_manager'
+
+  return { 
+    prd, 
+    conversationState,
+    currentAgent,
+    agentPrompts: getAgentPrompts(currentAgent)
+  }
+}
+
+async function getAgentStatus(
+  supabase: any,
+  userId: string,
+  prdId: string,
+  agent?: AgentType
+) {
+  // Verify user owns the PRD
+  const { data: prd, error: prdError } = await supabase
+    .from('prds')
+    .select('*')
+    .eq('id', prdId)
+    .eq('user_id', userId)
+    .single()
+
+  if (prdError || !prd) {
+    throw new Error('PRD not found or access denied')
+  }
+
+  const sections: PRDSection[] = prd.sections || []
+  const currentAgent = agent || getCurrentAgentFromSections(sections)
+  const agentSections = sections.filter(s => s.agent === currentAgent)
+  const requiredSections = agentSections.filter(s => s.required)
+  const completedSections = requiredSections.filter(s => s.status === 'completed')
+  const isComplete = areAgentSectionsComplete(sections, currentAgent)
+  const nextAgent = getNextAgent(currentAgent)
+
+  return {
+    agent: currentAgent,
+    sections: agentSections,
+    requiredCount: requiredSections.length,
+    completedCount: completedSections.length,
+    isComplete,
+    nextAgent,
+    prompts: getAgentPrompts(currentAgent)
+  }
 }
 
 async function finalizePRD(
@@ -302,11 +590,18 @@ async function finalizePRD(
   }
 
   // Validate PRD is complete
-  const validation = validateCompletePRD(prd)
-  if (!validation.valid) {
+  const sections: PRDSection[] = prd.sections || []
+  const requiredSections = sections.filter(s => s.required)
+  const incompleteSections = requiredSections.filter(s => s.status !== 'completed')
+  
+  if (incompleteSections.length > 0) {
     return { 
       error: 'PRD is not complete',
-      validation 
+      incompleteSections: incompleteSections.map(s => ({
+        id: s.id,
+        title: s.title,
+        agent: s.agent
+      }))
     }
   }
 
@@ -317,11 +612,7 @@ async function finalizePRD(
       prd_id: prdId,
       version_number: prd.version,
       title: prd.title,
-      overview: prd.overview,
-      core_features: prd.core_features,
-      additional_features: prd.additional_features,
-      technical_requirements: prd.technical_requirements,
-      success_metrics: prd.success_metrics,
+      sections: prd.sections,
       change_summary: 'Finalized version',
       created_by: userId
     })
@@ -355,88 +646,110 @@ async function finalizePRD(
 
 async function generateSuggestions(
   supabase: any,
-  conversationId: string,
-  section: string,
-  context: any
+  prdId: string,
+  sectionId: string,
+  agent?: AgentType,
+  context?: any
 ): Promise<{ suggestions: PRDSuggestion[] }> {
-  // Get conversation state
-  const { data: conversationState } = await supabase
-    .from('prd_conversation_states')
-    .select('*')
-    .eq('conversation_id', conversationId)
+  // Get PRD sections
+  const { data: prd } = await supabase
+    .from('prds')
+    .select('sections')
+    .eq('id', prdId)
     .single()
 
+  const sections: PRDSection[] = prd?.sections || []
+  const section = getSectionById(sections, sectionId)
+  
+  if (!section) {
+    return { suggestions: [] }
+  }
+
+  const agentType = agent || section.agent
   const suggestions: PRDSuggestion[] = []
 
-  // Generate contextual suggestions based on section
-  switch (section) {
+  // Generate contextual suggestions based on section and agent
+  switch (sectionId) {
     case 'overview':
       suggestions.push(
-        { text: "It's a social app for connecting people with similar interests", category: 'example', section },
-        { text: "I want to solve the problem of finding reliable service providers", category: 'continuation', section },
-        { text: "My target users are small business owners aged 25-45", category: 'example', section }
+        { text: "It's a social app for connecting people with similar interests", category: 'example', section: sectionId, agent: agentType },
+        { text: "I want to solve the problem of finding reliable service providers", category: 'continuation', section: sectionId, agent: agentType },
+        { text: "My target users are small business owners aged 25-45", category: 'example', section: sectionId, agent: agentType }
       )
       break
 
     case 'core_features':
       suggestions.push(
-        { text: "Add user authentication with email and social login", category: 'example', section },
-        { text: "Include real-time chat messaging between users", category: 'example', section },
-        { text: "Implement push notifications for important updates", category: 'example', section }
+        { text: "Add user authentication with email and social login", category: 'example', section: sectionId, agent: agentType },
+        { text: "Include real-time chat messaging between users", category: 'example', section: sectionId, agent: agentType },
+        { text: "Implement push notifications for important updates", category: 'example', section: sectionId, agent: agentType }
       )
       break
 
-    case 'additional_features':
+    case 'ui_design_patterns':
       suggestions.push(
-        { text: "Add dark mode support for better user experience", category: 'example', section },
-        { text: "Include analytics dashboard for tracking user activity", category: 'example', section },
-        { text: "Implement offline mode with data synchronization", category: 'example', section }
+        { text: "Use a card-based layout for better mobile experience", category: 'example', section: sectionId, agent: agentType },
+        { text: "Implement a dark mode option for user preference", category: 'example', section: sectionId, agent: agentType },
+        { text: "Follow Material Design 3 guidelines for consistency", category: 'example', section: sectionId, agent: agentType }
       )
       break
 
-    case 'technical_requirements':
+    case 'technical_architecture':
       suggestions.push(
-        { text: "Needs to work on both iOS and Android platforms", category: 'continuation', section },
-        { text: "Should handle 10,000+ concurrent users", category: 'example', section },
-        { text: "Must integrate with Stripe for payment processing", category: 'example', section }
+        { text: "Use React Native for cross-platform mobile development", category: 'example', section: sectionId, agent: agentType },
+        { text: "Implement microservices architecture for scalability", category: 'example', section: sectionId, agent: agentType },
+        { text: "Use PostgreSQL with Redis for caching", category: 'example', section: sectionId, agent: agentType }
       )
       break
 
-    case 'success_metrics':
+    case 'tech_integrations':
       suggestions.push(
-        { text: "Achieve 1000 daily active users within 3 months", category: 'example', section },
-        { text: "Maintain 4.5+ star rating on app stores", category: 'example', section },
-        { text: "Reach 80% user retention rate after 30 days", category: 'example', section }
+        { text: "Integrate Stripe for payment processing", category: 'example', section: sectionId, agent: agentType },
+        { text: "Use SendGrid for transactional emails", category: 'example', section: sectionId, agent: agentType },
+        { text: "Implement Google Analytics for usage tracking", category: 'example', section: sectionId, agent: agentType }
       )
       break
 
     default:
+      // Generic suggestions
       suggestions.push(
-        { text: "Tell me more about your app idea", category: 'clarification', section: 'overview' },
-        { text: "Let's start with the main problem you're solving", category: 'continuation', section: 'overview' },
-        { text: "I have a specific feature in mind", category: 'continuation', section: 'core_features' }
+        { text: "Tell me more about this section", category: 'clarification', section: sectionId, agent: agentType },
+        { text: "Let's continue with the next requirement", category: 'continuation', section: sectionId, agent: agentType },
+        { text: "I have a specific idea for this", category: 'continuation', section: sectionId, agent: agentType }
       )
-  }
-
-  // Store suggestions in conversation state
-  if (conversationState) {
-    await supabase
-      .from('prd_conversation_states')
-      .update({
-        last_suggestions: suggestions,
-        suggestion_context: context
-      })
-      .eq('conversation_id', conversationId)
   }
 
   return { suggestions }
 }
 
-function validatePRDSection(section: string, data: any): { valid: boolean; errors: string[]; warnings: string[] } {
+async function validatePRDSectionFlexible(
+  prdId: string,
+  sectionId: string,
+  data: any,
+  supabase: any
+): Promise<{ valid: boolean; errors: string[]; warnings: string[] }> {
+  const { data: prd } = await supabase
+    .from('prds')
+    .select('sections')
+    .eq('id', prdId)
+    .single()
+
+  const sections: PRDSection[] = prd?.sections || []
+  const section = getSectionById(sections, sectionId)
+  
+  if (!section) {
+    return {
+      valid: false,
+      errors: [`Section ${sectionId} not found`],
+      warnings: []
+    }
+  }
+
   const errors: string[] = []
   const warnings: string[] = []
 
-  switch (section) {
+  // Validate based on section template structure
+  switch (sectionId) {
     case 'overview':
       if (!data.vision || data.vision.length < 10) {
         errors.push('Vision statement is too short or missing')
@@ -444,40 +757,35 @@ function validatePRDSection(section: string, data: any): { valid: boolean; error
       if (!data.problem || data.problem.length < 20) {
         errors.push('Problem statement needs more detail')
       }
-      if (!data.targetUsers || data.targetUsers.length < 10) {
-        errors.push('Target users description is required')
+      if (!data.targetUsers || data.targetUsers.length === 0) {
+        errors.push('Target users must be specified')
       }
       break
 
     case 'core_features':
-      if (!Array.isArray(data) || data.length < 3) {
+      if (!data.features || !Array.isArray(data.features) || data.features.length < 3) {
         errors.push('At least 3 core features are required')
       }
-      data.forEach((feature: any, index: number) => {
-        if (!feature.title || !feature.description) {
-          errors.push(`Feature ${index + 1} is missing title or description`)
-        }
-      })
       break
 
-    case 'additional_features':
-      if (!Array.isArray(data)) {
-        warnings.push('Additional features should be provided as a list')
+    case 'ui_design_patterns':
+      if (!data.designSystem || !data.patterns) {
+        warnings.push('Design system and patterns should be defined')
       }
       break
 
-    case 'technical_requirements':
+    case 'technical_architecture':
       if (!data.platforms || data.platforms.length === 0) {
         errors.push('Target platforms must be specified')
       }
-      if (!data.performance) {
-        warnings.push('Performance requirements not specified')
+      if (!data.techStack) {
+        errors.push('Technology stack must be defined')
       }
       break
 
-    case 'success_metrics':
-      if (!data.kpis || !Array.isArray(data.kpis) || data.kpis.length === 0) {
-        errors.push('At least one KPI must be defined')
+    case 'tech_integrations':
+      if (!data.integrations || data.integrations.length === 0) {
+        warnings.push('No integrations specified')
       }
       break
   }
@@ -489,69 +797,27 @@ function validatePRDSection(section: string, data: any): { valid: boolean; error
   }
 }
 
-function calculateCompletion(prd: any): number {
-  let completion = 0
-  
-  // Overview (20%)
-  if (prd.overview?.vision && prd.overview?.problem && prd.overview?.targetUsers) {
-    completion += 20
+// Legacy function for backward compatibility
+async function updatePRDSectionLegacy(
+  supabase: any,
+  userId: string,
+  prdId: string,
+  sectionName: string,
+  data: any
+) {
+  // Map old section names to new section IDs
+  const sectionMapping: Record<string, string> = {
+    'overview': 'overview',
+    'core_features': 'core_features',
+    'additional_features': 'additional_features',
+    'technical_requirements': 'technical_architecture',
+    'success_metrics': 'success_metrics'
   }
-  
-  // Core features (30%)
-  if (Array.isArray(prd.core_features) && prd.core_features.length >= 3) {
-    completion += 30
-  }
-  
-  // Additional features (20%)
-  if (Array.isArray(prd.additional_features) && prd.additional_features.length > 0) {
-    completion += 20
-  }
-  
-  // Technical requirements (15%)
-  if (prd.technical_requirements?.platforms && prd.technical_requirements.platforms.length > 0) {
-    completion += 15
-  }
-  
-  // Success metrics (15%)
-  if (prd.success_metrics?.kpis && Array.isArray(prd.success_metrics.kpis) && prd.success_metrics.kpis.length > 0) {
-    completion += 15
-  }
-  
-  return completion
-}
 
-function getNextSection(currentSection: string): string {
-  const sections = ['overview', 'core_features', 'additional_features', 'technical_requirements', 'success_metrics', 'review']
-  const currentIndex = sections.indexOf(currentSection)
-  
-  if (currentIndex === -1 || currentIndex === sections.length - 1) {
-    return 'review'
+  const sectionId = sectionMapping[sectionName]
+  if (!sectionId) {
+    throw new Error(`Invalid section name: ${sectionName}`)
   }
-  
-  return sections[currentIndex + 1]
-}
 
-function validateCompletePRD(prd: any): { valid: boolean; missingFields: string[] } {
-  const missingFields: string[] = []
-  
-  if (!prd.overview?.vision || !prd.overview?.problem || !prd.overview?.targetUsers) {
-    missingFields.push('overview')
-  }
-  
-  if (!Array.isArray(prd.core_features) || prd.core_features.length < 3) {
-    missingFields.push('core_features (minimum 3 required)')
-  }
-  
-  if (!prd.technical_requirements?.platforms) {
-    missingFields.push('technical_requirements.platforms')
-  }
-  
-  if (!prd.success_metrics?.kpis || !Array.isArray(prd.success_metrics.kpis) || prd.success_metrics.kpis.length === 0) {
-    missingFields.push('success_metrics.kpis')
-  }
-  
-  return {
-    valid: missingFields.length === 0,
-    missingFields
-  }
+  return updatePRDSectionFlexible(supabase, userId, prdId, sectionId, data)
 }

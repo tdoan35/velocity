@@ -1909,7 +1909,7 @@
             "id": 1,
             "title": "Fix Critical PRD Content Persistence and Context Issues",
             "description": "Address the three critical issues: PRD content not being saved during conversation, frontend context gaps, and missing PRD content in system prompts.",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "- Fix conversation/index.ts (lines 170-204) to always fetch full PRD content when projectId exists\n- Update buildSystemPrompt (lines 499-690) to include complete PRD content in agent context\n- Add automatic PRD section updates when agents collect sufficient information\n- Fix useAIChatStream.ts (line 269) to include prdId in context payload\n- Update ProjectDesign.tsx to pass PRD ID to chat interface when PRD exists\n- Integrate NotionPRDEditor.tsx with sync notifications via prdService.autoSavePRD()\n- Test that agents now have full PRD context and can reference existing content",
             "testStrategy": "- Verify conversation agents can see and reference existing PRD content\n- Test that PRD content is automatically saved during conversations\n- Validate prdId is passed correctly from frontend to backend\n- Test bidirectional sync between manual editor changes and conversation context\n- Verify system prompts include complete PRD data for agent context"
@@ -1918,7 +1918,7 @@
             "id": 2,
             "title": "Implement Flexible PRD Database Schema with JSONB",
             "description": "Create new JSONB-based flexible section structure since project is pre-launch with no existing user data to migrate.",
-            "status": "pending",
+            "status": "done",
             "dependencies": [
               1
             ],
@@ -1929,7 +1929,7 @@
             "id": 3,
             "title": "Configure Agent-Specific Default Sections",
             "description": "Implement the default section configuration system with agent-specific assignments and guided handoff sequence.",
-            "status": "pending",
+            "status": "done",
             "dependencies": [
               2
             ],
@@ -1940,7 +1940,7 @@
             "id": 4,
             "title": "Update PRD Management Edge Functions and Services",
             "description": "Refactor prd-management edge functions and prdService.ts to handle the flexible structure, including CRUD operations for sections and validation logic.",
-            "status": "pending",
+            "status": "done",
             "dependencies": [
               2,
               3
@@ -1977,7 +1977,7 @@
     ],
     "metadata": {
       "created": "2025-07-22T22:49:25.170Z",
-      "updated": "2025-08-12T00:04:47.251Z",
+      "updated": "2025-08-12T00:41:07.922Z",
       "description": "Tasks for master context"
     }
   }

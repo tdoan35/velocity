@@ -12,7 +12,7 @@ import Dropcursor from '@tiptap/extension-dropcursor'
 import Gapcursor from '@tiptap/extension-gapcursor'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
-import { prdService, type PRD, type PRDSection, type PRDFeature } from '@/services/prdService'
+import { prdService, type PRD, type PRDSection as PRDSectionType, type PRDFeature } from '@/services/prdService'
 import { PRDStatusBadge } from './PRDStatusBadge'
 import { 
   FileText, 
@@ -58,6 +58,10 @@ interface Section {
   icon: any
   isComplete: boolean
   isExpanded: boolean
+  order: number
+  agent: string
+  required: boolean
+  isCustom: boolean
 }
 
 export function NotionPRDEditor({ 
@@ -283,46 +287,35 @@ export function NotionPRDEditor({
     }
   }, [editor, prd, parseEditorContent])
 
-  // Initialize sections
+  // Initialize sections from flexible PRD structure
   useEffect(() => {
-    if (prd) {
-      setSections([
-        {
-          id: 'overview',
-          title: 'Overview',
-          icon: FileText,
-          isComplete: !!(prd.overview?.vision && prd.overview?.problem && prd.overview?.targetUsers),
-          isExpanded: true
-        },
-        {
-          id: 'core_features',
-          title: 'Core Features',
-          icon: Sparkles,
-          isComplete: Array.isArray(prd.core_features) && prd.core_features.length >= 3,
-          isExpanded: true
-        },
-        {
-          id: 'additional_features',
-          title: 'Additional Features',
-          icon: Plus,
-          isComplete: Array.isArray(prd.additional_features) && prd.additional_features.length > 0,
-          isExpanded: true
-        },
-        {
-          id: 'technical_requirements',
-          title: 'Technical Requirements',
-          icon: Settings,
-          isComplete: !!(prd.technical_requirements?.platforms && prd.technical_requirements.platforms.length > 0),
-          isExpanded: true
-        },
-        {
-          id: 'success_metrics',
-          title: 'Success Metrics',
-          icon: Target,
-          isComplete: !!(prd.success_metrics?.kpis && prd.success_metrics.kpis.length > 0),
-          isExpanded: true
+    if (prd && prd.sections) {
+      const mappedSections = prd.sections.map((section: any) => {
+        // Map agent-specific icons
+        const iconMap: Record<string, any> = {
+          'overview': FileText,
+          'core_features': Sparkles,
+          'additional_features': Plus,
+          'technical_architecture': Settings,
+          'ui_design_patterns': Settings,
+          'ux_flows': Target,
+          'tech_integrations': Settings
         }
-      ])
+        
+        return {
+          id: section.id,
+          title: section.title,
+          icon: iconMap[section.id] || FileText,
+          isComplete: section.status === 'completed',
+          isExpanded: true,
+          order: section.order,
+          agent: section.agent,
+          required: section.required,
+          isCustom: section.isCustom || false
+        }
+      }).sort((a: Section, b: Section) => a.order - b.order)
+      
+      setSections(mappedSections)
       
       // Set editor content
       if (editor) {
@@ -362,68 +355,144 @@ export function NotionPRDEditor({
   const formatPRDContent = (prd: PRD): string => {
     let content = `<h1>${prd.title}</h1>`
     
-    // Overview Section
-    content += '<h2 id="section-overview">📋 Overview</h2>'
-    if (prd.overview?.vision) {
-      content += `<h3>Vision</h3><p>${prd.overview.vision}</p>`
-    }
-    if (prd.overview?.problem) {
-      content += `<h3>Problem Statement</h3><p>${prd.overview.problem}</p>`
-    }
-    if (prd.overview?.targetUsers) {
-      content += `<h3>Target Users</h3><p>${prd.overview.targetUsers}</p>`
-    } else {
-      content += '<p>Add Overview...</p>'
+    if (!prd.sections || prd.sections.length === 0) {
+      content += '<p>No sections defined yet.</p>'
+      return content
     }
     
-    // Core Features
-    content += '<h2 id="section-core_features">✨ Core Features</h2>'
-    if (prd.core_features && prd.core_features.length > 0) {
-      prd.core_features.forEach((feature, index) => {
-        content += `<h3>${index + 1}. ${feature.title}</h3>`
-        content += `<p>${feature.description}</p>`
-      })
-    } else {
-      content += '<p>Add core features to your product...</p>'
+    // Sort sections by order
+    const sortedSections = [...prd.sections].sort((a: any, b: any) => a.order - b.order)
+    
+    // Icon map for sections
+    const iconMap: Record<string, string> = {
+      'overview': '📋',
+      'core_features': '✨',
+      'additional_features': '➕',
+      'technical_architecture': '⚙️',
+      'ui_design_patterns': '🎨',
+      'ux_flows': '🔄',
+      'tech_integrations': '🔌'
     }
     
-    // Additional Features
-    content += '<h2 id="section-additional_features">➕ Additional Features</h2>'
-    if (prd.additional_features && prd.additional_features.length > 0) {
-      prd.additional_features.forEach((feature, index) => {
-        content += `<h3>${index + 1}. ${feature.title}</h3>`
-        content += `<p>${feature.description}</p>`
-      })
-    } else {
-      content += '<p>Add additional features...</p>'
-    }
-    
-    // Technical Requirements
-    content += '<h2 id="section-technical_requirements">⚙️ Technical Requirements</h2>'
-    if (prd.technical_requirements?.platforms) {
-      content += `<h3>Platforms</h3><ul>${prd.technical_requirements.platforms.map(p => `<li>${p}</li>`).join('')}</ul>`
-    }
-    if (prd.technical_requirements?.performance) {
-      content += `<h3>Performance</h3><p>${prd.technical_requirements.performance}</p>`
-    } else {
-      content += '<p>Add technical requirements features...</p>'
-    }
-    
-    // Success Metrics
-    content += '<h2 id="section-success_metrics">🎯 Success Metrics</h2>'
-    if (prd.success_metrics?.kpis && prd.success_metrics.kpis.length > 0) {
-      content += '<h3>Key Performance Indicators</h3><ul>'
-      prd.success_metrics.kpis.forEach(kpi => {
-        content += `<li><strong>${kpi.metric}:</strong> ${kpi.target}`
-        if (kpi.timeframe) {
-          content += ` (${kpi.timeframe})`
+    // Render each section
+    sortedSections.forEach((section: any) => {
+      const icon = iconMap[section.id] || '📄'
+      content += `<h2 id="section-${section.id}">${icon} ${section.title}</h2>`
+      
+      // Render section content based on type
+      if (section.content) {
+        switch (section.id) {
+          case 'overview':
+            if (section.content.vision) {
+              content += `<h3>Vision</h3><p>${section.content.vision}</p>`
+            }
+            if (section.content.problem) {
+              content += `<h3>Problem Statement</h3><p>${section.content.problem}</p>`
+            }
+            if (section.content.targetUsers && section.content.targetUsers.length > 0) {
+              content += `<h3>Target Users</h3><ul>`
+              section.content.targetUsers.forEach((user: string) => {
+                content += `<li>${user}</li>`
+              })
+              content += '</ul>'
+            }
+            if (!section.content.vision && !section.content.problem) {
+              content += '<p>Add overview details...</p>'
+            }
+            break
+            
+          case 'core_features':
+          case 'additional_features':
+            if (section.content.features && section.content.features.length > 0) {
+              section.content.features.forEach((feature: any, index: number) => {
+                content += `<h3>${index + 1}. ${feature.title || feature.name || 'Feature'}</h3>`
+                content += `<p>${feature.description || ''}</p>`
+              })
+            } else {
+              content += '<p>Add features...</p>'
+            }
+            break
+            
+          case 'technical_architecture':
+            if (section.content.platforms && section.content.platforms.length > 0) {
+              content += `<h3>Platforms</h3><ul>`
+              section.content.platforms.forEach((platform: string) => {
+                content += `<li>${platform}</li>`
+              })
+              content += '</ul>'
+            }
+            if (section.content.techStack) {
+              content += '<h3>Technology Stack</h3>'
+              if (section.content.techStack.frontend?.length > 0) {
+                content += '<h4>Frontend</h4><ul>'
+                section.content.techStack.frontend.forEach((tech: string) => {
+                  content += `<li>${tech}</li>`
+                })
+                content += '</ul>'
+              }
+              if (section.content.techStack.backend?.length > 0) {
+                content += '<h4>Backend</h4><ul>'
+                section.content.techStack.backend.forEach((tech: string) => {
+                  content += `<li>${tech}</li>`
+                })
+                content += '</ul>'
+              }
+            }
+            if (!section.content.platforms && !section.content.techStack) {
+              content += '<p>Define technical architecture...</p>'
+            }
+            break
+            
+          case 'ui_design_patterns':
+            if (section.content.patterns && section.content.patterns.length > 0) {
+              content += '<h3>Design Patterns</h3><ul>'
+              section.content.patterns.forEach((pattern: any) => {
+                content += `<li>${pattern.name || pattern}</li>`
+              })
+              content += '</ul>'
+            } else {
+              content += '<p>Define UI design patterns...</p>'
+            }
+            break
+            
+          case 'ux_flows':
+            if (section.content.userJourneys && section.content.userJourneys.length > 0) {
+              content += '<h3>User Journeys</h3><ul>'
+              section.content.userJourneys.forEach((journey: any) => {
+                content += `<li>${journey.name || journey}</li>`
+              })
+              content += '</ul>'
+            } else {
+              content += '<p>Define user experience flows...</p>'
+            }
+            break
+            
+          case 'tech_integrations':
+            if (section.content.integrations && section.content.integrations.length > 0) {
+              content += '<h3>Integrations</h3><ul>'
+              section.content.integrations.forEach((integration: any) => {
+                content += `<li>${integration.name || integration}</li>`
+              })
+              content += '</ul>'
+            } else {
+              content += '<p>Configure integrations...</p>'
+            }
+            break
+            
+          default:
+            // For custom sections, display content as JSON or text
+            if (typeof section.content === 'string') {
+              content += `<p>${section.content}</p>`
+            } else if (Object.keys(section.content).length > 0) {
+              content += '<pre>' + JSON.stringify(section.content, null, 2) + '</pre>'
+            } else {
+              content += '<p>Add content...</p>'
+            }
         }
-        content += '</li>'
-      })
-      content += '</ul>'
-    } else {
-      content += '<p>Define success metrics...</p>'
-    }
+      } else {
+        content += '<p>Section content pending...</p>'
+      }
+    })
     
     return content
   }
@@ -492,17 +561,24 @@ export function NotionPRDEditor({
   }
 
   const scrollToSection = (sectionId: string) => {
-    // Map section IDs to their heading text
-    const sectionHeadings: Record<string, string> = {
-      'overview': '📋 Overview',
-      'core_features': '✨ Core Features',
-      'additional_features': '➕ Additional Features',
-      'technical_requirements': '⚙️ Technical Requirements',
-      'success_metrics': '🎯 Success Metrics'
+    // Find the section in our sections array to get its title
+    const section = sections.find(s => s.id === sectionId)
+    if (!section) return
+    
+    // Icon map for sections
+    const iconMap: Record<string, string> = {
+      'overview': '📋',
+      'core_features': '✨',
+      'additional_features': '➕',
+      'technical_architecture': '⚙️',
+      'ui_design_patterns': '🎨',
+      'ux_flows': '🔄',
+      'tech_integrations': '🔌'
     }
     
-    const headingText = sectionHeadings[sectionId]
-    if (!headingText) return
+    const icon = iconMap[sectionId] || '📄'
+    const headingText = `${icon} ${section.title}`
+    
     
     // Find the heading element by its text content
     const headings = document.querySelectorAll('h2')
