@@ -68,7 +68,8 @@
       "Bash(do if [ -f \"$file\" ])",
       "Bash(then sed -i \"s/^import React\\b[^;]*$//\" \"$file\")",
       "Bash(fi)",
-      "Bash(done)"
+      "Bash(done)",
+      "mcp__taskmaster-ai__expand_task"
     ]
   },
   "enableAllProjectMcpServers": true,
