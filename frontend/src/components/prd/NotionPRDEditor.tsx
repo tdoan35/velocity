@@ -13,6 +13,7 @@ import Gapcursor from '@tiptap/extension-gapcursor'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
 import { prdService, type PRD, type PRDSection as PRDSectionType, type PRDFeature } from '@/services/prdService'
+import { supabase } from '@/lib/supabase'
 import { PRDStatusBadge } from './PRDStatusBadge'
 import { 
   FileText, 
@@ -40,10 +41,178 @@ import {
   Plus,
   Hash,
   PanelRight,
-  GripVertical
+  GripVertical,
+  Palette,
+  Users,
+  Building2,
+  Plug
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BlockControls } from './BlockControls'
+
+// Generate default PRD content with placeholder text
+const getDefaultPRDContent = (): string => {
+  let content = ''
+  
+  // Overview Section
+  content += '<h2 id="section-overview">📋 Overview</h2>'
+  content += '<p class="placeholder-text">Start by defining your project vision and problem statement. The Project Manager agent will help you articulate:</p>'
+  content += '<ul>'
+  content += '<li>Your product vision and goals</li>'
+  content += '<li>The problem you\'re solving</li>'
+  content += '<li>Your target users and their needs</li>'
+  content += '<li>Key business objectives</li>'
+  content += '</ul>'
+  content += '<p><em>💡 Tip: Use the chat to work with the Project Manager agent to fill out this section.</em></p>'
+  
+  // Core Features
+  content += '<h2 id="section-core_features">✨ Core Features</h2>'
+  content += '<p class="placeholder-text">Define the essential features that deliver your product\'s core value:</p>'
+  content += '<ul>'
+  content += '<li>Feature 1: Primary user functionality</li>'
+  content += '<li>Feature 2: Key differentiator</li>'
+  content += '<li>Feature 3: Essential capability</li>'
+  content += '</ul>'
+  content += '<p><em>💡 The Project Manager will help you prioritize and define 3-5 core features.</em></p>'
+  
+  // Additional Features
+  content += '<h2 id="section-additional_features">➕ Additional Features</h2>'
+  content += '<p class="placeholder-text">Nice-to-have features for future iterations:</p>'
+  content += '<ul>'
+  content += '<li>Enhanced functionality</li>'
+  content += '<li>Premium features</li>'
+  content += '<li>Future roadmap items</li>'
+  content += '</ul>'
+  
+  // UI Design Patterns
+  content += '<h2 id="section-ui_design_patterns">🎨 UI Design Patterns</h2>'
+  content += '<p class="placeholder-text">The Design Assistant will help you define:</p>'
+  content += '<ul>'
+  content += '<li>Design system and component library</li>'
+  content += '<li>Color schemes and typography</li>'
+  content += '<li>Layout patterns and grids</li>'
+  content += '<li>Accessibility guidelines</li>'
+  content += '</ul>'
+  content += '<p><em>💡 Work with the Design Assistant to create a cohesive visual language.</em></p>'
+  
+  // UX Flows
+  content += '<h2 id="section-ux_flows">🔄 User Experience Flows</h2>'
+  content += '<p class="placeholder-text">Map out how users will interact with your application:</p>'
+  content += '<ul>'
+  content += '<li>User journey maps</li>'
+  content += '<li>Navigation structure</li>'
+  content += '<li>Interaction patterns</li>'
+  content += '<li>Responsive design strategy</li>'
+  content += '</ul>'
+  
+  // Technical Architecture
+  content += '<h2 id="section-technical_architecture">⚙️ Technical Architecture</h2>'
+  content += '<p class="placeholder-text">The Engineering Assistant will help you plan:</p>'
+  content += '<ul>'
+  content += '<li>Technology stack selection</li>'
+  content += '<li>System architecture patterns</li>'
+  content += '<li>Database design</li>'
+  content += '<li>API structure</li>'
+  content += '<li>Security considerations</li>'
+  content += '<li>Scalability planning</li>'
+  content += '</ul>'
+  content += '<p><em>💡 Define the technical foundation with the Engineering Assistant.</em></p>'
+  
+  // Tech Integrations
+  content += '<h2 id="section-tech_integrations">🔌 Tech Integrations</h2>'
+  content += '<p class="placeholder-text">The Config Helper will assist with:</p>'
+  content += '<ul>'
+  content += '<li>Third-party service integrations</li>'
+  content += '<li>API configurations</li>'
+  content += '<li>Environment setup</li>'
+  content += '<li>Deployment configurations</li>'
+  content += '<li>Monitoring and analytics setup</li>'
+  content += '</ul>'
+  content += '<p><em>💡 Configure all necessary integrations with the Config Helper.</em></p>'
+  
+  return content
+}
+
+// Default sections structure matching the agent flow
+const getDefaultSections = (): Section[] => [
+  {
+    id: 'overview',
+    title: 'Overview',
+    icon: FileText,
+    isComplete: false,
+    isExpanded: true,
+    order: 1,
+    agent: 'project_manager',
+    required: true,
+    isCustom: false
+  },
+  {
+    id: 'core_features',
+    title: 'Core Features',
+    icon: Sparkles,
+    isComplete: false,
+    isExpanded: true,
+    order: 2,
+    agent: 'project_manager',
+    required: true,
+    isCustom: false
+  },
+  {
+    id: 'additional_features',
+    title: 'Additional Features',
+    icon: Plus,
+    isComplete: false,
+    isExpanded: true,
+    order: 3,
+    agent: 'project_manager',
+    required: false,
+    isCustom: false
+  },
+  {
+    id: 'ui_design_patterns',
+    title: 'UI Design Patterns',
+    icon: Palette,
+    isComplete: false,
+    isExpanded: true,
+    order: 4,
+    agent: 'design_assistant',
+    required: true,
+    isCustom: false
+  },
+  {
+    id: 'ux_flows',
+    title: 'User Experience Flows',
+    icon: Users,
+    isComplete: false,
+    isExpanded: true,
+    order: 5,
+    agent: 'design_assistant',
+    required: true,
+    isCustom: false
+  },
+  {
+    id: 'technical_architecture',
+    title: 'Technical Architecture',
+    icon: Building2,
+    isComplete: false,
+    isExpanded: true,
+    order: 6,
+    agent: 'engineering_assistant',
+    required: true,
+    isCustom: false
+  },
+  {
+    id: 'tech_integrations',
+    title: 'Tech Integrations',
+    icon: Plug,
+    isComplete: false,
+    isExpanded: true,
+    order: 7,
+    agent: 'config_helper',
+    required: true,
+    isCustom: false
+  }
+]
 
 interface NotionPRDEditorProps {
   projectId: string
@@ -214,8 +383,8 @@ export function NotionPRDEditor({
   })
 
   // Define parseEditorContent before it's used in useEffect
-  const parseEditorContent = useCallback((editor: any): Partial<PRD> => {
-    if (!editor) return {}
+  const parseEditorContent = useCallback((editor: any, currentPRD: PRD | null): Partial<PRD> => {
+    if (!editor || !currentPRD) return {}
     
     const html = editor.getHTML()
     const parser = new DOMParser()
@@ -225,37 +394,113 @@ export function NotionPRDEditor({
     const titleElement = doc.querySelector('h1')
     const title = titleElement?.textContent || 'Untitled PRD'
     
-    // Extract overview section
-    const overview: any = {}
-    const visionHeader = Array.from(doc.querySelectorAll('h3')).find(h => h.textContent === 'Vision')
-    if (visionHeader) {
-      const visionPara = visionHeader.nextElementSibling
-      if (visionPara && visionPara.tagName === 'P') {
-        overview.vision = visionPara.textContent || ''
-      }
+    // Don't parse sections if they don't exist yet - this prevents overwriting
+    // the sections with empty data when showing placeholder content
+    if (!currentPRD.sections || currentPRD.sections.length === 0) {
+      return { title }
     }
     
-    const problemHeader = Array.from(doc.querySelectorAll('h3')).find(h => h.textContent === 'Problem Statement')
-    if (problemHeader) {
-      const problemPara = problemHeader.nextElementSibling
-      if (problemPara && problemPara.tagName === 'P') {
-        overview.problem = problemPara.textContent || ''
+    // Parse sections content by matching h2 headers with section titles
+    const updatedSections = currentPRD.sections.map((section: any) => {
+      // Look for section by its title text in h2 elements
+      const sectionHeaders = Array.from(doc.querySelectorAll('h2'))
+      const sectionHeader = sectionHeaders.find(h2 => {
+        const headerText = h2.textContent || ''
+        // Remove emoji and whitespace for comparison
+        const cleanHeaderText = headerText.replace(/[^\w\s]/g, '').trim().toLowerCase()
+        const cleanSectionTitle = section.title.replace(/[^\w\s]/g, '').trim().toLowerCase()
+        return cleanHeaderText.includes(cleanSectionTitle)
+      })
+      
+      if (!sectionHeader) return section
+      
+      // Clone the section to avoid mutation
+      const updatedSection = { ...section }
+      
+      // Get all content between this h2 and the next h2
+      const contentElements: Element[] = []
+      let nextElement = sectionHeader.nextElementSibling
+      while (nextElement && nextElement.tagName !== 'H2') {
+        contentElements.push(nextElement)
+        nextElement = nextElement.nextElementSibling
       }
-    }
-    
-    const targetUsersHeader = Array.from(doc.querySelectorAll('h3')).find(h => h.textContent === 'Target Users')
-    if (targetUsersHeader) {
-      const targetUsersPara = targetUsersHeader.nextElementSibling
-      if (targetUsersPara && targetUsersPara.tagName === 'P') {
-        overview.targetUsers = targetUsersPara.textContent || ''
+      
+      // Parse content based on section type
+      switch (section.id) {
+        case 'overview': {
+          const content: any = {}
+          const visionHeader = contentElements.find(el => el.tagName === 'H3' && el.textContent === 'Vision')
+          if (visionHeader) {
+            const visionPara = visionHeader.nextElementSibling
+            if (visionPara && visionPara.tagName === 'P') {
+              content.vision = visionPara.textContent || ''
+            }
+          }
+          
+          const problemHeader = Array.from(doc.querySelectorAll('h3')).find(h => h.textContent === 'Problem Statement')
+          if (problemHeader) {
+            const problemPara = problemHeader.nextElementSibling
+            if (problemPara && problemPara.tagName === 'P') {
+              content.problem = problemPara.textContent || ''
+            }
+          }
+          
+          const targetUsersHeader = Array.from(doc.querySelectorAll('h3')).find(h => h.textContent === 'Target Users')
+          if (targetUsersHeader) {
+            const targetUsersList = targetUsersHeader.nextElementSibling
+            if (targetUsersList && targetUsersList.tagName === 'UL') {
+              const users = Array.from(targetUsersList.querySelectorAll('li')).map(li => li.textContent || '')
+              content.targetUsers = users
+            }
+          }
+          
+          if (Object.keys(content).length > 0) {
+            updatedSection.content = content
+            updatedSection.status = 'in_progress'
+          }
+          break
+        }
+        
+        case 'core_features':
+        case 'additional_features': {
+          // Parse features from the section
+          const features: any[] = []
+          let currentH3 = sectionElement.nextElementSibling
+          
+          while (currentH3 && currentH3.tagName === 'H3') {
+            const featureTitle = currentH3.textContent?.replace(/^\d+\.\s*/, '') || ''
+            const featureDesc = currentH3.nextElementSibling?.tagName === 'P' ? 
+              currentH3.nextElementSibling.textContent || '' : ''
+            
+            if (featureTitle && !featureTitle.includes('Feature')) {
+              features.push({
+                title: featureTitle,
+                description: featureDesc
+              })
+            }
+            
+            currentH3 = currentH3.nextElementSibling?.nextElementSibling || null
+          }
+          
+          if (features.length > 0) {
+            updatedSection.content = { features }
+            updatedSection.status = 'in_progress'
+          }
+          break
+        }
+        
+        // Add more section parsers as needed
+        default:
+          // For other sections, just mark as in_progress if content changed
+          break
       }
-    }
+      
+      return updatedSection
+    })
     
-    // For now, we'll just parse the title and overview
-    // More complex parsing for features, technical requirements, etc. can be added later
     return {
       title,
-      overview: Object.keys(overview).length > 0 ? overview : undefined
+      sections: updatedSections
     }
   }, [])
 
@@ -274,7 +519,7 @@ export function NotionPRDEditor({
       
       // Save any pending changes on unmount
       if (editor && prd && prd.id) {
-        const parsedContent = parseEditorContent(editor)
+        const parsedContent = parseEditorContent(editor, prd)
         const updatedPRD = {
           ...prd,
           ...parsedContent
@@ -287,35 +532,41 @@ export function NotionPRDEditor({
     }
   }, [editor, prd, parseEditorContent])
 
-  // Initialize sections from flexible PRD structure
+  // Initialize sections from flexible PRD structure or use defaults
   useEffect(() => {
-    if (prd && prd.sections) {
-      const mappedSections = prd.sections.map((section: any) => {
-        // Map agent-specific icons
-        const iconMap: Record<string, any> = {
-          'overview': FileText,
-          'core_features': Sparkles,
-          'additional_features': Plus,
-          'technical_architecture': Settings,
-          'ui_design_patterns': Settings,
-          'ux_flows': Target,
-          'tech_integrations': Settings
-        }
+    if (prd) {
+      // If PRD has sections, use them
+      if (prd.sections && prd.sections.length > 0) {
+        const mappedSections = prd.sections.map((section: any) => {
+          // Map agent-specific icons
+          const iconMap: Record<string, any> = {
+            'overview': FileText,
+            'core_features': Sparkles,
+            'additional_features': Plus,
+            'technical_architecture': Building2,
+            'ui_design_patterns': Palette,
+            'ux_flows': Users,
+            'tech_integrations': Plug
+          }
+          
+          return {
+            id: section.id,
+            title: section.title,
+            icon: iconMap[section.id] || FileText,
+            isComplete: section.status === 'completed',
+            isExpanded: true,
+            order: section.order,
+            agent: section.agent,
+            required: section.required,
+            isCustom: section.isCustom || false
+          }
+        }).sort((a: Section, b: Section) => a.order - b.order)
         
-        return {
-          id: section.id,
-          title: section.title,
-          icon: iconMap[section.id] || FileText,
-          isComplete: section.status === 'completed',
-          isExpanded: true,
-          order: section.order,
-          agent: section.agent,
-          required: section.required,
-          isCustom: section.isCustom || false
-        }
-      }).sort((a: Section, b: Section) => a.order - b.order)
-      
-      setSections(mappedSections)
+        setSections(mappedSections)
+      } else {
+        // Use default sections if none exist
+        setSections(getDefaultSections())
+      }
       
       // Set editor content
       if (editor) {
@@ -339,6 +590,20 @@ export function NotionPRDEditor({
         throw error
       }
 
+      // If PRD exists but has no sections, initialize them
+      if (existingPRD && (!existingPRD.sections || existingPRD.sections.length === 0)) {
+        const { data, error: initError } = await supabase.functions.invoke('prd-management', {
+          body: {
+            action: 'initializeSections',
+            prdId: existingPRD.id
+          }
+        })
+        
+        if (!initError && data) {
+          existingPRD.sections = data.sections
+        }
+      }
+
       setPRD(existingPRD)
     } catch (error) {
       console.error('Error loading PRD:', error)
@@ -353,10 +618,20 @@ export function NotionPRDEditor({
   }
 
   const formatPRDContent = (prd: PRD): string => {
+    // Check if we have stored editor content in any section
+    if (prd.sections && prd.sections.length > 0) {
+      const firstSection = prd.sections[0] as any
+      if (firstSection._editorContent) {
+        // Return the stored editor content directly
+        return firstSection._editorContent
+      }
+    }
+    
     let content = `<h1>${prd.title}</h1>`
     
+    // If no sections exist, show default structure with placeholder content
     if (!prd.sections || prd.sections.length === 0) {
-      content += '<p>No sections defined yet.</p>'
+      content += getDefaultPRDContent()
       return content
     }
     
@@ -510,21 +785,38 @@ export function NotionPRDEditor({
     
     // Set a new auto-save timer (debounced to 2 seconds after user stops typing)
     autoSaveTimerRef.current = setTimeout(async () => {
-      // Parse the editor content and create updated PRD
-      const parsedContent = parseEditorContent(editor)
+      // Get the raw HTML content from the editor
+      const htmlContent = editor.getHTML()
+      
+      // Extract just the title for basic PRD fields
+      const parser = new DOMParser()
+      const doc = parser.parseFromString(htmlContent, 'text/html')
+      const titleElement = doc.querySelector('h1')
+      const title = titleElement?.textContent || prd.title || 'Untitled PRD'
+      
+      // Create a special sections array that preserves the editor content
+      // We store the HTML in a special _editorContent property
+      const sectionsWithContent = prd.sections ? prd.sections.map((section: any) => ({
+        ...section,
+        _editorContent: htmlContent // Store the full editor HTML here
+      })) : []
+      
+      // Update the PRD with the new title and sections containing editor content
       const updatedPRD = {
         ...prd,
-        ...parsedContent
+        title,
+        sections: sectionsWithContent
       }
       
-      // Update the PRD state only after debounce
+      // Update the PRD state
       setPRD(updatedPRD)
       
       // Auto-save to database
       if (updatedPRD.id) {
         setIsAutoSaving(true)
         try {
-          await prdService.autoSavePRD(updatedPRD.id, updatedPRD)
+          // Save the entire PRD including sections with editor content
+          await prdService.updatePRD(updatedPRD.id, updatedPRD)
         } catch (error) {
           console.error('Auto-save failed:', error)
           toast({
@@ -537,7 +829,7 @@ export function NotionPRDEditor({
         }
       }
     }, 2000) // 2 second debounce
-  }, [prd, editor, parseEditorContent, toast])
+  }, [prd, editor, toast])
 
 
   const handleExportMarkdown = () => {
@@ -762,9 +1054,9 @@ export function NotionPRDEditor({
 
       {/* Main Content Area with Editor and TOC */}
       <div className="flex-1 relative overflow-hidden">
-        {/* Editor Content - Full width */}
-        <div className="absolute inset-0 overflow-y-auto" ref={editorRef}>
-          <div className="max-w-4xl mx-auto px-24 relative" ref={editorContentRef}>
+        {/* Editor Content - Full width with muted background */}
+        <div className="absolute inset-0 overflow-y-auto bg-muted/50" ref={editorRef}>
+          <div className="max-w-4xl mx-auto px-24 py-8 relative" ref={editorContentRef}>
             {/* Block Controls for drag and insert - positioned absolutely within the padded container */}
             <BlockControls editor={editor} containerRef={editorContentRef} />
             
@@ -1132,6 +1424,25 @@ const notionStyles = `
 
 .dark .notion-content .is-empty::before {
   color: rgba(255, 255, 255, 0.3);
+}
+
+/* Placeholder text styling for empty sections */
+.notion-content .placeholder-text {
+  color: rgba(55, 53, 47, 0.5);
+  font-style: italic;
+}
+
+.dark .notion-content .placeholder-text {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.notion-content em {
+  color: rgba(55, 53, 47, 0.7);
+  font-size: 0.9em;
+}
+
+.dark .notion-content em {
+  color: rgba(255, 255, 255, 0.7);
 }
 
 [data-active="true"] {

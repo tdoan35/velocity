@@ -1895,7 +1895,7 @@
         "id": 22,
         "title": "Implement Flexible PRD System with Multi-Agent Collaboration and Real-time Sync",
         "description": "Overhaul the PRD system to support flexible document structure, multi-agent collaboration, and real-time synchronization between the PRD editor and conversation agents. Critical issues identified: PRD content not automatically saved during conversation, frontend context gaps (missing prdId), and PRD content not included in system prompts for proper agent context.",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           17,
           20,
@@ -1952,7 +1952,7 @@
             "id": 5,
             "title": "Enhance PRD Editor Component for Flexible Structure",
             "description": "Update the TipTap-based PRD editor to support the flexible section structure with drag-and-drop reordering, section creation/deletion, and real-time updates.",
-            "status": "pending",
+            "status": "done",
             "dependencies": [
               4
             ],
@@ -1963,7 +1963,7 @@
             "id": 6,
             "title": "Implement Bidirectional Sync and Multi-Agent Flow",
             "description": "Create comprehensive sync service and guided multi-agent conversation flow with proper section management and real-time synchronization.",
-            "status": "pending",
+            "status": "done",
             "dependencies": [
               1,
               4,
@@ -1973,11 +1973,121 @@
             "testStrategy": "- Test real-time sync between multiple clients\n- Validate conflict resolution with simultaneous edits\n- Test agent introduction prompts for clarity and section explanation\n- Verify guided handoff sequence works correctly\n- Test context-aware prompts with various PRD states\n- Validate conversation state tracking across sessions\n- Test integration of all components in end-to-end scenarios"
           }
         ]
+      },
+      {
+        "id": 23,
+        "title": "Implement Block-Based PRD Editor Architecture with Section-Aware Saving",
+        "description": "Refactor the PRD Editor to use a Notion-like block-based architecture with structured sections, enabling section-aware auto-saving and maintaining proper data schema throughout the editing flow.",
+        "details": "## Implementation Details\n\n1. **Create Core Block Architecture**\n   - Develop a `SectionBlock` base component that serves as the foundation for all section types\n   - Implement section-specific editor components (e.g., `OverviewEditor`, `FeaturesListEditor`) that extend the base block\n   - Add data attributes (`data-section-id`, `data-field`) to maintain structure during editing\n   ```tsx\n   interface SectionBlockProps {\n     id: string;\n     type: SectionType;\n     content: any;\n     ownership: AgentType;\n     isRequired: boolean;\n     onUpdate: (id: string, content: any) => void;\n   }\n   ```\n\n2. **Section Data Schema Implementation**\n   - Define Zod schemas for each section type to ensure data integrity\n   ```typescript\n   const OverviewSectionSchema = z.object({\n     vision: z.string(),\n     problem: z.string(),\n     targetUsers: z.array(z.string())\n   });\n   \n   const FeatureSectionSchema = z.object({\n     title: z.string(),\n     description: z.string(),\n     priority: z.enum([\"high\", \"medium\", \"low\"]).optional()\n   });\n   ```\n   - Create type definitions for all section types based on schemas\n   - Implement validation utilities to ensure data conforms to schema before saving\n\n3. **Section-Aware Auto-Save System**\n   - Implement debounced section-level saves instead of full document saves\n   ```typescript\n   const debouncedSaveSection = useCallback(\n     debounce((sectionId: string, content: any) => {\n       saveSectionContent(projectId, prdId, sectionId, content);\n     }, 1500),\n     [projectId, prdId]\n   );\n   ```\n   - Create a `saveSectionContent` edge function that only updates the specified section\n   - Add optimistic updates to prevent UI lag during saves\n   - Implement error handling with retry logic for failed saves\n\n4. **Notion-like UX Components**\n   - Create drag handles for section reordering\n   - Implement slash command menu for adding new sections\n   ```tsx\n   const SlashCommandMenu = ({ onSelect, position }) => {\n     const commands = [\n       { id: 'overview', label: 'Overview Section' },\n       { id: 'features', label: 'Features List' },\n       { id: 'custom', label: 'Custom Section...' }\n     ];\n     // Implementation\n   };\n   ```\n   - Add floating toolbar for text formatting within sections\n   - Implement block actions menu (⋮⋮) for section operations\n\n5. **Section Ownership and Permissions**\n   - Add visual badges to indicate agent ownership of sections\n   - Implement permission logic to control which sections can be deleted vs. cleared\n   - Create section visibility controls for hiding/showing sections\n\n6. **Smart Paste Detection**\n   - Implement content transformation based on section type\n   ```typescript\n   const handlePaste = (e: ClipboardEvent, sectionType: SectionType) => {\n     const text = e.clipboardData?.getData('text/plain');\n     if (!text) return;\n     \n     // Transform content based on section type\n     switch (sectionType) {\n       case 'features':\n         // Parse as feature list if possible\n         break;\n       case 'overview':\n         // Parse as overview content\n         break;\n       // Other section types\n     }\n   };\n   ```\n   - Add detection for common formats (lists, tables, etc.)\n\n7. **Drag & Drop Reordering with Constraints**\n   - Implement drag & drop using react-beautiful-dnd or similar library\n   - Add constraint logic to prevent deletion of required sections\n   - Create visual indicators for drag targets and invalid drops\n\n8. **Custom Section Creation**\n   - Develop UI for defining custom section structure\n   - Implement dynamic schema generation for custom sections\n   - Create persistence layer for custom section definitions\n\n9. **Integration with Existing PRD System**\n   - Refactor the current PRD editor to use the new block-based architecture\n   - Ensure backward compatibility with existing PRD data\n   - Implement migration utilities for converting old format to new structure",
+        "testStrategy": "## Test Strategy\n\n1. **Unit Testing Block Components**\n   - Test each section block component in isolation\n   - Verify section blocks correctly render and edit their specific data types\n   - Test validation logic for each section schema\n   - Validate that section blocks maintain data integrity during edits\n   ```typescript\n   test('OverviewSection maintains data structure during edits', () => {\n     // Test implementation\n   });\n   ```\n\n2. **Section-Aware Auto-Save Testing**\n   - Test debounced save functionality with various edit patterns\n   - Verify only modified sections are sent to the backend\n   - Test error handling and retry logic for failed saves\n   - Validate optimistic updates work correctly\n   - Simulate network failures to ensure data isn't lost\n\n3. **UX Component Testing**\n   - Test slash command menu functionality\n   - Verify drag handles correctly initiate section reordering\n   - Test floating toolbar appears in the correct position\n   - Validate block actions menu shows appropriate options based on section type\n\n4. **Integration Testing**\n   - Test full PRD editing flow from creation to completion\n   - Verify section changes persist correctly across page refreshes\n   - Test interactions between different section types\n   - Validate that the PRD maintains its structure during complex editing scenarios\n\n5. **Smart Paste Detection Testing**\n   - Test paste handling with various content formats\n   - Verify content is correctly transformed based on section type\n   - Test edge cases with mixed content types\n   - Validate handling of invalid content\n\n6. **Drag & Drop Testing**\n   - Test section reordering with various section combinations\n   - Verify constraints prevent invalid operations\n   - Test visual indicators for drag targets\n   - Validate section order is correctly persisted\n\n7. **Backward Compatibility Testing**\n   - Test loading and editing PRDs created with the old format\n   - Verify migration utilities correctly convert old data to new structure\n   - Test edge cases with incomplete or malformed legacy data\n\n8. **Performance Testing**\n   - Measure rendering performance with large PRDs\n   - Test save performance with frequent edits\n   - Verify editor responsiveness during complex operations\n   - Validate memory usage patterns during extended editing sessions\n\n9. **End-to-End Testing**\n   - Create comprehensive test scenarios covering the entire PRD editing flow\n   - Test integration with other system components\n   - Verify PRD content is correctly used by AI agents\n   - Validate multi-user scenarios with concurrent edits",
+        "status": "pending",
+        "dependencies": [
+          20,
+          22
+        ],
+        "priority": "medium",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create SectionBlock Base Component",
+            "description": "Develop the foundational SectionBlock component that will serve as the base for all section types in the PRD editor.",
+            "dependencies": [],
+            "details": "Implement the SectionBlock base component with the following features:\n- Create the component with props interface including id, type, content, ownership, isRequired, and onUpdate\n- Add data attributes (data-section-id, data-field) to maintain structure during editing\n- Implement basic rendering and editing capabilities\n- Create a section context provider to manage section state\n- Add event handlers for content changes\n- Implement basic validation against section schemas",
+            "status": "pending",
+            "testStrategy": "Unit test the SectionBlock component to verify:\n- Proper rendering of different content types\n- Correct application of data attributes\n- Event handling for content changes\n- Context provider functionality\n- Basic validation against schemas"
+          },
+          {
+            "id": 2,
+            "title": "Implement Section-Specific Editor Components",
+            "description": "Create specialized editor components for each PRD section type that extend the base SectionBlock.",
+            "dependencies": [
+              "23.1"
+            ],
+            "details": "Develop section-specific editor components including:\n- OverviewEditor for vision, problem, and target users\n- FeaturesListEditor for feature management\n- RequirementsEditor for functional and non-functional requirements\n- CustomSectionEditor for user-defined sections\n- Each component should maintain its specific data structure while providing a seamless editing experience\n- Implement section-specific validation using Zod schemas\n- Add specialized editing controls for each section type",
+            "status": "pending",
+            "testStrategy": "Test each section-specific editor component to verify:\n- Correct rendering of section-specific content\n- Proper data structure maintenance during editing\n- Section-specific validation functionality\n- Specialized editing controls work as expected"
+          },
+          {
+            "id": 3,
+            "title": "Develop Section Data Schema System",
+            "description": "Define and implement Zod schemas for all section types to ensure data integrity throughout the editing process.",
+            "dependencies": [
+              "23.1"
+            ],
+            "details": "Create a comprehensive schema system including:\n- Define Zod schemas for all standard section types (Overview, Features, Requirements, etc.)\n- Implement schema validation utilities to ensure data conforms before saving\n- Create TypeScript type definitions based on schemas\n- Develop schema migration utilities for handling schema changes\n- Implement schema versioning to support backward compatibility\n- Create a schema registry to manage all section schemas in one place",
+            "status": "pending",
+            "testStrategy": "Test the schema system to ensure:\n- All schemas correctly validate valid and invalid data\n- Type definitions match schema definitions\n- Schema migration utilities correctly transform data\n- Schema versioning properly handles backward compatibility"
+          },
+          {
+            "id": 4,
+            "title": "Implement Section-Aware Auto-Save System",
+            "description": "Create a debounced section-level save system that only updates modified sections instead of the entire document.",
+            "dependencies": [
+              "23.2",
+              "23.3"
+            ],
+            "details": "Develop the section-aware auto-save system with:\n- Implement debounced section-level saves with configurable timing\n- Create a saveSectionContent edge function that only updates the specified section\n- Add optimistic updates to prevent UI lag during saves\n- Implement error handling with retry logic for failed saves\n- Add visual indicators for save status (saving, saved, error)\n- Create a save queue to handle multiple section saves efficiently\n- Implement conflict resolution for simultaneous edits",
+            "status": "pending",
+            "testStrategy": "Test the auto-save system to verify:\n- Debounced saves trigger at appropriate intervals\n- Only modified sections are saved to the backend\n- Optimistic updates work correctly\n- Error handling and retry logic functions properly\n- Visual indicators accurately reflect save status\n- Save queue handles multiple saves efficiently"
+          },
+          {
+            "id": 5,
+            "title": "Create Notion-like UX Components",
+            "description": "Implement Notion-style UI components including slash commands, floating toolbar, and block actions menu.",
+            "dependencies": [
+              "23.1",
+              "23.2"
+            ],
+            "details": "Develop Notion-like UX components including:\n- Slash command menu for adding new sections with search functionality\n- Floating toolbar for text formatting within sections\n- Block actions menu (⋮⋮) for section operations (delete, duplicate, etc.)\n- Drag handles for section reordering\n- Hover states and focus indicators for improved UX\n- Keyboard shortcuts for common actions\n- Tooltips and contextual help",
+            "status": "pending",
+            "testStrategy": "Test the UX components to ensure:\n- Slash command menu appears and functions correctly\n- Floating toolbar appears at appropriate times and applies formatting\n- Block actions menu provides correct options based on section type\n- Drag handles enable proper section reordering\n- Keyboard shortcuts work as expected"
+          },
+          {
+            "id": 6,
+            "title": "Implement Section Ownership and Permissions",
+            "description": "Add visual badges to indicate agent ownership of sections and implement permission logic for section operations.",
+            "dependencies": [
+              "23.2"
+            ],
+            "details": "Develop section ownership and permissions system with:\n- Visual badges to indicate agent ownership (AI, Human, Shared)\n- Permission logic to control which sections can be deleted vs. cleared\n- Section visibility controls for hiding/showing sections\n- Implement read-only mode for sections owned by AI\n- Add permission checks before section operations\n- Create UI for transferring ownership between agents\n- Implement permission inheritance for nested sections",
+            "status": "pending",
+            "testStrategy": "Test the ownership and permissions system to verify:\n- Visual badges correctly indicate section ownership\n- Permission logic prevents unauthorized operations\n- Section visibility controls work as expected\n- Read-only mode prevents edits to AI-owned sections\n- Permission checks block unauthorized operations\n- Ownership transfer functions correctly"
+          },
+          {
+            "id": 7,
+            "title": "Implement Drag & Drop Reordering with Constraints",
+            "description": "Create a drag and drop system for section reordering with constraints to prevent deletion of required sections.",
+            "dependencies": [
+              "23.1",
+              "23.5"
+            ],
+            "details": "Develop drag and drop reordering system with:\n- Implement drag & drop using react-beautiful-dnd or similar library\n- Add constraint logic to prevent deletion of required sections\n- Create visual indicators for drag targets and invalid drops\n- Implement section grouping functionality\n- Add animations for smooth reordering experience\n- Create event handlers for reordering operations\n- Implement persistence of section order",
+            "status": "pending",
+            "testStrategy": "Test the drag and drop system to ensure:\n- Sections can be reordered through drag and drop\n- Required sections cannot be deleted\n- Visual indicators appear correctly during drag operations\n- Section grouping works as expected\n- Animations provide smooth transitions\n- Section order persists after page reload"
+          },
+          {
+            "id": 8,
+            "title": "Integrate with Existing PRD System",
+            "description": "Refactor the current PRD editor to use the new block-based architecture while maintaining backward compatibility.",
+            "dependencies": [
+              "23.1",
+              "23.2",
+              "23.3",
+              "23.4",
+              "23.5",
+              "23.6",
+              "23.7"
+            ],
+            "details": "Integrate the new block-based architecture with the existing PRD system:\n- Refactor the current PRD editor to use the new block-based components\n- Ensure backward compatibility with existing PRD data\n- Implement migration utilities for converting old format to new structure\n- Create fallback rendering for unsupported section types\n- Add progressive enhancement for new features\n- Implement feature flags for gradual rollout\n- Create comprehensive documentation for the new architecture",
+            "status": "pending",
+            "testStrategy": "Test the integration to verify:\n- Existing PRDs load correctly in the new editor\n- Changes made in the new editor persist correctly\n- Migration utilities correctly convert old format to new structure\n- Fallback rendering works for unsupported section types\n- Feature flags control access to new features as expected\n- End-to-end testing of the complete editing flow"
+          }
+        ]
       }
     ],
     "metadata": {
       "created": "2025-07-22T22:49:25.170Z",
-      "updated": "2025-08-12T00:41:07.922Z",
+      "updated": "2025-08-12T19:44:18.514Z",
       "description": "Tasks for master context"
     }
   }

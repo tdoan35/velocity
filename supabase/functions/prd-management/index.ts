@@ -22,7 +22,8 @@ import {
 
 interface PRDRequest {
   action: 'create' | 'update' | 'get' | 'finalize' | 'generateSuggestions' | 'validateSection' | 
-          'updateSection' | 'addSection' | 'removeSection' | 'reorderSections' | 'getAgentStatus'
+          'updateSection' | 'addSection' | 'removeSection' | 'reorderSections' | 'getAgentStatus' |
+          'initializeSections'
   conversationId?: string
   projectId?: string
   prdId?: string
@@ -128,6 +129,10 @@ Deno.serve(async (req) => {
 
       case 'getAgentStatus':
         response = await getAgentStatus(supabase, authResult.userId, prdId!, agent)
+        break
+
+      case 'initializeSections':
+        response = await initializeSectionsForPRD(supabase, authResult.userId, prdId!)
         break
 
       default:
@@ -794,6 +799,55 @@ async function validatePRDSectionFlexible(
     valid: errors.length === 0,
     errors,
     warnings
+  }
+}
+
+async function initializeSectionsForPRD(
+  supabase: any,
+  userId: string,
+  prdId: string
+) {
+  // Verify user owns the PRD
+  const { data: prd, error: prdError } = await supabase
+    .from('prds')
+    .select('*')
+    .eq('id', prdId)
+    .eq('user_id', userId)
+    .single()
+
+  if (prdError || !prd) {
+    throw new Error('PRD not found or access denied')
+  }
+
+  // Check if sections already exist
+  if (prd.sections && prd.sections.length > 0) {
+    return { 
+      prd,
+      message: 'Sections already initialized'
+    }
+  }
+
+  // Initialize with default sections using the imported function
+  const defaultSections = initializePRDSections()
+  
+  const { data: updatedPRD, error: updateError } = await supabase
+    .from('prds')
+    .update({
+      sections: defaultSections,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', prdId)
+    .select()
+    .single()
+
+  if (updateError) {
+    throw new Error(`Failed to initialize sections: ${updateError.message}`)
+  }
+
+  return { 
+    prd: updatedPRD,
+    sections: defaultSections,
+    initialized: true
   }
 }
 

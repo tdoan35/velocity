@@ -119,7 +119,39 @@ class PRDService {
 
   async updatePRD(prdId: string, updates: Partial<PRD>): Promise<{ prd: PRD | null; error: any }> {
     try {
-      // Calculate completion percentage based on content
+      // If sections are being updated, use the edge function for proper handling
+      if (updates.sections && updates.sections.length > 0) {
+        // Update each modified section through the edge function
+        for (const section of updates.sections) {
+          if (section.content && Object.keys(section.content).length > 0) {
+            const { data, error } = await supabase.functions.invoke('prd-management', {
+              body: {
+                action: 'updateSection',
+                prdId,
+                sectionId: section.id,
+                data: section.content
+              }
+            })
+            
+            if (error) {
+              console.error(`Failed to update section ${section.id}:`, error)
+            }
+          }
+        }
+        
+        // Fetch updated PRD
+        const { data: updatedPRD, error: fetchError } = await supabase
+          .from('prds')
+          .select('*')
+          .eq('id', prdId)
+          .single()
+          
+        if (fetchError) throw fetchError
+        
+        return { prd: updatedPRD as PRD, error: null }
+      }
+      
+      // For non-section updates, proceed with normal update
       const completionPercentage = this.calculateCompletion({
         ...updates
       } as PRD)
