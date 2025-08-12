@@ -6,7 +6,7 @@ import { projectService } from '@/services/projectService'
 import { conversationService } from '@/services/conversationService'
 import { prdService } from '@/services/prdService'
 import { EnhancedChatInterface } from '@/components/chat/enhanced-chat-interface'
-import { EnhancedBlockBasedPRDEditor } from '@/components/prd/BlockBasedPRDEditor.enhanced'
+import { NotionPRDEditorEnhanced } from '@/components/prd/NotionPRDEditor.enhanced'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
@@ -485,10 +485,8 @@ export function ProjectDesign() {
                       ease: [0.4, 0, 0.2, 1] 
                     }}
                   >
-                    <EnhancedBlockBasedPRDEditor
+                    <NotionPRDEditorEnhanced
                       projectId={projectId || ''}
-                      conversationId={currentConversation?.id}
-                      onClose={() => setShowPRD(false)}
                       className="flex-1"
                     />
                   </motion.div>
