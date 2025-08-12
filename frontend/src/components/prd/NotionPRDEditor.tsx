@@ -465,7 +465,7 @@ export function NotionPRDEditor({
         case 'additional_features': {
           // Parse features from the section
           const features: any[] = []
-          let currentH3 = sectionElement.nextElementSibling
+          let currentH3 = sectionHeader.nextElementSibling
           
           while (currentH3 && currentH3.tagName === 'H3') {
             const featureTitle = currentH3.textContent?.replace(/^\d+\.\s*/, '') || ''

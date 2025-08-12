@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { initializeStoreSubscriptions } from './stores'
 import { useAuthStore } from './stores/useAuthStore'
@@ -23,6 +23,7 @@ import {
 import { SnackProjects } from './pages/SnackProjects'
 import { SnackEditor } from './pages/SnackEditor'
 import { AuthCallback } from './pages/AuthCallback'
+import { CompareEditors } from './pages/CompareEditors'
 import { Modal } from './components/ui/modal'
 import { SignupForm } from './components/ui/signup-form'
 import { AuthenticatedLayout } from './components/AuthenticatedLayout'
@@ -293,6 +294,9 @@ function App() {
         <Routes>
           {/* Auth callback route */}
           <Route path="/auth/callback" element={<AuthCallback />} />
+          
+          {/* Test comparison route */}
+          <Route path="/compare-editors" element={<CompareEditors />} />
           
           {/* Main routes without navigation */}
           <Route path="/snack/:projectId" element={<SnackEditor />} />
