@@ -420,7 +420,7 @@ export function EnhancedChatInterface({
   return (
     <div className={cn('flex flex-col h-full overflow-hidden', className)}>
       {/* Header */}
-      <div className="p-4 pl-5 border-b border-gray-300  dark:border-gray-700 bg-transparent flex-shrink-0">
+      <div className="p-4 pl-5 border-b border-gray-300  dark:border-gray-700/50 bg-transparent flex-shrink-0">
         <div className="flex items-center justify-between w-full">
           <div className="flex items-center gap-2">
             <div className={`w-8 h-8 rounded-full ${agentInfo.bgColor} flex items-center justify-center flex-shrink-0`}>
@@ -601,7 +601,7 @@ export function EnhancedChatInterface({
       )}
       
       {/* Input */}
-      <div className="border-t border-gray-300 dark:border-gray-700 p-4 flex-shrink-0">
+      <div className="border-t border-gray-300 dark:border-gray-700/50 p-4 flex-shrink-0">
         <EnhancedTextarea
           ref={inputRef}
           value={input}

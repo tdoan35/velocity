@@ -471,7 +471,7 @@ export function ProjectDesign() {
         {/* Left Panel - Enhanced Chat Interface or PRD Editor */}
         <ResizablePanel defaultSize={65} minSize={40}>
           <div className="h-full p-2">
-            <Card className="h-full flex flex-col bg-transparent border-gray-300 relative overflow-hidden">
+            <Card className="h-full flex flex-col bg-transparent border-gray-300 dark:border-gray-700/50 relative overflow-hidden">
               <AnimatePresence mode="wait">
                 {showPRD ? (
                   <motion.div
@@ -600,7 +600,7 @@ export function ProjectDesign() {
           <ResizablePanel defaultSize={35} minSize={25}>
             <div className="h-full p-2">
               <Card className="h-full flex flex-col bg-transparent border-gray-300 dark:border-gray-700/50">
-                <CardHeader className="p-4 pl-5 border-b border-gray-300">
+                <CardHeader className="p-4 pl-5 border-b border-gray-300 dark:border-gray-700/50">
                   <AnimatePresence mode="wait">
                     <motion.div 
                       key={showHistory ? 'history' : 'agents'}
@@ -921,7 +921,7 @@ export function ProjectDesign() {
                 </CardContent>
                 {/* Card Footer with View PRD Button */}
                 {!showHistory && activeAgent === 'project_manager' && (
-                  <CardFooter className="p-4 border-t border-gray-300">
+                  <CardFooter className="p-4 border-t border-gray-300 dark:border-gray-700/50">
                     <Button
                       variant={showPRD ? "default" : "outline"}
                       size="sm"

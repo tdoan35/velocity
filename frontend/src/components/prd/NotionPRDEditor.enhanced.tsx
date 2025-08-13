@@ -35,7 +35,8 @@ import {
   Copy,
   MoreVertical,
   ChevronRight,
-  PanelRight
+  PanelRight,
+  Save
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -92,6 +93,23 @@ const transformSectionToHTML = (section: FlexiblePRDSection): string => {
   html += `<h2 id="section-${section.id}" data-section-id="${section.id}" class="section-header">`
   html += `${sectionIcons[sectionType] || '📝'} ${section.title}`
   html += '</h2>'
+  
+  // Check if content is raw HTML saved from editor
+  if (section.content?.content && typeof section.content.content === 'string') {
+    // Content was saved as raw HTML, just append it
+    html += section.content.content
+    if (!section.content.content.includes('section-divider')) {
+      html += '<div class="section-divider"></div>'
+    }
+    return html
+  }
+  
+  // If section has no content or empty content, add a placeholder paragraph
+  if (!section.content || (typeof section.content === 'object' && Object.keys(section.content).length === 0)) {
+    html += '<p><em>Section content to be added...</em></p>'
+    html += '<div class="section-divider"></div>'
+    return html
+  }
   
   // Transform content based on section type
   switch (sectionType) {
@@ -157,10 +175,225 @@ const transformSectionToHTML = (section: FlexiblePRDSection): string => {
       }
       break
       
+    case 'ui_design_patterns':
+      // Check if there's any content at all
+      const hasUIContent = section.content?.patterns?.length > 0 || 
+                          section.content?.designSystem || 
+                          section.content?.accessibility?.length > 0
+      
+      if (!hasUIContent) {
+        html += '<p><em>UI design patterns and guidelines to be defined...</em></p>'
+      } else {
+        if (section.content?.patterns?.length > 0) {
+          html += '<h3>Design Patterns</h3>'
+          html += '<ul>'
+          section.content.patterns.forEach((pattern: string) => {
+            html += `<li>${pattern}</li>`
+          })
+          html += '</ul>'
+        }
+        if (section.content?.designSystem) {
+          html += '<h3>Design System</h3>'
+          if (section.content.designSystem.colors && Object.keys(section.content.designSystem.colors).length > 0) {
+            html += '<h4>Colors</h4>'
+            html += '<ul>'
+            Object.entries(section.content.designSystem.colors).forEach(([key, value]) => {
+              html += `<li><strong>${key}:</strong> ${value}</li>`
+            })
+            html += '</ul>'
+          }
+          if (section.content.designSystem.typography && Object.keys(section.content.designSystem.typography).length > 0) {
+            html += '<h4>Typography</h4>'
+            html += '<ul>'
+            Object.entries(section.content.designSystem.typography).forEach(([key, value]) => {
+              html += `<li><strong>${key}:</strong> ${value}</li>`
+            })
+            html += '</ul>'
+          }
+          if (section.content.designSystem.spacing && Object.keys(section.content.designSystem.spacing).length > 0) {
+            html += '<h4>Spacing</h4>'
+            html += '<ul>'
+            Object.entries(section.content.designSystem.spacing).forEach(([key, value]) => {
+              html += `<li><strong>${key}:</strong> ${value}</li>`
+            })
+            html += '</ul>'
+          }
+          if (section.content.designSystem.components?.length > 0) {
+            html += '<h4>Components</h4>'
+            html += '<ul>'
+            section.content.designSystem.components.forEach((component: any) => {
+              if (typeof component === 'string') {
+                html += `<li>${component}</li>`
+              } else if (component.name) {
+                html += `<li><strong>${component.name}</strong>${component.description ? `: ${component.description}` : ''}</li>`
+              }
+            })
+            html += '</ul>'
+          }
+        }
+        if (section.content?.accessibility?.length > 0) {
+          html += '<h3>Accessibility Guidelines</h3>'
+          html += '<ul>'
+          section.content.accessibility.forEach((guideline: string) => {
+            html += `<li>${guideline}</li>`
+          })
+          html += '</ul>'
+        }
+      }
+      break
+      
+    case 'ux_flows':
+      // Check if there's any UX content
+      const hasUXContent = section.content?.userJourneys?.length > 0 ||
+                          section.content?.navigationStructure ||
+                          section.content?.interactionPatterns?.length > 0 ||
+                          section.content?.responsiveStrategy
+      
+      if (!hasUXContent) {
+        html += '<p><em>User experience flows and journeys to be defined...</em></p>'
+      } else {
+        if (section.content?.userJourneys?.length > 0) {
+          html += '<h3>User Journeys</h3>'
+          section.content.userJourneys.forEach((journey: any, index: number) => {
+            if (typeof journey === 'string') {
+              html += `<p>${index + 1}. ${journey}</p>`
+            } else if (journey.title || journey.name) {
+              html += `<h4>${index + 1}. ${journey.title || journey.name}</h4>`
+              if (journey.steps?.length > 0) {
+                html += '<ol>'
+                journey.steps.forEach((step: string) => {
+                  html += `<li>${step}</li>`
+                })
+                html += '</ol>'
+              } else if (journey.description) {
+                html += `<p>${journey.description}</p>`
+              }
+            }
+          })
+        }
+        if (section.content?.navigationStructure) {
+          html += '<h3>Navigation Structure</h3>'
+          if (typeof section.content.navigationStructure === 'string') {
+            html += `<p>${section.content.navigationStructure}</p>`
+          } else if (Object.keys(section.content.navigationStructure).length > 0) {
+            html += '<ul>'
+            Object.entries(section.content.navigationStructure).forEach(([key, value]) => {
+              html += `<li><strong>${key}:</strong> ${value}</li>`
+            })
+            html += '</ul>'
+          }
+        }
+        if (section.content?.interactionPatterns?.length > 0) {
+          html += '<h3>Interaction Patterns</h3>'
+          html += '<ul>'
+          section.content.interactionPatterns.forEach((pattern: any) => {
+            if (typeof pattern === 'string') {
+              html += `<li>${pattern}</li>`
+            } else if (pattern.name || pattern.title) {
+              html += `<li><strong>${pattern.name || pattern.title}</strong>${pattern.description ? `: ${pattern.description}` : ''}</li>`
+            }
+          })
+          html += '</ul>'
+        }
+        if (section.content?.responsiveStrategy) {
+          html += '<h3>Responsive Strategy</h3>'
+          html += `<p>${section.content.responsiveStrategy}</p>`
+        }
+      }
+      break
+      
+    case 'tech_integrations':
+      // Check if there's any tech integrations content
+      const hasTechContent = section.content?.integrations?.length > 0 ||
+                            section.content?.apiConfigurations?.length > 0 ||
+                            section.content?.monitoring?.length > 0 ||
+                            section.content?.deploymentConfig ||
+                            section.content?.environmentVariables?.length > 0
+      
+      if (!hasTechContent) {
+        html += '<p><em>Technical integrations and configurations to be defined...</em></p>'
+      } else {
+        if (section.content?.integrations?.length > 0) {
+          html += '<h3>Third-Party Integrations</h3>'
+          html += '<ul>'
+          section.content.integrations.forEach((integration: any) => {
+            if (typeof integration === 'string') {
+              html += `<li>${integration}</li>`
+            } else if (integration.name) {
+              html += `<li><strong>${integration.name}</strong>`
+              if (integration.purpose) {
+                html += `: ${integration.purpose}`
+              }
+              if (integration.apiKey || integration.config) {
+                html += ' (Configured)'
+              }
+              html += '</li>'
+            }
+          })
+          html += '</ul>'
+        }
+        if (section.content?.apiConfigurations?.length > 0) {
+          html += '<h3>API Configurations</h3>'
+          html += '<ul>'
+          section.content.apiConfigurations.forEach((api: any) => {
+            if (typeof api === 'string') {
+              html += `<li>${api}</li>`
+            } else if (api.name) {
+              html += `<li><strong>${api.name}</strong>`
+              if (api.endpoint) {
+                html += `: ${api.endpoint}`
+              }
+              html += '</li>'
+            }
+          })
+          html += '</ul>'
+        }
+        if (section.content?.monitoring?.length > 0) {
+          html += '<h3>Monitoring & Analytics</h3>'
+          html += '<ul>'
+          section.content.monitoring.forEach((item: any) => {
+            if (typeof item === 'string') {
+              html += `<li>${item}</li>`
+            } else if (item.tool || item.name) {
+              html += `<li><strong>${item.tool || item.name}</strong>${item.purpose ? `: ${item.purpose}` : ''}</li>`
+            }
+          })
+          html += '</ul>'
+        }
+        if (section.content?.deploymentConfig) {
+          html += '<h3>Deployment Configuration</h3>'
+          if (typeof section.content.deploymentConfig === 'string') {
+            html += `<p>${section.content.deploymentConfig}</p>`
+          } else if (Object.keys(section.content.deploymentConfig).length > 0) {
+            html += '<ul>'
+            Object.entries(section.content.deploymentConfig).forEach(([key, value]) => {
+              html += `<li><strong>${key}:</strong> ${value}</li>`
+            })
+            html += '</ul>'
+          }
+        }
+        if (section.content?.environmentVariables?.length > 0) {
+          html += '<h3>Environment Variables</h3>'
+          html += '<ul>'
+          section.content.environmentVariables.forEach((envVar: any) => {
+            if (typeof envVar === 'string') {
+              html += `<li><code>${envVar}</code></li>`
+            } else if (envVar.name) {
+              html += `<li><code>${envVar.name}</code>${envVar.description ? `: ${envVar.description}` : ''}</li>`
+            }
+          })
+          html += '</ul>'
+        }
+      }
+      break
+      
     default:
       // For custom sections, display content as is
       if (typeof section.content === 'string') {
         html += `<p>${section.content}</p>`
+      } else if (section.content?.content && typeof section.content.content === 'string') {
+        // If content was saved as raw HTML, display it directly
+        html += section.content.content
       } else if (section.content && Object.keys(section.content).length > 0) {
         html += '<pre>' + JSON.stringify(section.content, null, 2) + '</pre>'
       }
@@ -273,9 +506,12 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
   const [prdStatus, setPrdStatus] = useState<'draft' | 'in_progress' | 'review' | 'finalized' | 'archived'>('draft')
   const [showSlashCommand, setShowSlashCommand] = useState(false)
   const [slashCommandPosition, setSlashCommandPosition] = useState({ top: 0, left: 0 })
+  const [hasLocalChanges, setHasLocalChanges] = useState(false)
   const editorRef = useRef<HTMLDivElement>(null)
   const editorContentRef = useRef<HTMLDivElement>(null)
   const sectionTimers = useRef<Map<string, NodeJS.Timeout>>(new Map())
+  const isUpdatingFromSections = useRef(false)
+  const lastSavedContent = useRef<string>('')
   
   // Initialize TipTap editor
   const editor = useEditor({
@@ -334,16 +570,45 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
     loadPRD()
   }, [projectId])
   
-  // Update editor content when sections change
+  // Update editor content when sections change - only on initial load or when sections are loaded
   useEffect(() => {
-    if (editor && sections.length > 0) {
+    if (editor && sections.length > 0 && !hasLocalChanges) {
       const html = sections.map(section => transformSectionToHTML(section)).join('')
-      editor.commands.setContent(html)
+      const currentContent = editor.getHTML()
+      
+      // Check if editor is empty or has just placeholder
+      const isEditorEmpty = currentContent === '<p></p>' || currentContent === '' || 
+                            currentContent.includes('Start typing or press "/" for commands')
+      
+      // Check if we already have section headers in the content
+      const hasSectionHeaders = sections.some(section => 
+        currentContent.includes(`id="section-${section.id}"`)
+      )
+      
+      // Only update if we don't have the section headers yet and we have content to add
+      // OR if the editor is empty (initial load)
+      if ((isEditorEmpty || !hasSectionHeaders) && html.length > 0) {
+        console.log('Setting editor content from sections, sections count:', sections.length)
+        console.log('Current content empty check:', isEditorEmpty, 'Has headers:', hasSectionHeaders)
+        console.log('Current content length:', currentContent.length)
+        console.log('Generated HTML length:', html.length)
+        isUpdatingFromSections.current = true
+        editor.commands.setContent(html, false) // false = don't trigger update events
+        lastSavedContent.current = html
+        // Reset flag after a short delay
+        setTimeout(() => {
+          isUpdatingFromSections.current = false
+        }, 200)
+      } else {
+        console.log('Not setting content - Has headers:', hasSectionHeaders, 'HTML length:', html.length, 'hasLocalChanges:', hasLocalChanges)
+      }
     }
-  }, [sections, editor])
+  }, [sections, editor, hasLocalChanges]) // Include hasLocalChanges to prevent updates when user is editing
   
   const loadPRD = async () => {
     setIsLoading(true)
+    // Set flag to prevent saves during load
+    isUpdatingFromSections.current = true
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('No active session')
@@ -365,6 +630,7 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
           ...section,
           status: section.status || 'pending'
         }))
+        console.log('Loaded PRD sections:', sectionsWithStatus.length, sectionsWithStatus.map(s => s.title))
         setSections(sectionsWithStatus)
         // Set PRD status
         setPrdStatus(data.prd.status || 'draft')
@@ -389,6 +655,7 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
           ...section,
           status: section.status || 'pending'
         }))
+        console.log('Created new PRD with sections:', sectionsWithStatus.length, sectionsWithStatus.map(s => s.title))
         setSections(sectionsWithStatus)
         // New PRDs start at 0% completion
         setCompletionPercentage(0)
@@ -402,22 +669,79 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
       })
     } finally {
       setIsLoading(false)
+      // Reset flag after loading is complete
+      setTimeout(() => {
+        isUpdatingFromSections.current = false
+      }, 500)
     }
   }
   
   // Handle content updates with section-aware saving
   const handleContentUpdate = useCallback((editor: Editor) => {
-    if (!prdId || !editor) return
+    if (!prdId || !editor || isUpdatingFromSections.current) {
+      if (isUpdatingFromSections.current) {
+        console.log('Skipping save - updating from sections')
+      }
+      return
+    }
     
     const html = editor.getHTML()
+    
+    // Check if this is the same content we just set programmatically
+    if (html === lastSavedContent.current) {
+      console.log('Skipping save - content unchanged')
+      return
+    }
+    
+    console.log('Content update detected, HTML length:', html.length)
+    
+    // Mark that we have local changes (this will prevent the useEffect from re-setting content)
+    setHasLocalChanges(true)
+    
+    // Update lastSavedContent to prevent re-triggering
+    lastSavedContent.current = html
+    
+    // If we have no sections yet or they're empty, save the entire content as a draft
+    if (sections.length === 0 || sections.every(s => !s.content || Object.keys(s.content).length === 0)) {
+      console.log('No sections or empty sections, saving as draft')
+      // Clear any existing timer
+      const existingTimer = sectionTimers.current.get('draft')
+      if (existingTimer) {
+        clearTimeout(existingTimer)
+      }
+      
+      // Set new debounced save timer for draft content
+      const timer = setTimeout(async () => {
+        console.log('Autosaving draft content...')
+        // Save as raw HTML content to the first section or create a draft section
+        const targetSection = sections[0] || { id: 'draft', title: 'Draft Content' }
+        await saveSection(targetSection.id, { content: html })
+        setHasLocalChanges(false) // Clear flag after save
+      }, 1500) as unknown as NodeJS.Timeout
+      
+      sectionTimers.current.set('draft', timer)
+      return
+    }
     
     // Parse each section and check for changes
     sections.forEach(section => {
       const sectionType = getSectionType(section)
       const sectionContent = parseHTMLToSection(html, section.id, sectionType)
       
-      // Check if content changed
-      if (JSON.stringify(sectionContent) !== JSON.stringify(section.content)) {
+      // If we couldn't parse the section (no header found), treat the entire content as changed
+      if (sectionContent === null) {
+        // Save the entire HTML as raw content
+        const existingTimer = sectionTimers.current.get(section.id)
+        if (existingTimer) {
+          clearTimeout(existingTimer)
+        }
+        
+        const timer = setTimeout(async () => {
+          await saveSection(section.id, { content: html })
+        }, 1500) as unknown as NodeJS.Timeout
+        
+        sectionTimers.current.set(section.id, timer)
+      } else if (JSON.stringify(sectionContent) !== JSON.stringify(section.content)) {
         // Clear existing timer for this section
         const existingTimer = sectionTimers.current.get(section.id)
         if (existingTimer) {
@@ -427,6 +751,7 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
         // Set new debounced save timer (1.5 seconds)
         const timer = setTimeout(async () => {
           await saveSection(section.id, sectionContent)
+          setHasLocalChanges(false) // Clear flag after save
         }, 1500) as unknown as NodeJS.Timeout
         
         sectionTimers.current.set(section.id, timer)
@@ -455,6 +780,8 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
       if (error) throw error
       
       // Update local state - only update content, not status
+      // Use a flag to prevent re-rendering the editor
+      isUpdatingFromSections.current = true
       setSections(prev => {
         const updated = prev.map(section => 
           section.id === sectionId 
@@ -467,6 +794,10 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
         setCompletionPercentage(totalSections > 0 ? Math.round((completedSections / totalSections) * 100) : 0)
         return updated
       })
+      // Reset flag after state update
+      setTimeout(() => {
+        isUpdatingFromSections.current = false
+      }, 100)
       
       toast({
         title: 'Saved',
@@ -478,6 +809,81 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
       toast({
         title: 'Error',
         description: 'Failed to save section',
+        variant: 'destructive'
+      })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+  
+  // Manual save all sections
+  const handleManualSave = async () => {
+    console.log('Manual save triggered, prdId:', prdId, 'editor exists:', !!editor)
+    if (!prdId || !editor) return
+    
+    setIsSaving(true)
+    try {
+      const html = editor.getHTML()
+      console.log('Manual save HTML length:', html.length)
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('No active session')
+      
+      // If no sections exist or all are empty, save as draft
+      if (sections.length === 0 || sections.every(s => !s.content || Object.keys(s.content).length === 0)) {
+        const targetSection = sections[0] || { id: 'draft', title: 'Draft Content' }
+        await supabase.functions.invoke('prd-management', {
+          body: {
+            action: 'updateSection',
+            prdId,
+            sectionId: targetSection.id,
+            data: { content: html }
+          }
+        })
+      } else {
+        const savePromises: Promise<void>[] = []
+        
+        // Parse and save each section
+        sections.forEach(section => {
+          const sectionType = getSectionType(section)
+          const sectionContent = parseHTMLToSection(html, section.id, sectionType)
+          
+          // If parsing failed, save the entire HTML content
+          const contentToSave = sectionContent === null ? { content: html } : sectionContent
+          
+          // Save if content exists
+          if (contentToSave && Object.keys(contentToSave).length > 0) {
+            savePromises.push(
+              (async () => {
+                await supabase.functions.invoke('prd-management', {
+                  body: {
+                    action: 'updateSection',
+                    prdId,
+                    sectionId: section.id,
+                    data: contentToSave
+                  }
+                })
+              })()
+            )
+          }
+        })
+        
+        await Promise.all(savePromises)
+      }
+      
+      // Clear the local changes flag after successful save
+      setHasLocalChanges(false)
+      lastSavedContent.current = editor.getHTML()
+      
+      toast({
+        title: 'All changes saved',
+        description: 'Document has been saved successfully',
+        duration: 2000
+      })
+    } catch (error) {
+      console.error('Error saving document:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to save document',
         variant: 'destructive'
       })
     } finally {
@@ -729,7 +1135,7 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
   return (
     <div className={cn('flex flex-col h-full overflow-hidden', className)}>
       {/* Header - matching Original NotionPRDEditor style */}
-      <div className="relative border-b border-gray-300 dark:border-gray-700 bg-transparent flex-shrink-0 rounded-t-lg">
+      <div className="relative border-b border-gray-200 dark:border-gray-700/50 bg-transparent flex-shrink-0 rounded-t-lg">
         <div className="p-4 pl-5">
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-2">
@@ -745,6 +1151,16 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
                 </div>
               )}
               <PRDStatusBadge status={prdStatus} />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={handleManualSave}
+                disabled={isSaving}
+                title="Save document"
+              >
+                <Save className="h-4 w-4" />
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"
@@ -801,7 +1217,7 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
             {editor && (
               <BubbleMenu
                 editor={editor}
-                className="flex items-center gap-1 p-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
+                className="flex items-center gap-1 p-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700/50"
               >
                 <Button
                   variant="ghost"
@@ -873,7 +1289,7 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
             {/* Slash Command Menu */}
             {showSlashCommand && (
               <div 
-                className="absolute z-50 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-2 min-w-[200px]"
+                className="absolute z-50 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700/50 p-2 min-w-[200px]"
                 style={{ top: slashCommandPosition.top, left: slashCommandPosition.left }}
               >
                 <div className="space-y-1">
@@ -990,7 +1406,7 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
         <AnimatePresence mode="wait">
           {showTOC && (
             <motion.div 
-              className="absolute top-0 right-0 bottom-0 w-64 border-l border-gray-200 dark:border-gray-700 bg-gray-50/95 dark:bg-gray-800/95 backdrop-blur-sm overflow-y-auto z-40 shadow-xl"
+              className="absolute top-0 right-0 bottom-0 w-64 border-l border-gray-200 dark:border-gray-700/50 bg-gray-50/95 dark:bg-gray-800/95 backdrop-blur-sm overflow-y-auto z-40 shadow-xl"
               initial={{ x: "100%", opacity: 0 }}
               animate={{ 
                 x: 0,
@@ -1060,7 +1476,7 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
                   })}
                 </div>
                 {sections.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700/50">
                     <div className="text-xs text-gray-500 dark:text-gray-400">
                       <div className="flex justify-between mb-1">
                         <span>Progress</span>
