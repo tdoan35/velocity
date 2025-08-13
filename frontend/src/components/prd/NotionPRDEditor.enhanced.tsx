@@ -36,7 +36,8 @@ import {
   MoreVertical,
   ChevronRight,
   PanelRight,
-  Save
+  Save,
+  RotateCcw
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -84,23 +85,141 @@ const getSectionType = (section: FlexiblePRDSection): SectionType => {
   return typeMap[section.id] || 'custom'
 }
 
+// Clean HTML content by removing duplicates more aggressively
+const cleanHTMLContent = (html: string): string => {
+  if (!html || typeof html !== 'string') return ''
+  
+  try {
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(html, 'text/html')
+    
+    // Strategy 1: Remove duplicate section wrappers based on data-section-id
+    const sectionWrappers = Array.from(doc.querySelectorAll('[data-section-id]'))
+    const seenSectionIds = new Set<string>()
+    sectionWrappers.forEach(wrapper => {
+      const sectionId = wrapper.getAttribute('data-section-id')
+      if (sectionId && seenSectionIds.has(sectionId)) {
+        wrapper.remove()
+      } else if (sectionId) {
+        seenSectionIds.add(sectionId)
+      }
+    })
+    
+    // Strategy 2: Remove duplicate headers (h1, h2, h3) and their content
+    const allHeaders = Array.from(doc.querySelectorAll('h1, h2, h3'))
+    const seenHeaderTexts = new Map<string, Element>()
+    const elementsToRemove: Element[] = []
+    
+    allHeaders.forEach(header => {
+      const headerText = header.textContent?.trim() || ''
+      const headerLevel = header.tagName.toLowerCase()
+      const headerKey = `${headerLevel}:${headerText}`
+      
+      if (seenHeaderTexts.has(headerKey)) {
+        // This is a duplicate - mark for removal along with its content
+        elementsToRemove.push(header)
+        
+        // Collect all siblings until next header of same or higher level
+        let nextSibling = header.nextElementSibling
+        while (nextSibling) {
+          const isHeader = /^H[1-3]$/i.test(nextSibling.tagName)
+          if (isHeader) {
+            // Check if this is a header of same or higher level
+            const nextLevel = parseInt(nextSibling.tagName.charAt(1))
+            const currentLevel = parseInt(headerLevel.charAt(1))
+            if (nextLevel <= currentLevel) break
+          }
+          elementsToRemove.push(nextSibling)
+          nextSibling = nextSibling.nextElementSibling
+        }
+      } else {
+        seenHeaderTexts.set(headerKey, header)
+      }
+    })
+    
+    // Strategy 3: Remove duplicate divs with identical content
+    const contentDivs = Array.from(doc.querySelectorAll('div'))
+    const seenDivContents = new Map<string, Element>()
+    
+    contentDivs.forEach(div => {
+      // Skip if already marked for removal
+      if (elementsToRemove.includes(div)) return
+      
+      // Create a normalized content signature
+      const contentSignature = div.innerHTML.trim()
+        .replace(/\s+/g, ' ') // Normalize whitespace
+        .replace(/data-[\w-]+="[^"]*"/g, '') // Remove data attributes
+        .replace(/class="[^"]*"/g, '') // Remove class attributes
+        .replace(/style="[^"]*"/g, '') // Remove style attributes
+        .replace(/id="[^"]*"/g, '') // Remove id attributes
+      
+      if (contentSignature.length > 50) { // Only check substantial content
+        if (seenDivContents.has(contentSignature)) {
+          elementsToRemove.push(div)
+        } else {
+          seenDivContents.set(contentSignature, div)
+        }
+      }
+    })
+    
+    // Remove all marked elements
+    elementsToRemove.forEach(el => {
+      try {
+        el.remove()
+      } catch (e) {
+        console.warn('Failed to remove element:', e)
+      }
+    })
+    
+    // Strategy 4: Clean up empty wrapper divs
+    const emptyDivs = Array.from(doc.querySelectorAll('div'))
+      .filter(div => {
+        const content = div.textContent?.trim() || ''
+        const hasOnlyWhitespace = content === ''
+        const hasNoChildren = div.children.length === 0
+        return hasOnlyWhitespace && hasNoChildren
+      })
+    
+    emptyDivs.forEach(div => div.remove())
+    
+    // Log cleanup statistics
+    console.log('HTML Cleanup Stats:', {
+      duplicateSections: seenSectionIds.size > 0 ? sectionWrappers.length - seenSectionIds.size : 0,
+      duplicateHeaders: elementsToRemove.filter(el => /^H[1-3]$/i.test(el.tagName)).length,
+      duplicateDivs: seenDivContents.size > 0 ? contentDivs.length - seenDivContents.size : 0,
+      emptyDivs: emptyDivs.length,
+      totalRemoved: elementsToRemove.length + emptyDivs.length
+    })
+    
+    return doc.body.innerHTML
+  } catch (e) {
+    console.error('Error cleaning HTML:', e)
+    return html
+  }
+}
+
 // Transform structured section data to HTML for TipTap
 const transformSectionToHTML = (section: FlexiblePRDSection): string => {
   let html = ''
   const sectionType = getSectionType(section)
   
+  // Add section wrapper to prevent duplication
+  html += `<div class="prd-section" data-section-id="${section.id}" data-section-order="${section.order}">`
+  
   // Add section header with icon and ID for tracking
-  html += `<h2 id="section-${section.id}" data-section-id="${section.id}" class="section-header">`
+  html += `<h2 id="section-${section.id}" class="section-header">`
   html += `${sectionIcons[sectionType] || '📝'} ${section.title}`
   html += '</h2>'
   
   // Check if content is raw HTML saved from editor
   if (section.content?.content && typeof section.content.content === 'string') {
-    // Content was saved as raw HTML, just append it
-    html += section.content.content
-    if (!section.content.content.includes('section-divider')) {
+    // Content was saved as raw HTML - clean it first to remove any embedded duplicates
+    const cleanedContent = cleanHTMLContent(section.content.content)
+    html += cleanedContent
+    if (!cleanedContent.includes('section-divider')) {
       html += '<div class="section-divider"></div>'
     }
+    html += '</div>' // Close section wrapper
     return html
   }
   
@@ -402,6 +521,7 @@ const transformSectionToHTML = (section: FlexiblePRDSection): string => {
   // Add a subtle divider (will be styled with CSS)
   html += '<div class="section-divider"></div>'
   
+  html += '</div>' // Close section wrapper
   return html
 }
 
@@ -512,6 +632,8 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
   const sectionTimers = useRef<Map<string, NodeJS.Timeout>>(new Map())
   const isUpdatingFromSections = useRef(false)
   const lastSavedContent = useRef<string>('')
+  const initialContentSet = useRef(false)
+  const hasLoadedPRD = useRef(false)
   
   // Initialize TipTap editor
   const editor = useEditor({
@@ -565,48 +687,108 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
     }
   })
   
-  // Load PRD and sections
+  // Load PRD and sections - only once
   useEffect(() => {
-    loadPRD()
+    if (!hasLoadedPRD.current) {
+      loadPRD()
+      hasLoadedPRD.current = true
+    }
   }, [projectId])
   
-  // Update editor content when sections change - only on initial load or when sections are loaded
+  // Cleanup on unmount
   useEffect(() => {
-    if (editor && sections.length > 0 && !hasLocalChanges) {
-      const html = sections.map(section => transformSectionToHTML(section)).join('')
-      const currentContent = editor.getHTML()
-      
-      // Check if editor is empty or has just placeholder
-      const isEditorEmpty = currentContent === '<p></p>' || currentContent === '' || 
-                            currentContent.includes('Start typing or press "/" for commands')
-      
-      // Check if we already have section headers in the content
-      const hasSectionHeaders = sections.some(section => 
-        currentContent.includes(`id="section-${section.id}"`)
-      )
-      
-      // Only update if we don't have the section headers yet and we have content to add
-      // OR if the editor is empty (initial load)
-      if ((isEditorEmpty || !hasSectionHeaders) && html.length > 0) {
-        console.log('Setting editor content from sections, sections count:', sections.length)
-        console.log('Current content empty check:', isEditorEmpty, 'Has headers:', hasSectionHeaders)
-        console.log('Current content length:', currentContent.length)
-        console.log('Generated HTML length:', html.length)
-        isUpdatingFromSections.current = true
-        editor.commands.setContent(html, false) // false = don't trigger update events
-        lastSavedContent.current = html
-        // Reset flag after a short delay
-        setTimeout(() => {
-          isUpdatingFromSections.current = false
-        }, 200)
+    return () => {
+      // Clean up all timers on unmount
+      sectionTimers.current.forEach(timer => clearTimeout(timer))
+      sectionTimers.current.clear()
+      // Reset refs
+      initialContentSet.current = false
+      hasLoadedPRD.current = false
+    }
+  }, [])
+  
+  // Helper function to safely set editor content with duplicate detection
+  const setEditorContentSafely = useCallback((html: string) => {
+    if (!editor) return
+    
+    const currentHTML = editor.getHTML()
+    
+    // Check if sections already exist in the editor
+    const parser = new DOMParser()
+    const currentDoc = parser.parseFromString(currentHTML, 'text/html')
+    const newDoc = parser.parseFromString(html, 'text/html')
+    
+    const currentSectionIds = Array.from(
+      currentDoc.querySelectorAll('[data-section-id]')
+    ).map(el => el.getAttribute('data-section-id')).filter(Boolean)
+    
+    const newSectionIds = Array.from(
+      newDoc.querySelectorAll('[data-section-id]')
+    ).map(el => el.getAttribute('data-section-id')).filter(Boolean)
+    
+    // Only update if section IDs are different or editor is empty
+    const isEditorEmpty = currentHTML === '<p></p>' || currentHTML === ''
+    const isDifferent = JSON.stringify(currentSectionIds.sort()) !== 
+                        JSON.stringify(newSectionIds.sort())
+    
+    if (isEditorEmpty || isDifferent) {
+      console.log('Setting editor content safely, different:', isDifferent, 'empty:', isEditorEmpty)
+      isUpdatingFromSections.current = true
+      editor.commands.setContent(html, false)
+      lastSavedContent.current = html
+      setTimeout(() => {
+        isUpdatingFromSections.current = false
+      }, 100)
+    } else {
+      console.log('Skipping content update - sections already present')
+    }
+  }, [editor])
+  
+  // Update editor content when sections change - only on initial load
+  useEffect(() => {
+    if (!editor || sections.length === 0 || hasLocalChanges) return
+    
+    // Only set initial content once
+    if (initialContentSet.current) {
+      console.log('Initial content already set, skipping')
+      return
+    }
+    
+    const html = sections.map(section => transformSectionToHTML(section)).join('')
+    
+    if (html.length > 0) {
+      console.log('Setting initial editor content from sections, count:', sections.length)
+      setEditorContentSafely(html)
+      initialContentSet.current = true
+    }
+  }, [editor, sections.length, hasLocalChanges, setEditorContentSafely])
+  
+  // Function to remove duplicate sections based on ID
+  const removeDuplicateSections = (sections: FlexiblePRDSection[]): FlexiblePRDSection[] => {
+    const seen = new Set<string>()
+    const cleaned: FlexiblePRDSection[] = []
+    
+    for (const section of sections) {
+      // Only keep the first occurrence of each section ID
+      if (!seen.has(section.id)) {
+        seen.add(section.id)
+        cleaned.push(section)
       } else {
-        console.log('Not setting content - Has headers:', hasSectionHeaders, 'HTML length:', html.length, 'hasLocalChanges:', hasLocalChanges)
+        console.warn(`Removing duplicate section: ${section.id} - ${section.title}`)
       }
     }
-  }, [sections, editor, hasLocalChanges]) // Include hasLocalChanges to prevent updates when user is editing
-  
+    
+    // Re-order sections to ensure continuous ordering
+    return cleaned.map((section, index) => ({
+      ...section,
+      order: index + 1
+    }))
+  }
+
   const loadPRD = async () => {
     setIsLoading(true)
+    // Reset flags for new load
+    initialContentSet.current = false
     // Set flag to prevent saves during load
     isUpdatingFromSections.current = true
     try {
@@ -626,10 +808,55 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
       if (data?.prd) {
         setPrdId(data.prd.id)
         // Ensure all sections have a status field, default to 'pending' if missing
-        const sectionsWithStatus = (data.prd.sections || []).map((section: FlexiblePRDSection) => ({
+        let sectionsWithStatus = (data.prd.sections || []).map((section: FlexiblePRDSection) => ({
           ...section,
           status: section.status || 'pending'
         }))
+        
+        // Clean up duplicate sections
+        const originalCount = sectionsWithStatus.length
+        sectionsWithStatus = removeDuplicateSections(sectionsWithStatus)
+        const cleanedCount = sectionsWithStatus.length
+        
+        // Also clean the content of each section if it contains raw HTML
+        let contentCleaned = false
+        sectionsWithStatus = sectionsWithStatus.map(section => {
+          if (section.content?.content && typeof section.content.content === 'string') {
+            const originalContent = section.content.content
+            const cleanedContent = cleanHTMLContent(originalContent)
+            if (originalContent !== cleanedContent) {
+              contentCleaned = true
+              console.log(`Cleaned duplicates from content of section: ${section.id}`)
+              return {
+                ...section,
+                content: { ...section.content, content: cleanedContent }
+              }
+            }
+          }
+          return section
+        })
+        
+        if (originalCount !== cleanedCount || contentCleaned) {
+          console.log(`Cleaned ${originalCount - cleanedCount} duplicate sections from PRD`)
+          if (contentCleaned) {
+            console.log('Also cleaned duplicate content within sections')
+          }
+          
+          // Save the cleaned sections back to the database
+          try {
+            await supabase.functions.invoke('prd-management', {
+              body: {
+                action: 'updateAllSections',
+                prdId: data.prd.id,
+                sections: sectionsWithStatus
+              }
+            })
+            console.log('Saved cleaned sections to database')
+          } catch (saveError) {
+            console.error('Error saving cleaned sections:', saveError)
+          }
+        }
+        
         console.log('Loaded PRD sections:', sectionsWithStatus.length, sectionsWithStatus.map(s => s.title))
         setSections(sectionsWithStatus)
         // Set PRD status
@@ -678,9 +905,12 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
   
   // Handle content updates with section-aware saving
   const handleContentUpdate = useCallback((editor: Editor) => {
-    if (!prdId || !editor || isUpdatingFromSections.current) {
+    if (!prdId || !editor || isUpdatingFromSections.current || !initialContentSet.current) {
       if (isUpdatingFromSections.current) {
         console.log('Skipping save - updating from sections')
+      }
+      if (!initialContentSet.current) {
+        console.log('Skipping save - initial content not yet set')
       }
       return
     }
@@ -884,6 +1114,68 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
       toast({
         title: 'Error',
         description: 'Failed to save document',
+        variant: 'destructive'
+      })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Reset PRD to default state
+  const handleResetPRD = async () => {
+    if (!projectId || !editor) return
+    
+    // Confirm reset action
+    if (!window.confirm('Are you sure you want to reset the PRD? This will clear all content and restore default sections.')) {
+      return
+    }
+    
+    setIsSaving(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('No active session')
+      
+      // Reset PRD by reinitializing sections
+      const { data, error } = await supabase.functions.invoke('prd-management', {
+        body: {
+          action: 'initializeSections',
+          prdId: prdId || undefined,
+          projectId: projectId
+        },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
+      })
+      
+      if (error) throw error
+      
+      // Clear the editor and set default content
+      const resetSections = data?.sections || []
+      const defaultContent = resetSections.map(section => transformSectionToHTML(section)).join('')
+      editor.commands.setContent(defaultContent)
+      
+      // Update sections state
+      setSections(resetSections)
+      
+      // Reset local state
+      initialContentSet.current = false
+      hasLoadedPRD.current = false
+      setHasLocalChanges(false)
+      lastSavedContent.current = defaultContent
+      
+      // Reload the PRD to get fresh data
+      await loadPRD()
+      
+      toast({
+        title: 'PRD Reset',
+        description: 'The PRD has been reset to default state',
+        duration: 3000
+      })
+    } catch (error) {
+      console.error('Error resetting PRD:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to reset PRD',
         variant: 'destructive'
       })
     } finally {
@@ -1160,6 +1452,16 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
                 title="Save document"
               >
                 <Save className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={handleResetPRD}
+                disabled={isSaving}
+                title="Reset PRD to default"
+              >
+                <RotateCcw className="h-4 w-4" />
               </Button>
               <Button
                 variant="ghost"

@@ -1,7 +1,7 @@
 # Task ID: 6
 # Title: Implement Team Management and Permissions System
 # Status: pending
-# Dependencies: 1, 14
+# Dependencies: 1
 # Priority: medium
 # Description: Develop enterprise-grade team creation, invitation, and permission management features with organization-level billing and SSO integration to enable professional collaborative development.
 # Details:

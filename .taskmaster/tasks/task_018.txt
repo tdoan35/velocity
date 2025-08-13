@@ -1,0 +1,229 @@
+# Task ID: 18
+# Title: Refactor Suggested Responses with Vercel AI SDK Object Generation
+# Status: done
+# Dependencies: 16, 17
+# Priority: medium
+# Description: Refactor the Program Manager Assistant chat's suggested responses feature to use Vercel AI SDK's Object Generation with useObject hook, enabling structured data streaming and improved UI separation.
+# Details:
+## Implementation Details
+
+1. **Analyze Current Implementation**
+   - Review how suggested responses are currently embedded in message text
+   - Document the parsing logic used in the frontend
+   - Identify components that need modification
+
+2. **Define Structured Response Schema with Zod**
+   - Install Zod if not already present: `npm install zod`
+   - Create a schema for structured assistant responses:
+   ```typescript
+   import { z } from 'zod';
+   
+   export const AssistantResponseSchema = z.object({
+     message: z.string(),
+     suggestedResponses: z.array(z.object({
+       id: z.string(),
+       text: z.string(),
+       action: z.string().optional()
+     })).optional()
+   });
+   
+   export type AssistantResponse = z.infer<typeof AssistantResponseSchema>;
+   ```
+
+3. **Implement Backend Changes**
+   - Modify the AI response generation to format responses according to the schema
+   - Update the Project Manager Assistant's prompt to instruct the AI to generate structured data
+   - Implement schema validation before sending responses to the client
+   - Example backend implementation:
+   ```typescript
+   import { OpenAIStream, StreamingTextResponse } from 'ai';
+   import { AssistantResponseSchema } from '../schemas/assistant';
+   
+   export async function POST(req: Request) {
+     // Existing code to process the request and get AI response
+     
+     // Configure OpenAI to return structured objects
+     const response = await openai.chat.completions.create({
+       model: "gpt-4-turbo",
+       messages: messages,
+       stream: true,
+       response_format: { type: "json_object" },
+       temperature: 0.7,
+     });
+     
+     // Create a stream that validates against our schema
+     const stream = OpenAIStream(response, {
+       onFinal: (completion) => {
+         try {
+           // Validate the complete response against our schema
+           const parsedResponse = AssistantResponseSchema.parse(JSON.parse(completion));
+           console.log("Valid response received:", parsedResponse);
+         } catch (error) {
+           console.error("Schema validation failed:", error);
+         }
+       }
+     });
+     
+     return new StreamingTextResponse(stream);
+   }
+   ```
+
+4. **Implement Frontend Changes with useObject Hook**
+   - Update the chat component to use Vercel AI SDK's useObject hook
+   - Example implementation:
+   ```typescript
+   import { useChat } from 'ai/react';
+   import { useObject } from 'ai/react/object';
+   import { AssistantResponseSchema } from '../schemas/assistant';
+   
+   export function Chat() {
+     const { messages, input, handleInputChange, handleSubmit } = useChat();
+     
+     // Use the object hook with our schema
+     const { object: latestResponse, isLoading } = useObject({
+       schema: AssistantResponseSchema,
+       id: messages.length > 0 ? messages[messages.length - 1].id : undefined
+     });
+     
+     return (
+       <div className="chat-container">
+         {/* Display chat messages */}
+         {messages.map((message) => (
+           <div key={message.id} className={`message ${message.role}`}>
+             {message.role === 'assistant' && latestResponse && message.id === messages[messages.length - 1].id ? (
+               // Display structured message content
+               <div className="message-content">{latestResponse.message}</div>
+             ) : (
+               <div className="message-content">{message.content}</div>
+             )}
+           </div>
+         ))}
+         
+         {/* Display suggested responses separately */}
+         {latestResponse?.suggestedResponses && (
+           <div className="suggested-responses">
+             {latestResponse.suggestedResponses.map((suggestion) => (
+               <button 
+                 key={suggestion.id} 
+                 onClick={() => handleSuggestionClick(suggestion.text)}
+                 className="suggestion-button"
+               >
+                 {suggestion.text}
+               </button>
+             ))}
+           </div>
+         )}
+         
+         {/* Input form */}
+         <form onSubmit={handleSubmit}>
+           <input
+             value={input}
+             onChange={handleInputChange}
+             placeholder="Type your message..."
+           />
+           <button type="submit">Send</button>
+         </form>
+       </div>
+     );
+   }
+   ```
+
+5. **Update UI Components**
+   - Modify the chat UI to display suggestion buttons separately from message content
+   - Style the suggestion buttons for better user experience
+   - Implement click handlers for suggestion buttons
+
+6. **Implement Backwards Compatibility**
+   - Add fallback parsing for legacy message format
+   - Example fallback implementation:
+   ```typescript
+   function extractSuggestedResponses(message: string) {
+     // Legacy parsing logic to extract suggestions from text
+     const regex = /Suggested responses:\s*\n((?:- .*\n?)+)/i;
+     const match = message.match(regex);
+     
+     if (match && match[1]) {
+       const suggestions = match[1]
+         .split('\n')
+         .filter(line => line.trim().startsWith('- '))
+         .map((line, index) => ({
+           id: `legacy-${index}`,
+           text: line.replace(/^- /, '').trim()
+         }));
+       
+       return suggestions;
+     }
+     
+     return [];
+   }
+   
+   // In the component:
+   const suggestedResponses = latestResponse?.suggestedResponses || 
+     (messages[messages.length - 1]?.role === 'assistant' 
+       ? extractSuggestedResponses(messages[messages.length - 1].content) 
+       : []);
+   ```
+
+7. **Add Error Handling**
+   - Implement robust error handling for schema validation failures
+   - Add fallback UI for when structured data isn't available
+   - Log validation errors for debugging
+
+8. **Update TypeScript Types**
+   - Ensure all components have proper TypeScript types
+   - Use the types generated from Zod schema
+   - Update any related interfaces or type definitions
+
+9. **Performance Optimization**
+   - Implement memoization for expensive operations
+   - Optimize rendering of streaming content
+   - Add loading states for better user experience
+
+# Test Strategy:
+## Test Strategy
+
+1. **Unit Testing**
+   - Test Zod schema validation with various input formats
+   - Verify the useObject hook correctly processes structured data
+   - Test fallback parsing logic for backward compatibility
+   - Validate error handling for malformed responses
+
+2. **Integration Testing**
+   - Test end-to-end flow from user input to structured response display
+   - Verify suggested responses appear correctly in the UI
+   - Test clicking on suggestion buttons properly sends the selected text
+   - Validate that streaming works correctly with structured data
+
+3. **Backward Compatibility Testing**
+   - Test with legacy format messages to ensure they still display correctly
+   - Verify suggested responses are still extracted from text when needed
+   - Test mixed scenarios where some messages use new format and others use old format
+
+4. **UI/UX Testing**
+   - Verify suggested response buttons are visually distinct from message content
+   - Test responsive design on different screen sizes
+   - Ensure accessibility standards are maintained (keyboard navigation, screen readers)
+   - Test with different themes and color modes
+
+5. **Performance Testing**
+   - Measure rendering performance with large chat histories
+   - Test streaming performance with various network conditions
+   - Verify memory usage remains stable during extended chat sessions
+
+6. **Error Handling Testing**
+   - Simulate schema validation failures and verify graceful degradation
+   - Test with malformed JSON responses
+   - Verify error logging works correctly
+   - Test recovery from temporary errors
+
+7. **Browser Compatibility**
+   - Test across major browsers (Chrome, Firefox, Safari, Edge)
+   - Verify functionality on mobile browsers
+
+8. **Manual Testing Checklist**
+   - Verify suggested responses appear immediately after assistant message
+   - Test that clicking a suggestion sends the correct text
+   - Confirm suggested responses don't appear in the message text
+   - Verify streaming of both message content and suggested responses
+   - Test with various types and numbers of suggested responses
+   - Confirm that UI remains responsive during streaming

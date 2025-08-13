@@ -1,0 +1,309 @@
+# Task ID: 23
+# Title: Implement Block-Based PRD Editor Architecture with Section-Aware Saving
+# Status: in-progress
+# Dependencies: 20, 22
+# Priority: medium
+# Description: Refactor the existing PRD Editor components to use a block-based architecture with structured sections, enabling section-aware auto-saving and maintaining proper data schema throughout the editing flow. Build upon existing NotionPRDEditor, SectionEditor, and edge functions. Enhanced with Notion-like UI/UX features for optimal editing experience.
+# Details:
+## Implementation Details
+
+1. **Refactor Existing SectionEditor to SectionBlock Base**
+   - Extend the existing SectionEditor component to serve as the foundation SectionBlock for all section types
+   - Add data attributes (`data-section-id`, `data-field`) to maintain structure during editing
+   - Implement section-specific validation using Zod schemas
+   ```tsx
+   interface SectionBlockProps {
+     id: string;
+     type: SectionType;
+     content: any;
+     ownership: AgentType;
+     isRequired: boolean;
+     onUpdate: (id: string, content: any) => void;
+   }
+   ```
+
+2. **Enhance NotionPRDEditor for Section-Aware Operations**
+   - Refactor the existing NotionPRDEditor with TipTap to use section-aware saving instead of full document saves
+   - Integrate with existing edge functions (updateSection, addSection) for granular operations
+   - Implement debounced section-level saves using existing backend infrastructure
+   ```typescript
+   const debouncedSaveSection = useCallback(
+     debounce((sectionId: string, content: any) => {
+       // Use existing updateSection edge function
+       updateSection(projectId, prdId, sectionId, content);
+     }, 1500),
+     [projectId, prdId]
+   );
+   ```
+
+3. **Section Data Schema Implementation**
+   - Define Zod schemas for each section type to ensure data integrity with existing JSONB sections column
+   ```typescript
+   const OverviewSectionSchema = z.object({
+     vision: z.string(),
+     problem: z.string(),
+     targetUsers: z.array(z.string())
+   });
+   ```
+   - Create type definitions and validation utilities that work with existing database structure
+
+4. **Enhance Existing BlockControls and DragHandle Components**
+   - Extend existing BlockControls to include section-specific actions
+   - Enhance existing DragHandle with constraint logic to prevent deletion of required sections
+   - Add visual indicators for drag targets and invalid drops
+   - Implement slash command menu integration with existing components
+
+5. **Section Ownership and Permissions Enhancement**
+   - Add visual badges to existing components to indicate agent ownership of sections
+   - Implement permission logic using existing database schema
+   - Create section visibility controls for hiding/showing sections
+
+6. **Smart Paste Detection Integration**
+   - Implement content transformation within existing TipTap editor setup
+   ```typescript
+   const handlePaste = (e: ClipboardEvent, sectionType: SectionType) => {
+     const text = e.clipboardData?.getData('text/plain');
+     if (!text) return;
+     
+     // Transform content based on section type using existing infrastructure
+     switch (sectionType) {
+       case 'features':
+         // Parse as feature list if possible
+         break;
+       case 'overview':
+         // Parse as overview content
+         break;
+     }
+   };
+   ```
+
+7. **Migration and Backward Compatibility**
+   - Ensure existing PRDs in the database work with the refactored components
+   - Implement any necessary data migrations for the sections JSONB column
+   - Create fallback rendering for legacy section formats
+
+8. **Integration Testing with Existing Backend**
+   - Verify compatibility with existing edge functions (updateSection, addSection, etc.)
+   - Test section operations against existing database schema
+   - Ensure proper integration with existing authentication and permissions
+
+9. **Notion-like UI/UX Integration**
+   - Create NotionSectionEditor component wrapping TipTap while maintaining section-aware architecture
+   - Implement hybrid content model storing both structured data (for backend) and rich HTML (for display)
+   - Add slash command menu (/) for quick content insertion with section-specific commands
+   - Implement bubble menu for contextual text formatting
+   - Enhance BlockControls with improved drag handles and visual feedback
+   - Apply Notion-style CSS with clean aesthetics and proper spacing
+   - Add placeholder text with helpful hints for each section type
+   - Implement smooth animations for interactions and transitions
+   - Add block hover effects for visual feedback during editing
+   - Enable inline editing without modal dialogs for seamless experience
+
+# Test Strategy:
+## Test Strategy
+
+1. **Refactoring Validation Testing**
+   - Test that refactored SectionEditor maintains backward compatibility
+   - Verify existing PRDs load correctly with refactored components
+   - Test that all existing functionality remains intact after refactoring
+
+2. **Section-Aware Auto-Save Testing**
+   - Test integration with existing updateSection edge function
+   - Verify debounced saves work with existing backend infrastructure
+   - Test optimistic updates with existing database schema
+   - Validate error handling using existing error management system
+
+3. **Enhanced Component Testing**
+   - Test enhanced BlockControls with section-specific actions
+   - Verify improved DragHandle functionality with existing drag/drop
+   - Test slash command integration with existing NotionPRDEditor
+
+4. **Backend Integration Testing**
+   - Test all edge function integrations (updateSection, addSection, etc.)
+   - Verify section operations work correctly with existing JSONB column
+   - Test authentication and permissions with refactored components
+
+5. **Migration and Compatibility Testing**
+   - Test loading existing PRDs with new architecture
+   - Verify data migrations work correctly if needed
+   - Test fallback rendering for legacy formats
+
+6. **End-to-End Refactoring Testing**
+   - Test complete PRD editing flow with refactored components
+   - Verify all existing features work with new architecture
+   - Test performance with existing data volumes
+   - Validate that refactored system maintains feature parity
+
+7. **Notion-like UI/UX Testing**
+   - Test NotionSectionEditor component integration
+   - Verify hybrid content model maintains data consistency
+   - Test slash command menu functionality and responsiveness
+   - Validate bubble menu contextual formatting
+   - Test enhanced drag/drop interactions and visual feedback
+   - Verify CSS styling consistency across different browsers
+   - Test animation performance and smoothness
+   - Validate inline editing experience across all section types
+
+# Subtasks:
+## 1. Refactor SectionEditor to SectionBlock Base Component [done]
+### Dependencies: None
+### Description: Extend the existing SectionEditor component to serve as the foundational SectionBlock component for all section types.
+### Details:
+Refactor the existing SectionEditor component with the following enhancements:
+- Extend existing component to include SectionBlock interface (id, type, content, ownership, isRequired, onUpdate)
+- Add data attributes (data-section-id, data-field) to maintain structure during editing
+- Integrate section-specific validation using Zod schemas
+- Maintain backward compatibility with existing usage
+- Add section context provider to manage section state
+- Implement event handlers for content changes that work with existing backend
+
+## 2. Enhance NotionPRDEditor for Section-Aware Saving [done]
+### Dependencies: 23.1
+### Description: Refactor the existing NotionPRDEditor with TipTap to implement section-aware auto-saving using existing edge functions.
+### Details:
+Enhance the existing NotionPRDEditor with section-aware capabilities:
+- Implement debounced section-level saves using existing updateSection edge function
+- Replace full document saves with granular section updates
+- Add optimistic updates to prevent UI lag during saves
+- Integrate with existing error handling and retry logic
+- Add visual indicators for save status (saving, saved, error)
+- Maintain existing TipTap functionality while adding section awareness
+- Ensure compatibility with existing database JSONB sections column
+
+## 3. Implement Section Data Schema System [done]
+### Dependencies: 23.1
+### Description: Define and implement Zod schemas for all section types to work with the existing database structure.
+### Details:
+Create a schema system that integrates with existing infrastructure:
+- Define Zod schemas for all standard section types compatible with existing JSONB column
+- Implement schema validation utilities that work with existing data structure
+- Create TypeScript type definitions based on schemas
+- Develop schema versioning to support existing PRD data
+- Create a schema registry to manage all section schemas
+- Ensure schemas validate against existing section data in database
+
+## 4. Enhance Existing BlockControls and DragHandle Components [done]
+### Dependencies: 23.1, 23.2
+### Description: Enhance the existing BlockControls and DragHandle components with section-specific functionality and constraints.
+### Details:
+Enhance existing components with new functionality:
+- Extend existing BlockControls to include section-specific actions and slash command integration
+- Enhance existing DragHandle with constraint logic to prevent deletion of required sections
+- Add visual indicators for drag targets and invalid drops to existing drag/drop system
+- Implement section reordering that persists to existing database structure
+- Add hover states and focus indicators to existing components
+- Integrate with existing permission system for section operations
+
+## 5. Implement Section Ownership and Permissions Integration [done]
+### Dependencies: 23.2, 23.3
+### Description: Add section ownership and permissions functionality that integrates with existing authentication and database systems.
+### Details:
+Implement ownership and permissions using existing infrastructure:
+- Add visual badges to indicate agent ownership using existing user/agent system
+- Implement permission logic using existing authentication and authorization
+- Create section visibility controls that work with existing database schema
+- Implement read-only mode for sections owned by AI using existing ownership data
+- Add permission checks before section operations using existing middleware
+- Create UI for ownership management within existing interface patterns
+
+## 6. Implement Smart Paste Detection with TipTap Integration [done]
+### Dependencies: 23.2, 23.3
+### Description: Add smart paste detection functionality to the existing TipTap editor setup within NotionPRDEditor.
+### Details:
+Integrate smart paste detection with existing TipTap setup:
+- Implement content transformation based on section type within existing editor
+- Add detection for common formats (lists, tables, etc.) using TipTap extensions
+- Create paste handlers that respect existing section schemas
+- Integrate with existing validation system for pasted content
+- Add user feedback for successful content transformation
+- Maintain existing paste functionality for non-structured content
+
+## 7. Implement Migration and Backward Compatibility [done]
+### Dependencies: 23.1, 23.2, 23.3, 23.4, 23.5
+### Description: Ensure existing PRDs work with refactored components and implement any necessary data migrations.
+### Details:
+Implement backward compatibility and migration:
+- Analyze existing PRD data structure in JSONB sections column
+- Create migration utilities if needed for data structure changes
+- Implement fallback rendering for legacy section formats
+- Ensure all existing PRDs load correctly with refactored components
+- Create progressive enhancement for new features
+- Add feature flags for gradual rollout of new functionality
+- Maintain API compatibility for existing integrations
+
+## 8. Integration Testing with Existing Backend Infrastructure [done]
+### Dependencies: 23.1, 23.2, 23.3, 23.4, 23.5, 23.6, 23.7
+### Description: Comprehensive testing of refactored components with existing edge functions, database, and authentication systems.
+### Details:
+Perform comprehensive integration testing:
+- Test all edge function integrations (updateSection, addSection, etc.)
+- Verify section operations work correctly with existing JSONB column
+- Test authentication and permissions with refactored components
+- Validate performance with existing data volumes
+- Test concurrent editing scenarios with existing real-time infrastructure
+- Verify error handling works with existing error management systems
+- Ensure feature parity with pre-refactoring functionality
+
+## 9. Create NotionSectionEditor Component with Hybrid Content Model [done]
+### Dependencies: 23.1, 23.2, 23.3
+### Description: Develop the NotionSectionEditor component that wraps TipTap while maintaining section-aware architecture with hybrid content storage.
+### Details:
+Create a new NotionSectionEditor component that bridges the completed section-aware architecture with Notion-like UI:
+- Build wrapper component around completed SectionBlock foundation
+- Implement hybrid content model storing both structured data (for backend) and rich HTML (for display)
+- Integrate with completed section-aware saving mechanism
+- Ensure compatibility with existing TipTap setup from completed NotionPRDEditor enhancements
+- Add content synchronization between structured and rich formats
+- Implement progressive enhancement strategy for existing PRDs
+- Maintain backward compatibility with completed schema system
+<info added on 2025-08-12T22:05:01.546Z>
+Implementation successfully completed - the NotionSectionEditor component is now functional with TipTap integration, hybrid content model operational for dual data storage, and seamless integration with section-aware saving system confirmed. Ready for testing phase and UI/UX enhancements in next subtask.
+</info added on 2025-08-12T22:05:01.546Z>
+
+## 10. Implement Notion-style UI/UX Enhancements [done]
+### Dependencies: 23.9, 23.4
+### Description: Add comprehensive UI/UX enhancements including slash commands, bubble menu, styling, and animations.
+### Details:
+Enhance the NotionSectionEditor with comprehensive UI/UX features:
+- Implement slash command menu (/) for quick content insertion with section-specific commands
+- Add bubble menu for contextual text formatting using TipTap extensions
+- Apply Notion-style CSS with clean aesthetics, proper spacing, and typography
+- Add section-specific placeholder text with helpful hints
+- Implement smooth animations for interactions, transitions, and state changes
+- Add block hover effects and visual feedback during editing
+- Enhance completed BlockControls with improved visual design and interactions
+- Implement inline editing experience without modal dialogs
+- Add keyboard shortcuts for common operations
+- Create responsive design for different screen sizes
+
+## 11. Implement Enhanced Drag and Drop with Visual Feedback [done]
+### Dependencies: 23.10, 23.4
+### Description: Refine drag and drop interactions with improved visual feedback and smart drop zone detection.
+### Details:
+Build upon completed DragHandle enhancements to create polished drag/drop experience:
+- Enhance visual feedback during drag operations with ghost elements and drop indicators
+- Implement smart drop zone detection with visual highlighting
+- Add constraint-based dropping with clear visual cues for invalid drops
+- Improve drag handle positioning and accessibility
+- Add smooth animations for drag start, drag over, and drop completion
+- Implement auto-scroll during drag operations for long documents
+- Add haptic feedback for mobile devices where supported
+- Integrate with completed permission system to show/hide drag handles appropriately
+- Ensure drag operations work seamlessly with hybrid content model
+
+## 12. Comprehensive UI/UX Integration Testing and Performance Optimization [pending]
+### Dependencies: 23.9, 23.10, 23.11
+### Description: Perform end-to-end testing of all Notion-like UI/UX features and optimize performance.
+### Details:
+Conduct comprehensive testing and optimization of the complete Notion-like experience:
+- Test complete editing workflow from section creation to content management
+- Verify all UI/UX enhancements work cohesively together
+- Performance testing with large documents and multiple sections
+- Cross-browser compatibility testing for all visual enhancements
+- Accessibility testing for keyboard navigation and screen readers
+- Mobile responsiveness testing for touch interactions
+- Integration testing with all completed backend features
+- Load testing with concurrent users and real-time updates
+- Memory leak detection and optimization for long editing sessions
+- Bundle size optimization for fast loading times
+

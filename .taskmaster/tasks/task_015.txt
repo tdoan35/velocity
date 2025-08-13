@@ -1,0 +1,53 @@
+# Task ID: 15
+# Title: Enable Multi-Agent Chat System
+# Status: done
+# Dependencies: None
+# Priority: high
+# Description: Update the existing conversation edge function to support multiple AI agent personalities and enable agent switching in the frontend. Each agent will have specialized prompts and context for their specific domain (project management, UI/UX design, code generation, configuration).
+# Details:
+## Implementation Steps:
+
+1. **Update Conversation Edge Function**
+   - Add `agentType` parameter to ConversationRequest interface
+   - Create agent-specific system prompt functions
+   - Implement buildSystemPrompt() switch for different agents
+   - Store agent_type in conversation metadata
+
+2. **Create Agent-Specific Prompts**
+   - Project Assistant: Focus on project planning, task management, feature prioritization
+   - Design Assistant: UI/UX patterns, component design, accessibility, mobile best practices
+   - Code Generator: React Native syntax, TypeScript, performance optimization, error handling
+   - Config Helper: Build settings, environment variables, deployment, app permissions
+
+3. **Frontend Updates (ProjectDesign.tsx)**
+   - Add activeAgent state management
+   - Enable all agent buttons (remove opacity-60)
+   - Implement agent switching logic
+   - Pass agentType in conversation API calls
+   - Update UI to show active agent context
+   - Add visual feedback for agent switching
+
+4. **Database Schema Updates**
+   - Add agent_type column to conversation_messages table
+   - Add agent_type to conversations metadata
+   - Create migration for schema changes
+
+5. **Agent Context Management**
+   - Maintain separate conversation contexts per agent
+   - Allow context sharing between agents when relevant
+   - Implement agent handoff capabilities
+
+## Technical Details:
+- Reuse existing authentication, rate limiting, and streaming infrastructure
+- Maintain backward compatibility with existing conversations
+- Use prompt engineering for agent specialization
+- Keep single edge function for easier maintenance
+
+# Test Strategy:
+1. Test agent switching in frontend UI
+2. Verify correct system prompts are applied per agent
+3. Test conversation continuity when switching agents
+4. Validate database persistence of agent_type
+5. Test streaming responses with different agents
+6. Verify rate limiting works across all agents
+7. Test error handling for invalid agent types

@@ -69,7 +69,17 @@
       "Bash(then sed -i \"s/^import React\\b[^;]*$//\" \"$file\")",
       "Bash(fi)",
       "Bash(done)",
-      "mcp__taskmaster-ai__expand_task"
+      "mcp__taskmaster-ai__expand_task",
+      "mcp__playwright__browser_handle_dialog",
+      "mcp__taskmaster-ai__remove_subtask",
+      "mcp__taskmaster-ai__add_subtask",
+      "mcp__taskmaster-ai__remove_dependency",
+      "mcp__taskmaster-ai__add_dependency",
+      "Bash(task-master show:*)",
+      "Bash(task-master move:*)",
+      "Bash(task-master:*)",
+      "Bash(jq:*)",
+      "Bash(python3:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
