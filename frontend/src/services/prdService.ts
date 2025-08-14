@@ -22,7 +22,7 @@ export interface FlexiblePRDSection {
   id: string
   title: string
   order: number
-  agent: AgentType
+  agent: AgentType | 'human'
   required: boolean
   content: Record<string, any>
   status: SectionStatus

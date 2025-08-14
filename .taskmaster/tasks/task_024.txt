@@ -1,546 +1,85 @@
 # Task ID: 24
-# Title: Fix PRD Editor Content Duplication with Single Source of Truth Architecture
+# Title: Implement Smart Onboarding Text Card with Contextual Hover Guidance
 # Status: pending
-# Dependencies: 20, 23
-# Priority: medium
-# Description: Resolve the content duplication issue in the PRD Editor by implementing a single source of truth architecture with unidirectional data flow, immutable section updates, and stable section IDs to prevent duplications after save/reload cycles. Investigation findings confirm the issue is in the presentation layer - TipTap editor not properly clearing content before setting new content.
+# Dependencies: None
+# Priority: high
+# Description: Add an intelligent onboarding helper card to the Project Design page that provides context-aware guidance based on user interactions and current workflow state
 # Details:
-## Implementation Details
 
-**CRITICAL FINDINGS from Duplication Bug Analysis:**
-- Backend cleanup function IS WORKING correctly (removing 48 duplicate headers from data)
-- Backend returns clean data (7 sections) but frontend still renders duplicates 
-- TipTap editor.commands.setContent() retains old DOM nodes instead of clearing
-- Content is being appended rather than replaced with each save/reload cycle
-- 400 error from prd-management edge function may contribute to fallback behavior
-- setEditorContent function logs "different: true empty: true" but fails to clear editor
-- Sections like "📋 Overview", "✨ Core Features" appear 7+ times in DOM despite clean data
-
-**IMMEDIATE FIX REQUIRED:**
-Must call `editor.destroy()` or `editor.commands.clearContent(false)` before setting new content in TipTap editor.
-
-1. **Fix TipTap Editor Content Clearing Issue (PRIORITY 1)**
-   - Investigate and fix the setEditorContent function that's failing to clear editor content
-   - Implement proper editor.commands.clearContent(false) or editor.destroy() before setContent()
-   - Fix the visual duplication where sections appear multiple times in DOM
-   - Address the 400 error from prd-management edge function that may trigger fallback behavior
-   ```tsx
-   const setEditorContent = useCallback((content: string) => {
-     if (!editor) return;
-     
-     // CRITICAL: Clear existing content before setting new content
-     editor.commands.clearContent(false);
-     // OR alternatively: editor.destroy() and recreate
-     
-     editor.commands.setContent(content);
-   }, [editor]);
-   ```
-
-2. **Analyze Current Implementation Issues**
-   - Review NotionPRDEditor.enhanced.tsx to identify the root causes of section duplication
-   - Document the current data flow and state management approach
-   - Map out how sections are currently stored, updated, and rendered
-   - Focus on the presentation layer since backend data is confirmed clean
-
-3. **Implement Single Source of Truth Architecture**
-   - Refactor the sections array to be the only source of truth for PRD content
-   - Remove any duplicate state representations (e.g., HTML strings alongside section data)
-   - Implement a clear unidirectional data flow: Sections Data → Section State → Editor View
-   ```tsx
-   // Example data flow pattern
-   const [sections, setSections] = useState<Section[]>(initialSections);
-   
-   // Update sections immutably
-   const updateSection = useCallback((sectionId: string, newContent: any) => {
-     setSections(prevSections => 
-       prevSections.map(section => 
-         section.id === sectionId ? {...section, content: newContent} : section
-       )
-     );
-   }, []);
-   ```
-
-4. **Implement TipTap JSON Document Structure**
-   - Replace HTML string storage with TipTap's JSON document structure
-   - Create custom TipTap nodes for different section types
-   - Implement serialization/deserialization between JSON and editor state
-   ```tsx
-   // Example TipTap JSON structure
-   interface TipTapJSON {
-     type: 'doc';
-     content: Array<{
-       type: string;
-       attrs?: Record<string, any>;
-       content?: TipTapJSON['content'];
-       marks?: Array<{
-         type: string;
-         attrs?: Record<string, any>;
-       }>;
-     }>;
-   }
-   
-   // Custom section node example
-   const SectionNode = Node.create({
-     name: 'section',
-     group: 'block',
-     content: 'block+',
-     
-     addAttributes() {
-       return {
-         id: { default: '' },
-         type: { default: 'text' }
-       };
-     },
-     
-     parseHTML() {
-       return [{ tag: 'div[data-section-id]' }];
-     },
-     
-     renderHTML({ HTMLAttributes }) {
-       return ['div', { ...HTMLAttributes, 'data-section-id': HTMLAttributes.id }, 0];
-     }
-   });
-   ```
-
-5. **Add Stable Section IDs**
-   - Implement unique, stable IDs for each section that persist across save/reload cycles
-   - Use UUID v4 or a similar approach for generating IDs
-   - Ensure IDs are preserved during serialization/deserialization
-   ```tsx
-   import { v4 as uuidv4 } from 'uuid';
-   
-   const createNewSection = (type: SectionType, content: any = {}): Section => ({
-     id: uuidv4(),
-     type,
-     content,
-     createdAt: new Date().toISOString(),
-     updatedAt: new Date().toISOString()
-   });
-   ```
-
-6. **Implement Proper State Management with Version Tracking**
-   - Add version tracking to detect and prevent conflicting updates
-   - Implement optimistic updates with rollback capability
-   - Use a reducer pattern for more predictable state transitions
-   ```tsx
-   interface SectionState {
-     sections: Section[];
-     version: number;
-     isLoading: boolean;
-     error: Error | null;
-   }
-   
-   type SectionAction = 
-     | { type: 'LOAD_SECTIONS', payload: Section[] }
-     | { type: 'UPDATE_SECTION', payload: { id: string, content: any } }
-     | { type: 'ADD_SECTION', payload: Section }
-     | { type: 'REMOVE_SECTION', payload: string }
-     | { type: 'SET_ERROR', payload: Error };
-   
-   function sectionReducer(state: SectionState, action: SectionAction): SectionState {
-     switch (action.type) {
-       case 'LOAD_SECTIONS':
-         return { ...state, sections: action.payload, version: state.version + 1, isLoading: false };
-       case 'UPDATE_SECTION':
-         return {
-           ...state,
-           sections: state.sections.map(section => 
-             section.id === action.payload.id 
-               ? { ...section, content: action.payload.content, updatedAt: new Date().toISOString() } 
-               : section
-           ),
-           version: state.version + 1
-         };
-       // Additional cases...
-     }
-   }
-   ```
-
-7. **Implement Transaction-Based Atomic Updates**
-   - Ensure all section updates are atomic and transactional
-   - Implement a transaction queue to handle concurrent updates
-   - Add rollback capability for failed transactions
-   ```tsx
-   interface Transaction {
-     id: string;
-     operations: Array<{
-       type: 'update' | 'add' | 'remove';
-       sectionId?: string;
-       data?: any;
-     }>;
-     timestamp: number;
-   }
-   
-   const applyTransaction = async (transaction: Transaction) => {
-     try {
-       // Begin transaction
-       await db.transaction(async (trx) => {
-         for (const op of transaction.operations) {
-           if (op.type === 'update') {
-             await trx('sections').where('id', op.sectionId).update({ content: op.data });
-           } else if (op.type === 'add') {
-             await trx('sections').insert(op.data);
-           } else if (op.type === 'remove') {
-             await trx('sections').where('id', op.sectionId).delete();
-           }
-         }
-       });
-       
-       // Update local state after successful transaction
-       dispatch({ type: 'APPLY_TRANSACTION', payload: transaction });
-       
-     } catch (error) {
-       console.error('Transaction failed:', error);
-       dispatch({ type: 'SET_ERROR', payload: error });
-     }
-   };
-   ```
-
-8. **Implement Debounced Auto-Save with Integrity Checks**
-   - Add debounced auto-save functionality to prevent rapid consecutive saves
-   - Implement integrity checks before saving to prevent duplicate sections
-   - Add validation to ensure section data is consistent
-   ```tsx
-   const debouncedSave = useCallback(
-     debounce(async (sections: Section[]) => {
-       // Validate sections before saving
-       const uniqueIds = new Set<string>();
-       const validSections = sections.filter(section => {
-         if (uniqueIds.has(section.id)) return false;
-         uniqueIds.add(section.id);
-         return true;
-       });
-       
-       // Only save if we have valid sections
-       if (validSections.length > 0) {
-         await saveSections(validSections);
-       }
-     }, 1000),
-     []
-   );
-   ```
-
-9. **Update NotionPRDEditor.enhanced.tsx**
-   - Refactor the component to implement the new architecture
-   - Remove any code that leads to duplication
-   - Implement the new data flow and state management approach
-   - Add comprehensive error handling and logging
-
-10. **Add Comprehensive Logging and Debugging Tools**
-    - Implement detailed logging for state changes and operations
-    - Add developer tools for inspecting the section structure
-    - Create utilities for diagnosing and fixing data inconsistencies
 
 # Test Strategy:
-## Test Strategy
 
-**PRIORITY 1: TipTap Editor Content Clearing Tests**
-- Test that editor.commands.clearContent(false) properly removes all content before setting new content
-- Verify that DOM nodes are completely cleared between content updates
-- Test that duplicate sections no longer appear in the rendered output
-- Validate that save/reload cycles don't accumulate content
-```javascript
-test('editor should clear content before setting new content', () => {
-  const editor = mockTipTapEditor();
-  const setEditorContent = createSetEditorContent(editor);
-  
-  // Set initial content
-  setEditorContent('<h1>Initial Content</h1>');
-  expect(editor.getHTML()).toContain('Initial Content');
-  
-  // Set new content - should completely replace, not append
-  setEditorContent('<h1>New Content</h1>');
-  expect(editor.getHTML()).toContain('New Content');
-  expect(editor.getHTML()).not.toContain('Initial Content');
-});
-
-test('sections should not accumulate after multiple save/reload cycles', async () => {
-  const { getByTestId, rerender, getAllByTestId } = render(<NotionPRDEditor initialSections={mockSections} />);
-  
-  // Get initial section count
-  const getSectionCount = (selector) => getAllByTestId(selector).length;
-  const initialOverviewCount = getSectionCount('section-overview');
-  
-  // Perform multiple save/reload cycles
-  for (let i = 0; i < 3; i++) {
-    // Save
-    await act(async () => {
-      fireEvent.click(getByTestId('save-button'));
-      await new Promise(resolve => setTimeout(resolve, 1500));
-    });
-    
-    // Reload
-    rerender(<NotionPRDEditor initialSections={await mockFetchSections()} />);
-    
-    // Verify section count hasn't increased
-    expect(getSectionCount('section-overview')).toBe(initialOverviewCount);
-  }
-});
-```
-
-1. **Unit Testing for Core Components**
-   - Test the section reducer with various action types to ensure correct state transitions
-   - Verify that section IDs remain stable across operations
-   - Test serialization/deserialization of TipTap JSON to ensure data integrity
-   - Validate transaction handling with simulated concurrent operations
-   ```javascript
-   test('section reducer should update sections immutably', () => {
-     const initialState = {
-       sections: [{ id: '1', type: 'text', content: { text: 'Initial' } }],
-       version: 1,
-       isLoading: false,
-       error: null
-     };
-     
-     const action = {
-       type: 'UPDATE_SECTION',
-       payload: { id: '1', content: { text: 'Updated' } }
-     };
-     
-     const newState = sectionReducer(initialState, action);
-     
-     expect(newState.version).toBe(2);
-     expect(newState.sections[0].content.text).toBe('Updated');
-     expect(initialState.sections[0].content.text).toBe('Initial'); // Original unchanged
-   });
-   ```
-
-2. **Integration Testing for Data Flow**
-   - Test the complete data flow from user input to storage and back
-   - Verify that sections are correctly rendered after reload
-   - Test that section updates are correctly persisted
-   - Validate that the editor state correctly reflects the section data
-   ```javascript
-   test('sections should persist correctly after save and reload', async () => {
-     // Setup test component with mock data
-     const { getByTestId, rerender } = render(<NotionPRDEditor initialSections={mockSections} />);
-     
-     // Make changes to a section
-     const section = getByTestId('section-1');
-     fireEvent.change(section, { target: { value: 'Updated content' } });
-     
-     // Trigger save
-     await act(async () => {
-       fireEvent.click(getByTestId('save-button'));
-       await new Promise(resolve => setTimeout(resolve, 1500)); // Wait for debounce
-     });
-     
-     // Simulate reload
-     rerender(<NotionPRDEditor initialSections={await mockFetchSections()} />);
-     
-     // Verify content persisted correctly
-     expect(getByTestId('section-1').textContent).toContain('Updated content');
-   });
-   ```
-
-3. **Duplication Prevention Testing**
-   - Create specific tests to verify that sections are not duplicated
-   - Test multiple save/reload cycles to ensure stability
-   - Validate that the system correctly handles edge cases like rapid consecutive saves
-   ```javascript
-   test('sections should not duplicate after multiple save/reload cycles', async () => {
-     const { getByTestId, rerender, getAllByTestId } = render(<NotionPRDEditor initialSections={mockSections} />);
-     
-     // Initial section count
-     const initialCount = getAllByTestId(/^section-/).length;
-     
-     // Perform multiple save/reload cycles
-     for (let i = 0; i < 5; i++) {
-       // Make a small change
-       const section = getByTestId('section-1');
-       fireEvent.change(section, { target: { value: `Updated content ${i}` } });
-       
-       // Save
-       await act(async () => {
-         fireEvent.click(getByTestId('save-button'));
-         await new Promise(resolve => setTimeout(resolve, 1500)); // Wait for debounce
-       });
-       
-       // Reload
-       rerender(<NotionPRDEditor initialSections={await mockFetchSections()} />);
-     }
-     
-     // Verify no duplication occurred
-     const finalCount = getAllByTestId(/^section-/).length;
-     expect(finalCount).toBe(initialCount);
-   });
-   ```
-
-4. **Performance Testing**
-   - Measure rendering performance with large PRDs
-   - Test memory usage during extended editing sessions
-   - Validate that the system remains responsive during complex operations
-   ```javascript
-   test('editor should maintain performance with large documents', async () => {
-     // Generate large test document with many sections
-     const largeMockSections = Array.from({ length: 100 }, (_, i) => ({
-       id: `section-${i}`,
-       type: 'text',
-       content: { text: `Section ${i} content with substantial text...` }
-     }));
-     
-     // Measure render time
-     const startTime = performance.now();
-     render(<NotionPRDEditor initialSections={largeMockSections} />);
-     const renderTime = performance.now() - startTime;
-     
-     // Assert reasonable performance
-     expect(renderTime).toBeLessThan(500); // Should render in under 500ms
-   });
-   ```
-
-5. **Error Handling and Recovery Testing**
-   - Test system behavior when errors occur during saving
-   - Verify that the system can recover from corrupted state
-   - Validate that error messages are displayed appropriately
-   ```javascript
-   test('editor should recover from save errors', async () => {
-     // Mock API to simulate error
-     jest.spyOn(api, 'saveSections').mockImplementationOnce(() => 
-       Promise.reject(new Error('Network error'))
-     );
-     
-     const { getByTestId, queryByText } = render(<NotionPRDEditor initialSections={mockSections} />);
-     
-     // Make changes and attempt to save
-     const section = getByTestId('section-1');
-     fireEvent.change(section, { target: { value: 'Updated content' } });
-     
-     await act(async () => {
-       fireEvent.click(getByTestId('save-button'));
-       await new Promise(resolve => setTimeout(resolve, 1500)); // Wait for debounce
-     });
-     
-     // Verify error is displayed
-     expect(queryByText(/error/i)).toBeInTheDocument();
-     
-     // Restore mock and retry save
-     jest.spyOn(api, 'saveSections').mockRestore();
-     
-     await act(async () => {
-       fireEvent.click(getByTestId('retry-button'));
-       await new Promise(resolve => setTimeout(resolve, 1500)); // Wait for debounce
-     });
-     
-     // Verify success message
-     expect(queryByText(/saved successfully/i)).toBeInTheDocument();
-   });
-   ```
-
-6. **End-to-End Testing**
-   - Test the complete PRD editing workflow from creation to publishing
-   - Verify that all features work together correctly
-   - Validate that the system behaves correctly in realistic usage scenarios
-   ```javascript
-   test('complete PRD editing workflow should work correctly', async () => {
-     // Setup Cypress test
-     cy.visit('/projects/123/prd');
-     
-     // Create new sections
-     cy.get('[data-testid="add-section-button"]').click();
-     cy.get('[data-testid="section-type-text"]').click();
-     cy.get('[data-testid="section-editor"]').last().type('New section content');
-     
-     // Save PRD
-     cy.get('[data-testid="save-button"]').click();
-     cy.wait(2000); // Wait for save
-     
-     // Reload page
-     cy.reload();
-     
-     // Verify content persisted
-     cy.get('[data-testid="section-editor"]').last().should('contain', 'New section content');
-     
-     // Verify no duplicates
-     cy.get('[data-testid="section-editor"]').should('have.length', initialSectionCount + 1);
-   });
-   ```
-
-7. **Regression Testing**
-   - Test that existing functionality continues to work correctly
-   - Verify that the fix doesn't introduce new issues
-   - Validate compatibility with other components and features
-   ```javascript
-   test('existing PRD functionality should continue to work', async () => {
-     // Test various existing features
-     cy.visit('/projects/123/prd');
-     
-     // Test section reordering
-     cy.get('[data-testid="section-1-drag-handle"]').drag('[data-testid="section-3-drop-zone"]');
-     cy.get('[data-testid="section-list"]').children().eq(2).should('have.attr', 'data-testid', 'section-1');
-     
-     // Test formatting options
-     cy.get('[data-testid="section-1-editor"]').click();
-     cy.get('[data-testid="bold-button"]').click();
-     cy.get('[data-testid="section-1-editor"]').type('Bold text');
-     cy.get('[data-testid="section-1-editor"]').find('strong').should('contain', 'Bold text');
-     
-     // Test other existing features...
-   });
-   ```
 
 # Subtasks:
-## 4. Implement Stable Section IDs and Version Tracking [pending]
-### Dependencies: 24.3
-### Description: Add unique, stable IDs for each section that persist across save/reload cycles using UUID v4, and implement version tracking to detect and prevent conflicting updates.
-### Details:
-- Implement unique, stable IDs for each section using UUID v4
-- Ensure IDs are preserved during serialization/deserialization
-- Add version tracking to detect and prevent conflicting updates
-- Implement optimistic updates with rollback capability
-- Use a reducer pattern for more predictable state transitions
-- Create a versioning system that tracks changes to individual sections
-
-## 5. Implement Transaction-Based Atomic Updates [pending]
-### Dependencies: 24.4
-### Description: Ensure all section updates are atomic and transactional by implementing a transaction queue to handle concurrent updates with rollback capability for failed transactions.
-### Details:
-- Ensure all section updates are atomic and transactional
-- Implement a transaction queue to handle concurrent updates
-- Add rollback capability for failed transactions
-- Create a transaction log for debugging and recovery
-- Implement transaction batching for improved performance
-- Add transaction validation to prevent invalid state transitions
-
-## 6. Implement Debounced Auto-Save with Integrity Checks [pending]
-### Dependencies: 24.5
-### Description: Add debounced auto-save functionality to prevent rapid consecutive saves, with integrity checks before saving to prevent duplicate sections and ensure data consistency.
-### Details:
-- Add debounced auto-save functionality to prevent rapid consecutive saves
-- Implement integrity checks before saving to prevent duplicate sections
-- Add validation to ensure section data is consistent
-- Create a save queue to handle multiple save requests
-- Implement conflict resolution for concurrent edits
-- Add visual indicators for save status (saving, saved, error)
-
-## 7. Refactor NotionPRDEditor.enhanced.tsx and Add Debugging Tools [pending]
-### Dependencies: 24.1, 24.3, 24.4, 24.5, 24.6
-### Description: Update the NotionPRDEditor component to implement the new architecture, remove duplication-causing code, and add comprehensive logging and debugging tools for state changes and operations.
-### Details:
-- Refactor the NotionPRDEditor.enhanced.tsx component to implement the new architecture
-- Remove any code that leads to duplication
-- Implement the new data flow and state management approach
-- Add comprehensive error handling and logging
-- Implement detailed logging for state changes and operations
-- Add developer tools for inspecting the section structure
-- Create utilities for diagnosing and fixing data inconsistencies
-- Add comprehensive documentation for the new architecture
-
-## 8. Investigate and Document Root Causes of Content Duplication [pending]
+## 1. Create Smart Onboarding Card Component [pending]
 ### Dependencies: None
-### Description: Perform comprehensive investigation of the TipTap editor content duplication issue, documenting all findings including the fact that backend cleanup works correctly but frontend presentation layer has issues with TipTap not clearing content before setContent().
+### Description: Design and implement the base component for the Smart Onboarding Text Card with proper styling and layout
 ### Details:
+Create a React component for the onboarding card with appropriate styling using Tailwind CSS. Include card container, header, content area, and dismissal controls. Ensure the component follows the design system and has proper accessibility attributes. Make the component configurable with props for title, content, and appearance.
+<info added on 2025-08-13T23:57:02.863Z>
+Refer to docs/feature-plans/smart-onboarding-text-card.md Section 5 (Smart Text Card Component) for detailed component structure, including AnimatePresence usage, ContentItem interface, and the complete SmartTextCard component example with Framer Motion animations and gradient styling.
+</info added on 2025-08-13T23:57:02.863Z>
 
-
-## 9. Implement TipTap Editor Content Clearing Fix [pending]
-### Dependencies: None
-### Description: Apply the immediate fix to the setEditorContent function by adding editor.commands.clearContent(false) before setContent() to prevent DOM node retention and content duplication.
+## 2. Implement Context-Aware Hover Detection System [pending]
+### Dependencies: 24.1
+### Description: Develop a system to detect user hover interactions with UI elements and determine the appropriate guidance context
 ### Details:
+Create a hover detection system that tracks mouse position and identifies UI elements being hovered. Implement event listeners for mouse movements and hover states. Build a context mapping system that associates UI elements with specific guidance content. Include debounce functionality to prevent rapid context switching.
+<info added on 2025-08-13T23:57:12.900Z>
+Refer to docs/feature-plans/smart-onboarding-text-card.md Section 3 (Hover Detection System) for implementation approach including data-onboarding-id attributes, event delegation pattern, and the complete useHoverContext hook code example with handleMouseEnter/handleMouseLeave callbacks.
+</info added on 2025-08-13T23:57:12.900Z>
 
-
-## 10. Implement Single Source of Truth Architecture with TipTap JSON [pending]
-### Dependencies: None
-### Description: Refactor the sections array to be the only source of truth for PRD content, replacing HTML string storage with TipTap's JSON document structure and implementing unidirectional data flow.
+## 3. Develop Content Management System for Guidance Text [pending]
+### Dependencies: 24.2
+### Description: Create a system to manage and deliver contextual guidance content based on user workflow state and interactions
 ### Details:
+Implement a content management system that stores guidance text for different UI elements and workflow states. Create a content retrieval API that returns appropriate guidance based on context. Include support for markdown formatting in guidance content. Implement content prioritization logic for complex UI states with multiple potential guidance points.
+<info added on 2025-08-13T23:57:25.742Z>
+Refer to docs/feature-plans/smart-onboarding-text-card.md Section 2 (Content Management System) for OnboardingContent and AgentContent interfaces, complete content structure examples for all agents, and the onboardingContent object with specific text for Project Manager, Design Assistant, Engineering Assistant, and Config Helper agents.
+</info added on 2025-08-13T23:57:25.742Z>
 
+## 4. Integrate Card with Project Design Page Workflow [pending]
+### Dependencies: 24.1, 24.2, 24.3
+### Description: Integrate the Smart Onboarding Card with the Project Design page workflow states and user interaction patterns
+### Details:
+Add the Smart Onboarding Card component to the Project Design page layout. Connect the card to the workflow state management system to display relevant guidance based on current project state. Implement logic to show/hide the card based on user experience level and current task complexity. Create hooks to update card content when workflow state changes.
+<info added on 2025-08-13T23:58:29.231Z>
+Refer to docs/feature-plans/smart-onboarding-text-card.md Section 4 (Integration Points) for exact placement code after line 918 in ProjectDesign.tsx, data-onboarding-id attribute additions to agent cards (lines 810-917), and the HoverContextProvider wrapper implementation in Section 6.
+</info added on 2025-08-13T23:58:29.231Z>
+
+## 5. Implement Card Animation and Transition Effects [pending]
+### Dependencies: 24.1, 24.4
+### Description: Add smooth animations and transitions for card appearance, content changes, and dismissal
+### Details:
+Implement entrance and exit animations for the card using CSS transitions or a library like Framer Motion. Add content transition effects when guidance text changes. Create subtle highlight animations to draw attention to the card when new guidance is available. Ensure animations are performant and don't cause layout shifts.
+<info added on 2025-08-13T23:58:38.936Z>
+Refer to docs/feature-plans/smart-onboarding-text-card.md Section 5 (Smart Text Card Component) for Framer Motion AnimatePresence implementation with initial, animate, and exit states, motion.div transitions with key-based animations, and specific transition duration and easing configurations.
+</info added on 2025-08-13T23:58:38.936Z>
+
+## 6. Develop User Preference and Dismissal System [pending]
+### Dependencies: 24.1, 24.4
+### Description: Create functionality for users to customize guidance level, dismiss cards, and manage their onboarding experience
+### Details:
+Implement user preference storage for onboarding guidance level (beginner, intermediate, expert). Create dismissal controls that allow temporary or permanent hiding of specific guidance cards. Add a system to track which guidance has been shown and dismissed to avoid repetition. Implement a reset option for users to restore all guidance if needed.
+<info added on 2025-08-13T23:58:48.953Z>
+Refer to docs/feature-plans/smart-onboarding-text-card.md Section 7 (Progressive Enhancement) for phased implementation approach from basic to advanced features, and Future Enhancements section for user preference system, analytics tracking, and personalization features.
+</info added on 2025-08-13T23:58:48.953Z>
+
+## 7. Implement Responsive Design for Different Viewports [pending]
+### Dependencies: 24.1, 24.5
+### Description: Ensure the Smart Onboarding Card works effectively across all device sizes and viewport configurations
+### Details:
+Adapt card positioning and sizing for different viewport sizes using responsive design techniques. Implement alternative placement strategies for mobile viewports where hover isn't available. Ensure card content is readable and accessible on small screens. Test and optimize for various device orientations and window sizes.
+<info added on 2025-08-13T23:58:58.023Z>
+Refer to docs/feature-plans/smart-onboarding-text-card.md Technical Considerations section for Responsive Design guidelines including sidebar width adaptation, mobile fallbacks, collapsed/expanded states, and Accessibility requirements for ARIA labels and keyboard navigation.
+</info added on 2025-08-13T23:58:58.023Z>
+
+## 8. Conduct Comprehensive Testing and Performance Optimization [pending]
+### Dependencies: 24.1, 24.2, 24.3, 24.4, 24.5, 24.6, 24.7
+### Description: Perform thorough testing of the Smart Onboarding Card system and optimize for performance and user experience
+### Details:
+Conduct unit tests for all card components and systems. Perform integration testing with the Project Design page workflow. Test performance impact of the guidance system on page load and interaction times. Gather user feedback on guidance effectiveness and card usability. Optimize rendering and interaction performance based on test results.
+<info added on 2025-08-13T23:59:56.280Z>
+Refer to docs/feature-plans/smart-onboarding-text-card.md Testing Strategy section for comprehensive unit tests, integration tests, user testing approaches, and Performance section for optimization guidelines including useMemo/useCallback usage, debouncing, and lazy loading.
+</info added on 2025-08-13T23:59:56.280Z>
 

@@ -213,8 +213,20 @@ const transformSectionToHTML = (section: FlexiblePRDSection): string => {
   
   // Check if content is raw HTML saved from editor
   if (section.content?.content && typeof section.content.content === 'string') {
-    // Content was saved as raw HTML - clean it first to remove any embedded duplicates
-    const cleanedContent = cleanHTMLContent(section.content.content)
+    const rawContent = section.content.content
+    
+    // Check if this HTML already contains a section wrapper for this section
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(rawContent, 'text/html')
+    const existingWrapper = doc.querySelector(`[data-section-id="${section.id}"]`)
+    
+    if (existingWrapper) {
+      // Content already has a wrapper, return as-is to prevent double-wrapping
+      return rawContent
+    }
+    
+    // Content needs wrapping - clean it first to remove any embedded duplicates
+    const cleanedContent = cleanHTMLContent(rawContent)
     html += cleanedContent
     if (!cleanedContent.includes('section-divider')) {
       html += '<div class="section-divider"></div>'
@@ -687,6 +699,41 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
     }
   })
   
+  // Helper function to extract HTML for a specific section
+  const extractSectionHTML = (html: string, sectionId: string): string => {
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(html, 'text/html')
+    
+    // Find the section wrapper
+    const sectionWrapper = doc.querySelector(`[data-section-id="${sectionId}"]`)
+    if (sectionWrapper) {
+      // Return inner HTML to avoid double-wrapping
+      return sectionWrapper.innerHTML
+    }
+    
+    // Fallback: find by header ID
+    const sectionHeader = doc.querySelector(`#section-${sectionId}`)
+    if (!sectionHeader) return ''
+    
+    // Collect content between this header and the next
+    let sectionHtml = ''
+    let currentElement: Element | null = sectionHeader
+    
+    while (currentElement) {
+      sectionHtml += currentElement.outerHTML
+      currentElement = currentElement.nextElementSibling
+      
+      // Stop at next section header or section wrapper
+      if (currentElement?.classList.contains('section-header') || 
+          currentElement?.id?.startsWith('section-') ||
+          currentElement?.hasAttribute('data-section-id')) {
+        break
+      }
+    }
+    
+    return sectionHtml
+  }
+  
   // Load PRD and sections - only once
   useEffect(() => {
     if (!hasLoadedPRD.current) {
@@ -734,7 +781,9 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
     if (isEditorEmpty || isDifferent) {
       console.log('Setting editor content safely, different:', isDifferent, 'empty:', isEditorEmpty)
       isUpdatingFromSections.current = true
-      editor.commands.setContent(html, false)
+      // CRITICAL FIX: Clear existing content before setting new content to prevent duplication
+      editor.commands.clearContent(false)
+      editor.commands.setContent(html)
       lastSavedContent.current = html
       setTimeout(() => {
         isUpdatingFromSections.current = false
@@ -958,19 +1007,22 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
       const sectionType = getSectionType(section)
       const sectionContent = parseHTMLToSection(html, section.id, sectionType)
       
-      // If we couldn't parse the section (no header found), treat the entire content as changed
+      // If we couldn't parse the section (no header found), extract section-specific HTML
       if (sectionContent === null) {
-        // Save the entire HTML as raw content
-        const existingTimer = sectionTimers.current.get(section.id)
-        if (existingTimer) {
-          clearTimeout(existingTimer)
+        // Extract only this section's HTML, not the entire document
+        const sectionHTML = extractSectionHTML(html, section.id)
+        if (sectionHTML) {
+          const existingTimer = sectionTimers.current.get(section.id)
+          if (existingTimer) {
+            clearTimeout(existingTimer)
+          }
+          
+          const timer = setTimeout(async () => {
+            await saveSection(section.id, { content: sectionHTML })
+          }, 1500) as unknown as NodeJS.Timeout
+          
+          sectionTimers.current.set(section.id, timer)
         }
-        
-        const timer = setTimeout(async () => {
-          await saveSection(section.id, { content: html })
-        }, 1500) as unknown as NodeJS.Timeout
-        
-        sectionTimers.current.set(section.id, timer)
       } else if (JSON.stringify(sectionContent) !== JSON.stringify(section.content)) {
         // Clear existing timer for this section
         const existingTimer = sectionTimers.current.get(section.id)
@@ -1077,8 +1129,10 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
           const sectionType = getSectionType(section)
           const sectionContent = parseHTMLToSection(html, section.id, sectionType)
           
-          // If parsing failed, save the entire HTML content
-          const contentToSave = sectionContent === null ? { content: html } : sectionContent
+          // If parsing failed, extract section-specific HTML
+          const contentToSave = sectionContent === null 
+            ? { content: extractSectionHTML(html, section.id) } 
+            : sectionContent
           
           // Save if content exists
           if (contentToSave && Object.keys(contentToSave).length > 0) {
@@ -1152,6 +1206,8 @@ export function NotionPRDEditorEnhanced({ projectId, className }: NotionPRDEdito
       // Clear the editor and set default content
       const resetSections = data?.sections || []
       const defaultContent = resetSections.map(section => transformSectionToHTML(section)).join('')
+      // Clear content first to prevent duplication
+      editor.commands.clearContent(false)
       editor.commands.setContent(defaultContent)
       
       // Update sections state

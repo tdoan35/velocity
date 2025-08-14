@@ -24,6 +24,7 @@ import { SnackProjects } from './pages/SnackProjects'
 import { SnackEditor } from './pages/SnackEditor'
 import { AuthCallback } from './pages/AuthCallback'
 import { CompareEditors } from './pages/CompareEditors'
+import TestPRDEditorV2 from './pages/TestPRDEditorV2'
 import { Modal } from './components/ui/modal'
 import { SignupForm } from './components/ui/signup-form'
 import { AuthenticatedLayout } from './components/AuthenticatedLayout'
@@ -297,6 +298,9 @@ function App() {
           
           {/* Test comparison route */}
           <Route path="/compare-editors" element={<CompareEditors />} />
+          
+          {/* Test PRD Editor V2 */}
+          <Route path="/test-prd-v2" element={<TestPRDEditorV2 />} />
           
           {/* Main routes without navigation */}
           <Route path="/snack/:projectId" element={<SnackEditor />} />

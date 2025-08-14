@@ -79,8 +79,11 @@
       "Bash(task-master move:*)",
       "Bash(task-master:*)",
       "Bash(jq:*)",
-      "Bash(python3:*)"
-    ]
+      "Bash(python3:*)",
+      "mcp__playwright__browser_navigate_forward",
+      "mcp__taskmaster-ai__remove_task"
+    ],
+    "defaultMode": "acceptEdits"
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [

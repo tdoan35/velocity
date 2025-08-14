@@ -14,7 +14,8 @@ import {
   Unlock,
   Eye,
   EyeOff,
-  AlertCircle
+  AlertCircle,
+  Asterisk
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -25,6 +26,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
 import type { AgentType } from '@/services/prdService'
+import { useDragStore } from '@/stores/dragStateStore'
+import { setupSectionDragData, dragDebug, validateDragOperation } from '@/utils/dragDetection'
 
 export type SectionType = 
   | 'overview' 
@@ -60,6 +63,7 @@ export interface SectionBlockProps {
   onDrop?: (e: React.DragEvent, id: string) => void
   children?: React.ReactNode
   className?: string
+  hideCard?: boolean
 }
 
 // Context for managing section state
@@ -104,11 +108,22 @@ export function SectionBlock({
   onDragOver,
   onDrop,
   children,
-  className
+  className,
+  hideCard = false
 }: SectionBlockProps) {
   const [isLocalExpanded, setIsLocalExpanded] = useState(isExpanded)
-  const [isDragging, setIsDragging] = useState(false)
   const [showBlockMenu, setShowBlockMenu] = useState(false)
+  
+  // Use centralized drag state
+  const { 
+    type: dragType, 
+    draggedSectionId, 
+    startSectionDrag, 
+    resetDragState 
+  } = useDragStore()
+  
+  // Determine if this section is currently being dragged
+  const isDragging = dragType === 'section' && draggedSectionId === id
 
   const handleToggleExpanded = useCallback(() => {
     const newState = !isLocalExpanded
@@ -117,16 +132,44 @@ export function SectionBlock({
   }, [isLocalExpanded, id, onToggleExpanded])
 
   const handleDragStart = useCallback((e: React.DragEvent) => {
-    setIsDragging(true)
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('application/x-prd-section', JSON.stringify({ id, order }))
+    // Prevent section drag if content is currently being dragged
+    if (!validateDragOperation.canStartSectionDrag(dragType)) {
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
+    
+    e.stopPropagation() // Prevent content drag interference
+    
+    // Set up drag data
+    setupSectionDragData(e.dataTransfer, id, order)
+    
+    // Update global state
+    startSectionDrag(id)
+    
+    // Visual feedback
+    e.currentTarget.classList.add('dragging-section')
+    
+    // Debug logging
+    dragDebug.logDragStart('section', id, { order, type })
+    
+    // Call parent handler
     onDragStart?.(e, id)
-  }, [id, order, onDragStart])
+  }, [id, order, dragType, startSectionDrag, onDragStart])
 
   const handleDragEnd = useCallback((e: React.DragEvent) => {
-    setIsDragging(false)
+    // Clean up visual state
+    e.currentTarget.classList.remove('dragging-section')
+    
+    // Reset global drag state
+    resetDragState()
+    
+    // Debug logging
+    dragDebug.logDragEnd('section', true)
+    
+    // Call parent handler
     onDragEnd?.(e)
-  }, [onDragEnd])
+  }, [resetDragState, onDragEnd])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -140,15 +183,15 @@ export function SectionBlock({
   }, [id, onDrop])
 
   const getOwnershipBadge = () => {
-    const badges: Record<string, { label: string; variant: any }> = {
-      project_manager: { label: 'PM', variant: 'default' },
-      design_assistant: { label: 'Design', variant: 'secondary' },
-      engineering_assistant: { label: 'Eng', variant: 'outline' },
-      config_helper: { label: 'Config', variant: 'outline' },
-      human: { label: 'You', variant: 'default' },
-      shared: { label: 'Shared', variant: 'secondary' }
+    const badges: Record<string, { label: string; className: string }> = {
+      project_manager: { label: 'Project Manager', className: 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800' },
+      design_assistant: { label: 'Design Assistant', className: 'bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 border-blue-200 dark:border-blue-800' },
+      engineering_assistant: { label: 'Engineering Assistant', className: 'bg-purple-500/10 text-purple-600 dark:bg-purple-500/20 dark:text-purple-400 border-purple-200 dark:border-purple-800' },
+      config_helper: { label: 'Config Helper', className: 'bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 border-orange-200 dark:border-orange-800' },
+      human: { label: 'You', className: 'bg-gray-500/10 text-gray-600 dark:bg-gray-500/20 dark:text-gray-400 border-gray-200 dark:border-gray-700' },
+      shared: { label: 'Shared', className: 'bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800' }
     }
-    return badges[ownership] || { label: 'Unknown', variant: 'outline' }
+    return badges[ownership] || { label: 'Unknown', className: 'bg-gray-500/10 text-gray-600 dark:bg-gray-500/20 dark:text-gray-400' }
   }
 
   const getStatusColor = () => {
@@ -169,6 +212,123 @@ export function SectionBlock({
 
   if (!isVisible) return null
 
+  // Document-style rendering without card
+  if (hideCard) {
+    return (
+      <SectionContext.Provider value={contextValue}>
+        <motion.div
+          layout
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: isDragging ? 0.5 : 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          transition={{ duration: 0.2 }}
+          className={cn(
+            'relative group',
+            dragType === 'section' && !isDragging && 'pointer-events-auto',
+            dragType === 'content' && 'section-content-drag-disabled',
+            className
+          )}
+          data-section-id={id}
+          data-section-type={type}
+          data-section-order={order}
+        >
+          <div className={cn(
+            'transition-all duration-200',
+            isDragging && 'cursor-move opacity-60 transform rotate-1 z-50',
+            dragType === 'content' && 'opacity-75',
+            validationErrors.length > 0 && 'border-l-4 border-red-500 pl-4'
+          )}>
+            {/* Section Header */}
+            <div
+              className="flex items-center justify-between py-3 cursor-pointer group/header"
+              onClick={handleToggleExpanded}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+            >
+              <div className="flex items-center gap-3">
+                {/* Drag Handle */}
+                <div
+                  className={cn(
+                    "opacity-0 group-hover:opacity-100 transition-opacity",
+                    dragType === 'content' ? 'cursor-not-allowed opacity-50' : 'cursor-move'
+                  )}
+                  draggable={dragType !== 'content'}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                  onClick={(e) => e.stopPropagation()}
+                  title={dragType === 'content' ? 'Cannot drag sections while content is being dragged' : 'Drag to reorder section'}
+                >
+                  <GripVertical className="h-5 w-5 text-gray-400" />
+                </div>
+                
+                {/* Expand/Collapse Icon */}
+                <div className="transition-transform duration-200">
+                  {isLocalExpanded ? (
+                    <ChevronDown className="h-4 w-4 text-gray-500" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-gray-500" />
+                  )}
+                </div>
+                
+                {/* Title - Larger h2 size */}
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                  {title}
+                </h2>
+
+                {/* Required icon */}
+                {isRequired && (
+                  <Asterisk className="h-4 w-4 text-red-500" title="Required" />
+                )}
+              </div>
+              
+              {/* Right side badges */}
+              <div className="flex items-center gap-2">
+                
+                {/* Agent Badge - styled like enhanced chat interface */}
+                <span className={cn(
+                  "px-2 py-1 text-xs font-medium rounded-md border",
+                  getOwnershipBadge().className
+                )}>
+                  {getOwnershipBadge().label}
+                </span>
+              </div>
+            </div>
+            
+            {/* Validation Errors */}
+            {validationErrors.length > 0 && (
+              <div className="flex items-start gap-2 p-3 mb-3 bg-red-50 dark:bg-red-900/20 rounded-md">
+                <AlertCircle className="h-4 w-4 text-red-500 mt-0.5" />
+                <div className="text-sm text-red-600 dark:text-red-400">
+                  {validationErrors.map((error, index) => (
+                    <div key={index}>{error}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {/* Content Area */}
+            <AnimatePresence>
+              {isLocalExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden"
+                >
+                  <div className="pl-20 pr-4 pb-6">
+                    {children}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </motion.div>
+      </SectionContext.Provider>
+    )
+  }
+
+  // Original card-based rendering
   return (
     <SectionContext.Provider value={contextValue}>
       <motion.div
@@ -177,14 +337,20 @@ export function SectionBlock({
         animate={{ opacity: isDragging ? 0.5 : 1, y: 0 }}
         exit={{ opacity: 0, y: -20 }}
         transition={{ duration: 0.2 }}
-        className={cn('relative group', className)}
+        className={cn(
+          'relative group',
+          dragType === 'section' && !isDragging && 'pointer-events-auto',
+          dragType === 'content' && 'section-content-drag-disabled',
+          className
+        )}
         data-section-id={id}
         data-section-type={type}
         data-section-order={order}
       >
         <Card className={cn(
           'overflow-hidden transition-all duration-200',
-          isDragging && 'cursor-move opacity-50',
+          isDragging && 'cursor-move opacity-60 transform rotate-1 z-50 shadow-lg',
+          dragType === 'content' && 'opacity-75',
           validationErrors.length > 0 && 'border-red-500'
         )}>
           {/* Section Header */}
@@ -197,11 +363,15 @@ export function SectionBlock({
             <div className="flex items-center gap-3">
               {/* Drag Handle */}
               <div
-                className="opacity-0 group-hover:opacity-100 transition-opacity cursor-move"
-                draggable
+                className={cn(
+                  "opacity-0 group-hover:opacity-100 transition-opacity",
+                  dragType === 'content' ? 'cursor-not-allowed opacity-50' : 'cursor-move'
+                )}
+                draggable={dragType !== 'content'}
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
                 onClick={(e) => e.stopPropagation()}
+                title={dragType === 'content' ? 'Cannot drag sections while content is being dragged' : 'Drag to reorder section'}
               >
                 <GripVertical className="w-5 h-5 text-gray-400" />
               </div>
@@ -220,101 +390,32 @@ export function SectionBlock({
                 }
               </button>
 
-              {/* Title and Status */}
-              <h3 className="text-lg font-semibold">{title}</h3>
-              
-              {/* Badges */}
-              <div className="flex items-center gap-2">
-                {isRequired && (
-                  <Badge variant="default" className="text-xs">
-                    Required
-                  </Badge>
-                )}
-                {getOwnershipBadge() && (
-                  <Badge variant={getOwnershipBadge().variant as any} className="text-xs">
-                    {getOwnershipBadge().label}
-                  </Badge>
-                )}
-                <span className={cn('text-sm', getStatusColor())}>
-                  {status === 'completed' && '✓'}
-                  {status === 'in_progress' && '◐'}
-                  {status === 'pending' && '○'}
-                </span>
-              </div>
+              {/* Title - Larger h2 size */}
+              <h2 className="text-xl font-semibold">{title}</h2>
 
               {/* Validation Errors */}
               {validationErrors.length > 0 && (
-                <div className="flex items-center gap-1 text-red-500">
+                <div className="flex items-center gap-1 text-red-500 ml-2">
                   <AlertCircle className="w-4 h-4" />
                   <span className="text-xs">{validationErrors.length} issues</span>
                 </div>
               )}
             </div>
 
-            {/* Actions Menu */}
+            {/* Right side badges */}
             <div className="flex items-center gap-2">
-              <DropdownMenu open={showBlockMenu} onOpenChange={setShowBlockMenu}>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setShowBlockMenu(!showBlockMenu)
-                    }}
-                  >
-                    <MoreVertical className="w-4 h-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {onDuplicate && (
-                    <DropdownMenuItem onClick={() => onDuplicate(id)}>
-                      <Copy className="w-4 h-4 mr-2" />
-                      Duplicate
-                    </DropdownMenuItem>
-                  )}
-                  {onToggleVisibility && (
-                    <DropdownMenuItem onClick={() => onToggleVisibility(id)}>
-                      {isVisible ? (
-                        <>
-                          <EyeOff className="w-4 h-4 mr-2" />
-                          Hide
-                        </>
-                      ) : (
-                        <>
-                          <Eye className="w-4 h-4 mr-2" />
-                          Show
-                        </>
-                      )}
-                    </DropdownMenuItem>
-                  )}
-                  {ownership === 'human' && (
-                    <DropdownMenuItem>
-                      <Lock className="w-4 h-4 mr-2" />
-                      Lock Section
-                    </DropdownMenuItem>
-                  )}
-                  {ownership !== 'human' && ownership !== 'shared' && (
-                    <DropdownMenuItem disabled>
-                      <Unlock className="w-4 h-4 mr-2" />
-                      Request Edit Access
-                    </DropdownMenuItem>
-                  )}
-                  {onDelete && !isRequired && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem 
-                        onClick={() => onDelete(id)}
-                        className="text-red-600 focus:text-red-600"
-                      >
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        Delete
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {/* Required icon */}
+              {isRequired && (
+                <Asterisk className="h-4 w-4 text-red-500" title="Required" />
+              )}
+              
+              {/* Agent Badge - styled like enhanced chat interface */}
+              <span className={cn(
+                "px-2 py-1 text-xs font-medium rounded-md border",
+                getOwnershipBadge().className
+              )}>
+                {getOwnershipBadge().label}
+              </span>
             </div>
           </div>
 

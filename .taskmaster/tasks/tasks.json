@@ -1978,7 +1978,7 @@
         "id": 23,
         "title": "Implement Block-Based PRD Editor Architecture with Section-Aware Saving",
         "description": "Refactor the existing PRD Editor components to use a block-based architecture with structured sections, enabling section-aware auto-saving and maintaining proper data schema throughout the editing flow. Build upon existing NotionPRDEditor, SectionEditor, and edge functions. Enhanced with Notion-like UI/UX features for optimal editing experience.",
-        "status": "in-progress",
+        "status": "done",
         "dependencies": [
           20,
           22
@@ -2127,7 +2127,7 @@
             "id": 12,
             "title": "Comprehensive UI/UX Integration Testing and Performance Optimization",
             "description": "Perform end-to-end testing of all Notion-like UI/UX features and optimize performance.",
-            "status": "pending",
+            "status": "done",
             "dependencies": [
               9,
               10,
@@ -2140,110 +2140,217 @@
       },
       {
         "id": 24,
-        "title": "Fix PRD Editor Content Duplication with Single Source of Truth Architecture",
-        "description": "Resolve the content duplication issue in the PRD Editor by implementing a single source of truth architecture with unidirectional data flow, immutable section updates, and stable section IDs to prevent duplications after save/reload cycles. Investigation findings confirm the issue is in the presentation layer - TipTap editor not properly clearing content before setting new content.",
+        "title": "Implement Smart Onboarding Text Card with Contextual Hover Guidance",
+        "description": "Add an intelligent onboarding helper card to the Project Design page that provides context-aware guidance based on user interactions and current workflow state",
+        "details": "",
+        "testStrategy": "",
         "status": "pending",
-        "dependencies": [
-          20,
-          23
-        ],
-        "priority": "medium",
-        "details": "## Implementation Details\n\n**CRITICAL FINDINGS from Duplication Bug Analysis:**\n- Backend cleanup function IS WORKING correctly (removing 48 duplicate headers from data)\n- Backend returns clean data (7 sections) but frontend still renders duplicates \n- TipTap editor.commands.setContent() retains old DOM nodes instead of clearing\n- Content is being appended rather than replaced with each save/reload cycle\n- 400 error from prd-management edge function may contribute to fallback behavior\n- setEditorContent function logs \"different: true empty: true\" but fails to clear editor\n- Sections like \"📋 Overview\", \"✨ Core Features\" appear 7+ times in DOM despite clean data\n\n**IMMEDIATE FIX REQUIRED:**\nMust call `editor.destroy()` or `editor.commands.clearContent(false)` before setting new content in TipTap editor.\n\n1. **Fix TipTap Editor Content Clearing Issue (PRIORITY 1)**\n   - Investigate and fix the setEditorContent function that's failing to clear editor content\n   - Implement proper editor.commands.clearContent(false) or editor.destroy() before setContent()\n   - Fix the visual duplication where sections appear multiple times in DOM\n   - Address the 400 error from prd-management edge function that may trigger fallback behavior\n   ```tsx\n   const setEditorContent = useCallback((content: string) => {\n     if (!editor) return;\n     \n     // CRITICAL: Clear existing content before setting new content\n     editor.commands.clearContent(false);\n     // OR alternatively: editor.destroy() and recreate\n     \n     editor.commands.setContent(content);\n   }, [editor]);\n   ```\n\n2. **Analyze Current Implementation Issues**\n   - Review NotionPRDEditor.enhanced.tsx to identify the root causes of section duplication\n   - Document the current data flow and state management approach\n   - Map out how sections are currently stored, updated, and rendered\n   - Focus on the presentation layer since backend data is confirmed clean\n\n3. **Implement Single Source of Truth Architecture**\n   - Refactor the sections array to be the only source of truth for PRD content\n   - Remove any duplicate state representations (e.g., HTML strings alongside section data)\n   - Implement a clear unidirectional data flow: Sections Data → Section State → Editor View\n   ```tsx\n   // Example data flow pattern\n   const [sections, setSections] = useState<Section[]>(initialSections);\n   \n   // Update sections immutably\n   const updateSection = useCallback((sectionId: string, newContent: any) => {\n     setSections(prevSections => \n       prevSections.map(section => \n         section.id === sectionId ? {...section, content: newContent} : section\n       )\n     );\n   }, []);\n   ```\n\n4. **Implement TipTap JSON Document Structure**\n   - Replace HTML string storage with TipTap's JSON document structure\n   - Create custom TipTap nodes for different section types\n   - Implement serialization/deserialization between JSON and editor state\n   ```tsx\n   // Example TipTap JSON structure\n   interface TipTapJSON {\n     type: 'doc';\n     content: Array<{\n       type: string;\n       attrs?: Record<string, any>;\n       content?: TipTapJSON['content'];\n       marks?: Array<{\n         type: string;\n         attrs?: Record<string, any>;\n       }>;\n     }>;\n   }\n   \n   // Custom section node example\n   const SectionNode = Node.create({\n     name: 'section',\n     group: 'block',\n     content: 'block+',\n     \n     addAttributes() {\n       return {\n         id: { default: '' },\n         type: { default: 'text' }\n       };\n     },\n     \n     parseHTML() {\n       return [{ tag: 'div[data-section-id]' }];\n     },\n     \n     renderHTML({ HTMLAttributes }) {\n       return ['div', { ...HTMLAttributes, 'data-section-id': HTMLAttributes.id }, 0];\n     }\n   });\n   ```\n\n5. **Add Stable Section IDs**\n   - Implement unique, stable IDs for each section that persist across save/reload cycles\n   - Use UUID v4 or a similar approach for generating IDs\n   - Ensure IDs are preserved during serialization/deserialization\n   ```tsx\n   import { v4 as uuidv4 } from 'uuid';\n   \n   const createNewSection = (type: SectionType, content: any = {}): Section => ({\n     id: uuidv4(),\n     type,\n     content,\n     createdAt: new Date().toISOString(),\n     updatedAt: new Date().toISOString()\n   });\n   ```\n\n6. **Implement Proper State Management with Version Tracking**\n   - Add version tracking to detect and prevent conflicting updates\n   - Implement optimistic updates with rollback capability\n   - Use a reducer pattern for more predictable state transitions\n   ```tsx\n   interface SectionState {\n     sections: Section[];\n     version: number;\n     isLoading: boolean;\n     error: Error | null;\n   }\n   \n   type SectionAction = \n     | { type: 'LOAD_SECTIONS', payload: Section[] }\n     | { type: 'UPDATE_SECTION', payload: { id: string, content: any } }\n     | { type: 'ADD_SECTION', payload: Section }\n     | { type: 'REMOVE_SECTION', payload: string }\n     | { type: 'SET_ERROR', payload: Error };\n   \n   function sectionReducer(state: SectionState, action: SectionAction): SectionState {\n     switch (action.type) {\n       case 'LOAD_SECTIONS':\n         return { ...state, sections: action.payload, version: state.version + 1, isLoading: false };\n       case 'UPDATE_SECTION':\n         return {\n           ...state,\n           sections: state.sections.map(section => \n             section.id === action.payload.id \n               ? { ...section, content: action.payload.content, updatedAt: new Date().toISOString() } \n               : section\n           ),\n           version: state.version + 1\n         };\n       // Additional cases...\n     }\n   }\n   ```\n\n7. **Implement Transaction-Based Atomic Updates**\n   - Ensure all section updates are atomic and transactional\n   - Implement a transaction queue to handle concurrent updates\n   - Add rollback capability for failed transactions\n   ```tsx\n   interface Transaction {\n     id: string;\n     operations: Array<{\n       type: 'update' | 'add' | 'remove';\n       sectionId?: string;\n       data?: any;\n     }>;\n     timestamp: number;\n   }\n   \n   const applyTransaction = async (transaction: Transaction) => {\n     try {\n       // Begin transaction\n       await db.transaction(async (trx) => {\n         for (const op of transaction.operations) {\n           if (op.type === 'update') {\n             await trx('sections').where('id', op.sectionId).update({ content: op.data });\n           } else if (op.type === 'add') {\n             await trx('sections').insert(op.data);\n           } else if (op.type === 'remove') {\n             await trx('sections').where('id', op.sectionId).delete();\n           }\n         }\n       });\n       \n       // Update local state after successful transaction\n       dispatch({ type: 'APPLY_TRANSACTION', payload: transaction });\n       \n     } catch (error) {\n       console.error('Transaction failed:', error);\n       dispatch({ type: 'SET_ERROR', payload: error });\n     }\n   };\n   ```\n\n8. **Implement Debounced Auto-Save with Integrity Checks**\n   - Add debounced auto-save functionality to prevent rapid consecutive saves\n   - Implement integrity checks before saving to prevent duplicate sections\n   - Add validation to ensure section data is consistent\n   ```tsx\n   const debouncedSave = useCallback(\n     debounce(async (sections: Section[]) => {\n       // Validate sections before saving\n       const uniqueIds = new Set<string>();\n       const validSections = sections.filter(section => {\n         if (uniqueIds.has(section.id)) return false;\n         uniqueIds.add(section.id);\n         return true;\n       });\n       \n       // Only save if we have valid sections\n       if (validSections.length > 0) {\n         await saveSections(validSections);\n       }\n     }, 1000),\n     []\n   );\n   ```\n\n9. **Update NotionPRDEditor.enhanced.tsx**\n   - Refactor the component to implement the new architecture\n   - Remove any code that leads to duplication\n   - Implement the new data flow and state management approach\n   - Add comprehensive error handling and logging\n\n10. **Add Comprehensive Logging and Debugging Tools**\n    - Implement detailed logging for state changes and operations\n    - Add developer tools for inspecting the section structure\n    - Create utilities for diagnosing and fixing data inconsistencies",
-        "testStrategy": "## Test Strategy\n\n**PRIORITY 1: TipTap Editor Content Clearing Tests**\n- Test that editor.commands.clearContent(false) properly removes all content before setting new content\n- Verify that DOM nodes are completely cleared between content updates\n- Test that duplicate sections no longer appear in the rendered output\n- Validate that save/reload cycles don't accumulate content\n```javascript\ntest('editor should clear content before setting new content', () => {\n  const editor = mockTipTapEditor();\n  const setEditorContent = createSetEditorContent(editor);\n  \n  // Set initial content\n  setEditorContent('<h1>Initial Content</h1>');\n  expect(editor.getHTML()).toContain('Initial Content');\n  \n  // Set new content - should completely replace, not append\n  setEditorContent('<h1>New Content</h1>');\n  expect(editor.getHTML()).toContain('New Content');\n  expect(editor.getHTML()).not.toContain('Initial Content');\n});\n\ntest('sections should not accumulate after multiple save/reload cycles', async () => {\n  const { getByTestId, rerender, getAllByTestId } = render(<NotionPRDEditor initialSections={mockSections} />);\n  \n  // Get initial section count\n  const getSectionCount = (selector) => getAllByTestId(selector).length;\n  const initialOverviewCount = getSectionCount('section-overview');\n  \n  // Perform multiple save/reload cycles\n  for (let i = 0; i < 3; i++) {\n    // Save\n    await act(async () => {\n      fireEvent.click(getByTestId('save-button'));\n      await new Promise(resolve => setTimeout(resolve, 1500));\n    });\n    \n    // Reload\n    rerender(<NotionPRDEditor initialSections={await mockFetchSections()} />);\n    \n    // Verify section count hasn't increased\n    expect(getSectionCount('section-overview')).toBe(initialOverviewCount);\n  }\n});\n```\n\n1. **Unit Testing for Core Components**\n   - Test the section reducer with various action types to ensure correct state transitions\n   - Verify that section IDs remain stable across operations\n   - Test serialization/deserialization of TipTap JSON to ensure data integrity\n   - Validate transaction handling with simulated concurrent operations\n   ```javascript\n   test('section reducer should update sections immutably', () => {\n     const initialState = {\n       sections: [{ id: '1', type: 'text', content: { text: 'Initial' } }],\n       version: 1,\n       isLoading: false,\n       error: null\n     };\n     \n     const action = {\n       type: 'UPDATE_SECTION',\n       payload: { id: '1', content: { text: 'Updated' } }\n     };\n     \n     const newState = sectionReducer(initialState, action);\n     \n     expect(newState.version).toBe(2);\n     expect(newState.sections[0].content.text).toBe('Updated');\n     expect(initialState.sections[0].content.text).toBe('Initial'); // Original unchanged\n   });\n   ```\n\n2. **Integration Testing for Data Flow**\n   - Test the complete data flow from user input to storage and back\n   - Verify that sections are correctly rendered after reload\n   - Test that section updates are correctly persisted\n   - Validate that the editor state correctly reflects the section data\n   ```javascript\n   test('sections should persist correctly after save and reload', async () => {\n     // Setup test component with mock data\n     const { getByTestId, rerender } = render(<NotionPRDEditor initialSections={mockSections} />);\n     \n     // Make changes to a section\n     const section = getByTestId('section-1');\n     fireEvent.change(section, { target: { value: 'Updated content' } });\n     \n     // Trigger save\n     await act(async () => {\n       fireEvent.click(getByTestId('save-button'));\n       await new Promise(resolve => setTimeout(resolve, 1500)); // Wait for debounce\n     });\n     \n     // Simulate reload\n     rerender(<NotionPRDEditor initialSections={await mockFetchSections()} />);\n     \n     // Verify content persisted correctly\n     expect(getByTestId('section-1').textContent).toContain('Updated content');\n   });\n   ```\n\n3. **Duplication Prevention Testing**\n   - Create specific tests to verify that sections are not duplicated\n   - Test multiple save/reload cycles to ensure stability\n   - Validate that the system correctly handles edge cases like rapid consecutive saves\n   ```javascript\n   test('sections should not duplicate after multiple save/reload cycles', async () => {\n     const { getByTestId, rerender, getAllByTestId } = render(<NotionPRDEditor initialSections={mockSections} />);\n     \n     // Initial section count\n     const initialCount = getAllByTestId(/^section-/).length;\n     \n     // Perform multiple save/reload cycles\n     for (let i = 0; i < 5; i++) {\n       // Make a small change\n       const section = getByTestId('section-1');\n       fireEvent.change(section, { target: { value: `Updated content ${i}` } });\n       \n       // Save\n       await act(async () => {\n         fireEvent.click(getByTestId('save-button'));\n         await new Promise(resolve => setTimeout(resolve, 1500)); // Wait for debounce\n       });\n       \n       // Reload\n       rerender(<NotionPRDEditor initialSections={await mockFetchSections()} />);\n     }\n     \n     // Verify no duplication occurred\n     const finalCount = getAllByTestId(/^section-/).length;\n     expect(finalCount).toBe(initialCount);\n   });\n   ```\n\n4. **Performance Testing**\n   - Measure rendering performance with large PRDs\n   - Test memory usage during extended editing sessions\n   - Validate that the system remains responsive during complex operations\n   ```javascript\n   test('editor should maintain performance with large documents', async () => {\n     // Generate large test document with many sections\n     const largeMockSections = Array.from({ length: 100 }, (_, i) => ({\n       id: `section-${i}`,\n       type: 'text',\n       content: { text: `Section ${i} content with substantial text...` }\n     }));\n     \n     // Measure render time\n     const startTime = performance.now();\n     render(<NotionPRDEditor initialSections={largeMockSections} />);\n     const renderTime = performance.now() - startTime;\n     \n     // Assert reasonable performance\n     expect(renderTime).toBeLessThan(500); // Should render in under 500ms\n   });\n   ```\n\n5. **Error Handling and Recovery Testing**\n   - Test system behavior when errors occur during saving\n   - Verify that the system can recover from corrupted state\n   - Validate that error messages are displayed appropriately\n   ```javascript\n   test('editor should recover from save errors', async () => {\n     // Mock API to simulate error\n     jest.spyOn(api, 'saveSections').mockImplementationOnce(() => \n       Promise.reject(new Error('Network error'))\n     );\n     \n     const { getByTestId, queryByText } = render(<NotionPRDEditor initialSections={mockSections} />);\n     \n     // Make changes and attempt to save\n     const section = getByTestId('section-1');\n     fireEvent.change(section, { target: { value: 'Updated content' } });\n     \n     await act(async () => {\n       fireEvent.click(getByTestId('save-button'));\n       await new Promise(resolve => setTimeout(resolve, 1500)); // Wait for debounce\n     });\n     \n     // Verify error is displayed\n     expect(queryByText(/error/i)).toBeInTheDocument();\n     \n     // Restore mock and retry save\n     jest.spyOn(api, 'saveSections').mockRestore();\n     \n     await act(async () => {\n       fireEvent.click(getByTestId('retry-button'));\n       await new Promise(resolve => setTimeout(resolve, 1500)); // Wait for debounce\n     });\n     \n     // Verify success message\n     expect(queryByText(/saved successfully/i)).toBeInTheDocument();\n   });\n   ```\n\n6. **End-to-End Testing**\n   - Test the complete PRD editing workflow from creation to publishing\n   - Verify that all features work together correctly\n   - Validate that the system behaves correctly in realistic usage scenarios\n   ```javascript\n   test('complete PRD editing workflow should work correctly', async () => {\n     // Setup Cypress test\n     cy.visit('/projects/123/prd');\n     \n     // Create new sections\n     cy.get('[data-testid=\"add-section-button\"]').click();\n     cy.get('[data-testid=\"section-type-text\"]').click();\n     cy.get('[data-testid=\"section-editor\"]').last().type('New section content');\n     \n     // Save PRD\n     cy.get('[data-testid=\"save-button\"]').click();\n     cy.wait(2000); // Wait for save\n     \n     // Reload page\n     cy.reload();\n     \n     // Verify content persisted\n     cy.get('[data-testid=\"section-editor\"]').last().should('contain', 'New section content');\n     \n     // Verify no duplicates\n     cy.get('[data-testid=\"section-editor\"]').should('have.length', initialSectionCount + 1);\n   });\n   ```\n\n7. **Regression Testing**\n   - Test that existing functionality continues to work correctly\n   - Verify that the fix doesn't introduce new issues\n   - Validate compatibility with other components and features\n   ```javascript\n   test('existing PRD functionality should continue to work', async () => {\n     // Test various existing features\n     cy.visit('/projects/123/prd');\n     \n     // Test section reordering\n     cy.get('[data-testid=\"section-1-drag-handle\"]').drag('[data-testid=\"section-3-drop-zone\"]');\n     cy.get('[data-testid=\"section-list\"]').children().eq(2).should('have.attr', 'data-testid', 'section-1');\n     \n     // Test formatting options\n     cy.get('[data-testid=\"section-1-editor\"]').click();\n     cy.get('[data-testid=\"bold-button\"]').click();\n     cy.get('[data-testid=\"section-1-editor\"]').type('Bold text');\n     cy.get('[data-testid=\"section-1-editor\"]').find('strong').should('contain', 'Bold text');\n     \n     // Test other existing features...\n   });\n   ```",
+        "dependencies": [],
+        "priority": "high",
         "subtasks": [
           {
             "id": 1,
-            "title": "Investigate and Document Root Causes of Content Duplication",
-            "description": "Perform comprehensive investigation of the TipTap editor content duplication issue, documenting all findings including the fact that backend cleanup works correctly but frontend presentation layer has issues with TipTap not clearing content before setContent().",
-            "status": "pending",
+            "title": "Create Smart Onboarding Card Component",
+            "description": "Design and implement the base component for the Smart Onboarding Text Card with proper styling and layout",
             "dependencies": [],
-            "details": "",
-            "testStrategy": ""
+            "details": "Create a React component for the onboarding card with appropriate styling using Tailwind CSS. Include card container, header, content area, and dismissal controls. Ensure the component follows the design system and has proper accessibility attributes. Make the component configurable with props for title, content, and appearance.\n<info added on 2025-08-13T23:57:02.863Z>\nRefer to docs/feature-plans/smart-onboarding-text-card.md Section 5 (Smart Text Card Component) for detailed component structure, including AnimatePresence usage, ContentItem interface, and the complete SmartTextCard component example with Framer Motion animations and gradient styling.\n</info added on 2025-08-13T23:57:02.863Z>",
+            "status": "pending",
+            "testStrategy": "Test component rendering with various content configurations. Verify accessibility compliance using axe testing tools. Ensure responsive behavior across different viewport sizes."
           },
           {
             "id": 2,
-            "title": "Implement TipTap Editor Content Clearing Fix",
-            "description": "Apply the immediate fix to the setEditorContent function by adding editor.commands.clearContent(false) before setContent() to prevent DOM node retention and content duplication.",
+            "title": "Implement Context-Aware Hover Detection System",
+            "description": "Develop a system to detect user hover interactions with UI elements and determine the appropriate guidance context",
+            "dependencies": [
+              "24.1"
+            ],
+            "details": "Create a hover detection system that tracks mouse position and identifies UI elements being hovered. Implement event listeners for mouse movements and hover states. Build a context mapping system that associates UI elements with specific guidance content. Include debounce functionality to prevent rapid context switching.\n<info added on 2025-08-13T23:57:12.900Z>\nRefer to docs/feature-plans/smart-onboarding-text-card.md Section 3 (Hover Detection System) for implementation approach including data-onboarding-id attributes, event delegation pattern, and the complete useHoverContext hook code example with handleMouseEnter/handleMouseLeave callbacks.\n</info added on 2025-08-13T23:57:12.900Z>",
             "status": "pending",
-            "dependencies": [],
-            "details": "",
-            "testStrategy": ""
+            "testStrategy": "Test hover detection accuracy across different UI elements. Verify context mapping returns appropriate content for each element. Test performance impact of hover detection system under various user interaction patterns."
           },
           {
             "id": 3,
-            "title": "Implement Single Source of Truth Architecture with TipTap JSON",
-            "description": "Refactor the sections array to be the only source of truth for PRD content, replacing HTML string storage with TipTap's JSON document structure and implementing unidirectional data flow.",
+            "title": "Develop Content Management System for Guidance Text",
+            "description": "Create a system to manage and deliver contextual guidance content based on user workflow state and interactions",
+            "dependencies": [
+              "24.2"
+            ],
+            "details": "Implement a content management system that stores guidance text for different UI elements and workflow states. Create a content retrieval API that returns appropriate guidance based on context. Include support for markdown formatting in guidance content. Implement content prioritization logic for complex UI states with multiple potential guidance points.\n<info added on 2025-08-13T23:57:25.742Z>\nRefer to docs/feature-plans/smart-onboarding-text-card.md Section 2 (Content Management System) for OnboardingContent and AgentContent interfaces, complete content structure examples for all agents, and the onboardingContent object with specific text for Project Manager, Design Assistant, Engineering Assistant, and Config Helper agents.\n</info added on 2025-08-13T23:57:25.742Z>",
             "status": "pending",
-            "dependencies": [],
-            "details": "",
             "testStrategy": ""
           },
           {
             "id": 4,
-            "title": "Implement Stable Section IDs and Version Tracking",
-            "description": "Add unique, stable IDs for each section that persist across save/reload cycles using UUID v4, and implement version tracking to detect and prevent conflicting updates.",
-            "status": "pending",
+            "title": "Integrate Card with Project Design Page Workflow",
+            "description": "Integrate the Smart Onboarding Card with the Project Design page workflow states and user interaction patterns",
             "dependencies": [
-              3
+              "24.1",
+              "24.2",
+              "24.3"
             ],
-            "details": "- Implement unique, stable IDs for each section using UUID v4\n- Ensure IDs are preserved during serialization/deserialization\n- Add version tracking to detect and prevent conflicting updates\n- Implement optimistic updates with rollback capability\n- Use a reducer pattern for more predictable state transitions\n- Create a versioning system that tracks changes to individual sections",
-            "testStrategy": "- Test that section IDs remain stable across save/reload cycles\n- Verify that version tracking correctly identifies conflicts\n- Test optimistic updates and rollback functionality with simulated network issues"
+            "details": "Add the Smart Onboarding Card component to the Project Design page layout. Connect the card to the workflow state management system to display relevant guidance based on current project state. Implement logic to show/hide the card based on user experience level and current task complexity. Create hooks to update card content when workflow state changes.\n<info added on 2025-08-13T23:58:29.231Z>\nRefer to docs/feature-plans/smart-onboarding-text-card.md Section 4 (Integration Points) for exact placement code after line 918 in ProjectDesign.tsx, data-onboarding-id attribute additions to agent cards (lines 810-917), and the HoverContextProvider wrapper implementation in Section 6.\n</info added on 2025-08-13T23:58:29.231Z>",
+            "status": "pending",
+            "testStrategy": ""
           },
           {
             "id": 5,
-            "title": "Implement Transaction-Based Atomic Updates",
-            "description": "Ensure all section updates are atomic and transactional by implementing a transaction queue to handle concurrent updates with rollback capability for failed transactions.",
-            "status": "pending",
+            "title": "Implement Card Animation and Transition Effects",
+            "description": "Add smooth animations and transitions for card appearance, content changes, and dismissal",
             "dependencies": [
-              4
+              "24.1",
+              "24.4"
             ],
-            "details": "- Ensure all section updates are atomic and transactional\n- Implement a transaction queue to handle concurrent updates\n- Add rollback capability for failed transactions\n- Create a transaction log for debugging and recovery\n- Implement transaction batching for improved performance\n- Add transaction validation to prevent invalid state transitions",
-            "testStrategy": "- Test transaction atomicity with simulated failures\n- Verify that concurrent updates are handled correctly\n- Test rollback functionality with various error scenarios\n- Measure performance impact of transaction-based updates"
+            "details": "Implement entrance and exit animations for the card using CSS transitions or a library like Framer Motion. Add content transition effects when guidance text changes. Create subtle highlight animations to draw attention to the card when new guidance is available. Ensure animations are performant and don't cause layout shifts.\n<info added on 2025-08-13T23:58:38.936Z>\nRefer to docs/feature-plans/smart-onboarding-text-card.md Section 5 (Smart Text Card Component) for Framer Motion AnimatePresence implementation with initial, animate, and exit states, motion.div transitions with key-based animations, and specific transition duration and easing configurations.\n</info added on 2025-08-13T23:58:38.936Z>",
+            "status": "pending",
+            "testStrategy": "Test animation performance across different devices and browsers. Verify animations don't interfere with user interactions. Ensure animations respect user preferences for reduced motion."
           },
           {
             "id": 6,
-            "title": "Implement Debounced Auto-Save with Integrity Checks",
-            "description": "Add debounced auto-save functionality to prevent rapid consecutive saves, with integrity checks before saving to prevent duplicate sections and ensure data consistency.",
-            "status": "pending",
+            "title": "Develop User Preference and Dismissal System",
+            "description": "Create functionality for users to customize guidance level, dismiss cards, and manage their onboarding experience",
             "dependencies": [
-              5
+              "24.1",
+              "24.4"
             ],
-            "details": "- Add debounced auto-save functionality to prevent rapid consecutive saves\n- Implement integrity checks before saving to prevent duplicate sections\n- Add validation to ensure section data is consistent\n- Create a save queue to handle multiple save requests\n- Implement conflict resolution for concurrent edits\n- Add visual indicators for save status (saving, saved, error)",
-            "testStrategy": "- Test debounce functionality with rapid changes\n- Verify that integrity checks prevent duplicate sections\n- Test save functionality with various network conditions\n- Verify that validation correctly identifies and handles inconsistent data"
+            "details": "Implement user preference storage for onboarding guidance level (beginner, intermediate, expert). Create dismissal controls that allow temporary or permanent hiding of specific guidance cards. Add a system to track which guidance has been shown and dismissed to avoid repetition. Implement a reset option for users to restore all guidance if needed.\n<info added on 2025-08-13T23:58:48.953Z>\nRefer to docs/feature-plans/smart-onboarding-text-card.md Section 7 (Progressive Enhancement) for phased implementation approach from basic to advanced features, and Future Enhancements section for user preference system, analytics tracking, and personalization features.\n</info added on 2025-08-13T23:58:48.953Z>",
+            "status": "pending",
+            "testStrategy": ""
           },
           {
             "id": 7,
-            "title": "Refactor NotionPRDEditor.enhanced.tsx and Add Debugging Tools",
-            "description": "Update the NotionPRDEditor component to implement the new architecture, remove duplication-causing code, and add comprehensive logging and debugging tools for state changes and operations.",
-            "status": "pending",
+            "title": "Implement Responsive Design for Different Viewports",
+            "description": "Ensure the Smart Onboarding Card works effectively across all device sizes and viewport configurations",
             "dependencies": [
-              1,
-              3,
-              4,
-              5,
-              6
+              "24.1",
+              "24.5"
             ],
-            "details": "- Refactor the NotionPRDEditor.enhanced.tsx component to implement the new architecture\n- Remove any code that leads to duplication\n- Implement the new data flow and state management approach\n- Add comprehensive error handling and logging\n- Implement detailed logging for state changes and operations\n- Add developer tools for inspecting the section structure\n- Create utilities for diagnosing and fixing data inconsistencies\n- Add comprehensive documentation for the new architecture",
-            "testStrategy": "- Test the refactored component with various PRD structures\n- Verify that no duplication occurs after save/reload cycles\n- Test error handling with simulated errors\n- Verify that debugging tools correctly identify and display state changes"
+            "details": "Adapt card positioning and sizing for different viewport sizes using responsive design techniques. Implement alternative placement strategies for mobile viewports where hover isn't available. Ensure card content is readable and accessible on small screens. Test and optimize for various device orientations and window sizes.\n<info added on 2025-08-13T23:58:58.023Z>\nRefer to docs/feature-plans/smart-onboarding-text-card.md Technical Considerations section for Responsive Design guidelines including sidebar width adaptation, mobile fallbacks, collapsed/expanded states, and Accessibility requirements for ARIA labels and keyboard navigation.\n</info added on 2025-08-13T23:58:58.023Z>",
+            "status": "pending",
+            "testStrategy": "Test card appearance and functionality across standard device sizes (mobile, tablet, desktop). Verify card positioning doesn't obscure critical UI elements on any viewport size. Test touch interactions on mobile devices."
+          },
+          {
+            "id": 8,
+            "title": "Conduct Comprehensive Testing and Performance Optimization",
+            "description": "Perform thorough testing of the Smart Onboarding Card system and optimize for performance and user experience",
+            "dependencies": [
+              "24.1",
+              "24.2",
+              "24.3",
+              "24.4",
+              "24.5",
+              "24.6",
+              "24.7"
+            ],
+            "details": "Conduct unit tests for all card components and systems. Perform integration testing with the Project Design page workflow. Test performance impact of the guidance system on page load and interaction times. Gather user feedback on guidance effectiveness and card usability. Optimize rendering and interaction performance based on test results.\n<info added on 2025-08-13T23:59:56.280Z>\nRefer to docs/feature-plans/smart-onboarding-text-card.md Testing Strategy section for comprehensive unit tests, integration tests, user testing approaches, and Performance section for optimization guidelines including useMemo/useCallback usage, debouncing, and lazy loading.\n</info added on 2025-08-13T23:59:56.280Z>",
+            "status": "pending",
+            "testStrategy": "Run comprehensive test suite covering all card functionality. Conduct usability testing with users of different experience levels. Measure and optimize performance metrics including First Contentful Paint and Interaction to Next Paint when card is active."
           }
         ]
       },
       {
         "id": 25,
-        "title": "Implement Single Source of Truth Architecture with TipTap JSON",
-        "description": "Refactor the sections array to be the only source of truth for PRD content, replacing HTML string storage with TipTap's JSON document structure and implementing unidirectional data flow.",
-        "details": "- Refactor the sections array to be the only source of truth for PRD content\n- Remove any duplicate state representations (e.g., HTML strings alongside section data)\n- Implement clear unidirectional data flow: Sections Data → Section State → Editor View\n- Replace HTML string storage with TipTap's JSON document structure\n- Create custom TipTap nodes for different section types\n- Implement serialization/deserialization between JSON and editor state\n<info added on 2025-08-13T07:18:35.076Z>\nThis is the primary fix based on investigation findings, implementing the comprehensive solution to address the root cause of content duplication. The task now serves as the first implementation step that directly targets the TipTap editor content clearing issue identified during investigation. Key improvements include proper use of editor.commands.clearContent(false) before setContent() to prevent DOM node retention, complete elimination of HTML string storage in favor of TipTap's JSON document structure, and establishment of strict unidirectional data flow to prevent content accumulation during save/reload cycles.\n</info added on 2025-08-13T07:18:35.076Z>",
+        "title": "Implement @dnd-kit Drag-and-Drop Solution for BlockBasedPRDEditor",
+        "description": "Complete refactoring of the drag-and-drop functionality in BlockBasedPRDEditor to replace the problematic native HTML5 implementation with @dnd-kit library, addressing all identified issues including multiple competing handlers, re-rendering during drag, event duplication, and state corruption.",
+        "details": "## Context\nThis task implements the comprehensive solution outlined in:\n- Investigation Report: docs/drag-drop-investigation-report.md\n- Implementation Plan: docs/implementation-plans/dnd-kit-refactoring-plan.md\n\n## Critical Issues Being Addressed\n1. Multiple competing drag handlers causing event conflicts\n2. Component re-rendering during drag operations breaking the drag chain\n3. useDragCleanup hook creating 20+ duplicate events per drag\n4. Non-atomic operations leading to corrupted content structure\n5. TipTap editor interference with custom drag implementation\n\n## Solution Approach\nReplace the entire native HTML5 drag-and-drop implementation with @dnd-kit library, which provides:\n- Single source of truth for drag state\n- Framework-managed cleanup operations\n- Stable references preventing re-renders\n- Atomic state updates\n- Built-in accessibility and touch support\n\n## Success Criteria\n- Zero drag-related errors in console\n- Playwright drag tests pass 100%\n- Drag operations complete in < 100ms\n- No component re-renders during drag\n- Content structure remains intact after drag operations",
+        "testStrategy": "1. Unit tests for all new DnD components\n2. E2E tests for section and content reordering\n3. Performance testing to verify < 100ms operations\n4. Manual testing on both desktop and touch devices\n5. Accessibility testing with keyboard navigation",
         "status": "pending",
-        "dependencies": [
-          "24.1",
-          24
-        ],
-        "priority": "medium"
+        "dependencies": [],
+        "priority": "high",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Install and Configure @dnd-kit Dependencies",
+            "description": "Install the @dnd-kit library and configure TypeScript support for the new drag-and-drop implementation. Verify the library is properly integrated with the existing React/TypeScript setup.",
+            "dependencies": [],
+            "details": "Install @dnd-kit/core, @dnd-kit/sortable, and @dnd-kit/utilities packages. Update package.json and verify compatibility with existing dependencies. Configure TypeScript types and ensure no conflicts with existing drag libraries (@hello-pangea/dnd is already installed). Create basic configuration and test integration works with current build system.\n<info added on 2025-08-14T20:25:38.346Z>\nBased on the implementation plan Phase 1.1, the @dnd-kit package installation should be done with consideration that @hello-pangea/dnd is already installed in the project and should remain separate to avoid conflicts. The specific packages required are @dnd-kit/core, @dnd-kit/sortable, @dnd-kit/utilities, and @dnd-kit/modifiers. Complete package requirements and installation details can be found in the implementation plan at docs/implementation-plans/dnd-kit-refactoring-plan.md which contains the comprehensive package list and configuration specifications.\n</info added on 2025-08-14T20:25:38.346Z>\n<info added on 2025-08-14T20:33:12.068Z>\nFIRST: Read docs/implementation-plans/dnd-kit-refactoring-plan.md Phase 1.1 for package requirements and docs/drag-drop-investigation-report.md for context on why @dnd-kit is needed.\n</info added on 2025-08-14T20:33:12.068Z>",
+            "status": "pending",
+            "testStrategy": "Verify package installation succeeds, TypeScript compilation passes, and development server starts without errors. Test basic @dnd-kit import statements work."
+          },
+          {
+            "id": 2,
+            "title": "Create Core DnD Infrastructure Components",
+            "description": "Implement the foundational @dnd-kit components including DndProvider, SortableSection wrapper, and SortableContentLine wrapper with proper TypeScript interfaces and stable references.",
+            "dependencies": [
+              "25.1"
+            ],
+            "details": "Create frontend/src/components/prd/dnd/DndProvider.tsx with DndContext, sensors configuration, and collision detection. Implement frontend/src/components/prd/dnd/SortableSection.tsx wrapper component using useSortable hook. Create frontend/src/components/prd/dnd/SortableContentLine.tsx for content-level dragging. Use stable references with useCallback and useMemo to prevent re-renders. Configure proper drag data structures and event handling interfaces.\n<info added on 2025-08-14T20:26:02.100Z>\nPRDDndProvider Component (frontend/src/components/prd/dnd/DndProvider.tsx):\n```tsx\nimport React from 'react';\nimport { DndContext, DragOverlay, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';\nimport { sortableKeyboardCoordinates } from '@dnd-kit/sortable';\n\ninterface PRDDndProviderProps {\n  children: React.ReactNode;\n  onDragEnd: (event: DragEndEvent) => void;\n}\n\nexport const PRDDndProvider: React.FC<PRDDndProviderProps> = ({ children, onDragEnd }) => {\n  const sensors = useSensors(\n    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),\n    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })\n  );\n\n  return (\n    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>\n      {children}\n      <DragOverlay>{/* Drag overlay content */}</DragOverlay>\n    </DndContext>\n  );\n};\n```\n\nSortableSection Component (frontend/src/components/prd/dnd/SortableSection.tsx):\n```tsx\nimport React, { useMemo } from 'react';\nimport { useSortable } from '@dnd-kit/sortable';\nimport { CSS } from '@dnd-kit/utilities';\n\ninterface SortableSectionProps {\n  id: string;\n  children: React.ReactNode;\n  className?: string;\n}\n\nexport const SortableSection = React.memo<SortableSectionProps>(({ id, children, className }) => {\n  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });\n  \n  const style = useMemo(() => ({\n    transform: CSS.Transform.toString(transform),\n    transition,\n  }), [transform, transition]);\n\n  return (\n    <div ref={setNodeRef} style={style} className={className} {...attributes} {...listeners}>\n      {children}\n    </div>\n  );\n});\n```\n\nSortableContentLine Component (frontend/src/components/prd/dnd/SortableContentLine.tsx):\n```tsx\nimport React, { useCallback, useMemo } from 'react';\nimport { useSortable } from '@dnd-kit/sortable';\nimport { CSS } from '@dnd-kit/utilities';\n\ninterface SortableContentLineProps {\n  id: string;\n  children: React.ReactNode;\n  onSelect?: (id: string) => void;\n}\n\nexport const SortableContentLine = React.memo<SortableContentLineProps>(({ id, children, onSelect }) => {\n  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });\n  \n  const handleClick = useCallback(() => {\n    onSelect?.(id);\n  }, [id, onSelect]);\n\n  const style = useMemo(() => ({\n    transform: CSS.Transform.toString(transform),\n    transition,\n    opacity: isDragging ? 0.5 : 1,\n  }), [transform, transition, isDragging]);\n\n  return (\n    <div ref={setNodeRef} style={style} {...attributes} {...listeners} onClick={handleClick}>\n      {children}\n    </div>\n  );\n});\n```\n\nDnD Store (frontend/src/stores/dndStore.ts):\n```ts\ninterface DragData {\n  id: string;\n  type: 'section' | 'content';\n  parentId?: string;\n}\n\ninterface DndState {\n  activeId: string | null;\n  draggedItem: DragData | null;\n  setActiveId: (id: string | null) => void;\n  setDraggedItem: (item: DragData | null) => void;\n}\n```\n\nInvestigation Report References:\n- Section 1 findings: Multiple competing drag handlers from react-beautiful-dnd and browser events caused conflicts resolved by @dnd-kit's unified sensor system\n- Section 2 findings: Component re-renders during drag operations prevented by stable references using useCallback and useMemo hooks as implemented above\n</info added on 2025-08-14T20:26:02.100Z>\n<info added on 2025-08-14T20:33:21.423Z>\nFIRST: Read docs/implementation-plans/dnd-kit-refactoring-plan.md Phase 1.1-1.2 for component architecture and code examples, and docs/drag-drop-investigation-report.md sections 1-2 for issues with competing handlers and re-renders.\n</info added on 2025-08-14T20:33:21.423Z>",
+            "status": "pending",
+            "testStrategy": "Unit test each component renders without errors, drag sensors activate correctly, and stable references prevent unnecessary re-renders during drag operations."
+          },
+          {
+            "id": 3,
+            "title": "Refactor BlockBasedPRDEditor to Use @dnd-kit",
+            "description": "Replace the native HTML5 drag implementation in BlockBasedPRDEditor.enhanced.tsx with the new @dnd-kit system, removing all custom drag handlers and cleanup hooks.",
+            "dependencies": [
+              "25.2"
+            ],
+            "details": "Remove existing native drag handlers (handleDragStart, handleDragOver, handleDrop, handleDragEnd) from lines 377-556. Remove useDragCleanup import and call on line 151. Replace section drag logic with @dnd-kit SortableContext. Update handleSectionReorder function to work with @dnd-kit events. Remove auto-scroll implementation and global drag listeners. Wrap component content with PRDDndProvider and configure section-level sortable context.\n<info added on 2025-08-14T20:26:14.958Z>\nPer the implementation plan Phase 2.1 and investigation report findings, current issues are located in BlockBasedPRDEditor.enhanced.tsx: lines 151 (useDragCleanup call), lines 377-556 (native drag handlers), and lines 381-424 (global drag handlers). Removing these components will directly address the \"multiple competing handlers\" issue identified in section 1 of the investigation report.\n</info added on 2025-08-14T20:26:14.958Z>\n<info added on 2025-08-14T20:33:32.856Z>\nFIRST: Read docs/implementation-plans/dnd-kit-refactoring-plan.md Phase 2.1 for BlockBasedPRDEditor refactoring steps and docs/drag-drop-investigation-report.md sections detailing the specific line numbers where issues occur (lines 151, 377-556, 381-424).\n</info added on 2025-08-14T20:33:32.856Z>",
+            "status": "pending",
+            "testStrategy": "Verify section drag-and-drop still works correctly, no console errors related to drag events, and performance metrics show < 100ms operation times. Test auto-scroll is handled by @dnd-kit modifiers."
+          },
+          {
+            "id": 4,
+            "title": "Refactor NotionSectionEditor for @dnd-kit Integration",
+            "description": "Update NotionSectionEditor.tsx to integrate with @dnd-kit, removing TipTap drag handler disabling and implementing content-level sortable functionality.",
+            "dependencies": [
+              "25.2"
+            ],
+            "details": "Remove useDragCleanup import and call on line 846. Update TipTap editor configuration to re-enable native drag handlers (remove lines 944-950 that return false). Implement content-level dragging using SortableContentLine wrapper around individual content blocks. Update content drag handlers (lines 1046-1073) to work with @dnd-kit events instead of native events. Ensure content sync logic doesn't interfere with drag operations by adding drag-in-progress checks.\n<info added on 2025-08-14T20:34:38.748Z>\nFIRST: Read docs/implementation-plans/dnd-kit-refactoring-plan.md Phase 2.2 and Phase 3.1 for NotionSectionEditor refactoring and docs/drag-drop-investigation-report.md Technical Deep Dive section regarding TipTap conflicts (lines 944-950, 846, 1046-1073).\n</info added on 2025-08-14T20:34:38.748Z>",
+            "status": "pending",
+            "testStrategy": "Test both section-level and content-level dragging works smoothly, TipTap editor doesn't conflict with @dnd-kit, and content synchronization remains stable during drag operations."
+          },
+          {
+            "id": 5,
+            "title": "Replace EnhancedBlockControls Native Drag Logic",
+            "description": "Completely refactor EnhancedBlockControls.tsx to use @dnd-kit instead of native HTML5 drag events, making content moves atomic and eliminating re-render issues.",
+            "dependencies": [
+              "25.2"
+            ],
+            "details": "Replace native dragstart handler (lines 369-459) with @dnd-kit useSortable integration. Remove native event listener effect hook (lines 497-527) that re-attaches listeners. Refactor handleMove function (lines 313-332) to be atomic using TipTap transactions instead of separate delete/insert operations. Remove TipTap editor disabling during drag (line 416) as @dnd-kit handles this properly. Update drag handle to use @dnd-kit's drag overlay system.\n<info added on 2025-08-14T20:26:30.505Z>\nLooking at the current subtask details and the investigation report context, here is the specific information about the atomic move operation issue:\n\nThe current handleMove function at lines 313-332 performs non-atomic delete/insert operations that cause the empty paragraph insertion bug documented in the investigation report. The problem occurs when the delete operation removes content but the insert operation fails or is delayed, leaving the editor in an inconsistent state. The investigation report identified this as Issue #3 (State Synchronization Issues) where separate operations can be interrupted by re-renders or competing state updates. The ContentDndProvider implementation from the implementation plan demonstrates proper atomic operations using TipTap's transaction system to bundle both delete and insert operations into a single atomic transaction, ensuring the editor state remains consistent throughout the move operation.\n</info added on 2025-08-14T20:26:30.505Z>\n<info added on 2025-08-14T20:34:49.337Z>\nFIRST: Read docs/drag-drop-investigation-report.md section 3 (State Synchronization Issues) focusing on the non-atomic operations bug, and docs/implementation-plans/dnd-kit-refactoring-plan.md Phase 2.3 for ContentDndProvider atomic transaction examples.\n</info added on 2025-08-14T20:34:49.337Z>",
+            "status": "pending",
+            "testStrategy": "Test content line dragging is smooth and atomic, no empty paragraphs are created, and drag operations complete successfully with proper performance metrics. Verify drag handle remains stable during operations."
+          },
+          {
+            "id": 6,
+            "title": "Implement @dnd-kit Drag Overlays and Visual Feedback",
+            "description": "Create proper drag overlays and visual feedback using @dnd-kit's DragOverlay component, replacing the existing drop indicators and auto-scroll zones.",
+            "dependencies": [
+              "25.3",
+              "25.4"
+            ],
+            "details": "Implement DragOverlay component in DndProvider for both section and content drags. Create visual feedback components for drag state (dragging styles, drop indicators). Replace existing drop zone system with @dnd-kit's built-in collision detection. Remove custom auto-scroll implementation and use @dnd-kit modifiers for scroll behavior. Update CSS classes to work with @dnd-kit drag states (isDragging, isOver, etc.).\n<info added on 2025-08-14T20:34:58.856Z>\nFIRST: Read docs/implementation-plans/dnd-kit-refactoring-plan.md Phase 3 for visual feedback implementation details and docs/drag-drop-investigation-report.md sections on auto-scroll and drop zone issues.\n</info added on 2025-08-14T20:34:58.856Z>",
+            "status": "pending",
+            "testStrategy": "Test drag overlays render correctly during drag operations, visual feedback is clear and responsive, and auto-scroll works smoothly in long documents. Verify accessibility features are maintained."
+          },
+          {
+            "id": 7,
+            "title": "Remove Legacy Drag System and Cleanup Utilities",
+            "description": "Remove all legacy drag-related files, utilities, and stores that are no longer needed after @dnd-kit implementation, ensuring clean codebase.",
+            "dependencies": [
+              "25.5",
+              "25.6"
+            ],
+            "details": "Delete frontend/src/hooks/useDragCleanup.ts as it's no longer needed with @dnd-kit cleanup. Remove frontend/src/stores/dragStateStore.ts and replace with @dnd-kit's built-in state management. Delete frontend/src/utils/dragDetection.ts, dragLogger.ts, and dragValidator.ts utilities. Remove frontend/src/components/DragErrorBoundary.tsx if no longer needed. Clean up all remaining imports of deleted modules across the codebase. Remove drag-related CSS classes that are no longer used.\n<info added on 2025-08-14T20:26:53.721Z>\nPer the investigation report's section 4, useDragCleanup interference causes 20+ hook fires per drag operation, creating performance bottlenecks and duplicate event handling. The exact files to be deleted based on Phase 4 of the implementation plan are:\n\n- frontend/src/hooks/useDragCleanup.ts\n- frontend/src/stores/dragStateStore.ts  \n- frontend/src/utils/dragDetection.ts\n- frontend/src/utils/dragLogger.ts\n- frontend/src/utils/dragValidator.ts\n- frontend/src/components/DragErrorBoundary.tsx (conditionally)\n\nThis cleanup addresses the root cause of duplicate events identified in the investigation by removing the legacy drag system that conflicts with @dnd-kit's native event handling and state management.\n</info added on 2025-08-14T20:26:53.721Z>\n<info added on 2025-08-14T20:35:08.601Z>\nFIRST: Read docs/drag-drop-investigation-report.md section 4 (Cleanup Hook Interference) detailing the 20+ duplicate events issue, and docs/implementation-plans/dnd-kit-refactoring-plan.md Phase 4 for the complete list of files to remove.\n</info added on 2025-08-14T20:35:08.601Z>",
+            "status": "pending",
+            "testStrategy": "Verify build succeeds with no references to deleted files, all drag functionality still works correctly, and bundle size is reduced without the legacy drag system."
+          },
+          {
+            "id": 8,
+            "title": "Add Comprehensive Testing and Performance Validation",
+            "description": "Implement unit tests for all new @dnd-kit components and validate that performance requirements are met with E2E testing.",
+            "dependencies": [
+              "25.7"
+            ],
+            "details": "Create unit tests for DndProvider, SortableSection, and SortableContentLine components. Add integration tests for section reordering and content line moving functionality. Update existing Playwright tests to work with @dnd-kit drag operations. Add performance testing to ensure drag operations complete in < 100ms. Implement accessibility testing for keyboard navigation and screen reader support. Create regression tests to prevent future drag-related issues.\n<info added on 2025-08-14T20:27:13.372Z>\nAdd specific performance validation with target metrics: drag operations must complete in < 100ms compared to current baseline of 71-112ms from investigation report. Include tests to verify fixes for \"Element Staleness\" issues where drag handles become detached from DOM elements and \"Event Chain Interruption\" problems that cause premature drag termination in Playwright tests. Implement E2E test scenarios from Phase 5.2 including multi-section drag sequences, cross-container moves, and rapid successive drag operations. Add regression tests that specifically reproduce and validate resolution of Playwright failure patterns: timeout during drag initiation, lost element references mid-drag, and incomplete drop events. Performance tests should benchmark drag latency, measure UI responsiveness during operations, and validate that accessibility features (keyboard navigation, screen reader announcements) maintain sub-100ms response times throughout drag sequences.\n</info added on 2025-08-14T20:27:13.372Z>\n<info added on 2025-08-14T20:35:19.155Z>\nFIRST: Read docs/drag-drop-investigation-report.md Performance Metrics section and Why Playwright Fails section for testing requirements, and docs/implementation-plans/dnd-kit-refactoring-plan.md Phase 5 for E2E test examples and success metrics.\n</info added on 2025-08-14T20:35:19.155Z>",
+            "status": "pending",
+            "testStrategy": "All unit tests pass with 100% coverage for new components, integration tests validate end-to-end drag functionality, Playwright tests pass consistently, and performance benchmarks show sub-100ms drag operations with zero console errors."
+          }
+        ]
       }
     ],
     "metadata": {
       "created": "2025-07-22T22:49:25.170Z",
-      "updated": "2025-08-13T06:33:32.225Z",
+      "updated": "2025-08-14T20:21:08.627Z",
       "description": "Tasks for master context"
     }
   }

@@ -1,12 +1,24 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { NotionPRDEditor } from '@/components/prd/NotionPRDEditor'
 import { EnhancedBlockBasedPRDEditor } from '@/components/prd/BlockBasedPRDEditor.enhanced'
 import { NotionPRDEditorEnhanced } from '@/components/prd/NotionPRDEditor.enhanced'
+import { PRDEditorV2 } from '@/components/prd/PRDEditorV2'
+import { usePRDEditorStore } from '@/stores/prdEditorStoreSimple'
 import { Button } from '@/components/ui/button'
+import { TestContentDrag } from '@/components/test/TestContentDrag'
 
 export function CompareEditors() {
-  const [editorType, setEditorType] = useState<'original' | 'block' | 'enhanced'>('enhanced')
+  const [editorType, setEditorType] = useState<'original' | 'block' | 'enhanced' | 'v2'>('v2')
   const projectId = 'cf11334e-4483-4802-b6d8-224e59988d35' // Using the Fitness Tracker project
+  const { loadSections } = usePRDEditorStore()
+  
+  // Load mock sections for V2 editor when it's selected
+  useEffect(() => {
+    if (editorType === 'v2') {
+      // Load with default sections from the store
+      loadSections([])
+    }
+  }, [editorType, loadSections])
   
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
@@ -32,8 +44,17 @@ export function CompareEditors() {
             >
               Enhanced NotionPRDEditor
             </Button>
+            <Button 
+              onClick={() => setEditorType('v2')}
+              variant={editorType === 'v2' ? "default" : "outline"}
+            >
+              PRD Editor V2 (Isolated)
+            </Button>
           </div>
         </div>
+        
+        {/* Test Component for Drag & Drop */}
+        <TestContentDrag />
         
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden" style={{ height: '80vh' }}>
           {editorType === 'original' ? (
@@ -49,6 +70,17 @@ export function CompareEditors() {
                 BlockBasedPRDEditor (Section Cards)
               </h2>
               <EnhancedBlockBasedPRDEditor projectId={projectId} />
+            </div>
+          ) : editorType === 'v2' ? (
+            <div className="h-full">
+              <h2 className="p-4 bg-orange-50 dark:bg-orange-900/20 text-lg font-semibold">
+                PRD Editor V2 (Isolated TipTap Instances - No Duplication)
+              </h2>
+              <PRDEditorV2 
+                prdId="test-prd-123" 
+                projectId={projectId}
+                className="h-[calc(100%-60px)]"
+              />
             </div>
           ) : (
             <div className="h-full">

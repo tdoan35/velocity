@@ -7,6 +7,28 @@
   caret-color: rgb(55, 53, 47);
 }
 
+/* ProseMirror base styles - fixes white-space warning */
+.ProseMirror {
+  position: relative;
+  word-wrap: break-word;
+  white-space: pre-wrap !important;
+  -webkit-font-variant-ligatures: none;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0; /* the above doesn't seem to work in Edge */
+}
+
+.ProseMirror pre {
+  white-space: pre-wrap;
+}
+
+.ProseMirror li {
+  position: relative;
+}
+
+.ProseMirror-hideselection *::selection { background: transparent; }
+.ProseMirror-hideselection *::-moz-selection { background: transparent; }
+.ProseMirror-hideselection { caret-color: transparent; }
+
 .dark .notion-content {
   color: rgba(255, 255, 255, 0.9);
   caret-color: rgba(255, 255, 255, 0.9);
@@ -16,12 +38,61 @@
   position: relative;
 }
 
+/* Controls positioning - no margin changes to content */
+
 /* Block hover effects */
 .notion-content > * {
   position: relative;
   transition: background-color 0.2s;
   min-height: 24px;
   padding: 2px 0;
+}
+
+/* Dragging states */
+.dragging-section .notion-content {
+  /* Disable TipTap interactions when section is being dragged */
+  pointer-events: none;
+}
+
+.dragging-content .notion-content {
+  /* Keep content interactions enabled during content drag */
+  pointer-events: auto;
+}
+
+/* Content drag visual feedback */
+.notion-content .is-dragging {
+  opacity: 0.5;
+  background-color: rgba(59, 130, 246, 0.1);
+  border-radius: 4px;
+}
+
+/* Drop zone visual feedback for content */
+.dragging-content .ProseMirror > * {
+  position: relative;
+}
+
+.dragging-content .ProseMirror > *:hover {
+  background-color: rgba(59, 130, 246, 0.05);
+}
+
+/* Disable section-level drop indicators during content drag */
+.dragging-content .section-drop-indicator {
+  display: none !important;
+}
+
+/* Section drop indicators */
+.section-drop-indicator {
+  height: 2px;
+  margin: 4px 0;
+  border-radius: 2px;
+  transition: all 0.15s ease;
+  opacity: 0;
+  background: transparent;
+}
+
+.section-drop-indicator-active {
+  opacity: 1;
+  background: #3b82f6;
 }
 
 .notion-content > *:hover {
@@ -127,6 +198,340 @@
   background: rgba(255, 255, 255, 0.05) !important;
 }
 
+/* ====================================
+   ENHANCED DRAG AND DROP STYLES
+   ==================================== */
+
+/* ---- SECTION DRAG STYLES ---- */
+
+/* Section being dragged */
+.dragging-section {
+  opacity: 0.7 !important;
+  /* Removed rotation to prevent layout shifts */
+  z-index: 1000 !important;
+  /* Removed transition during drag to prevent unwanted animations */
+}
+
+/* Unified section drop zones with visual indicators */
+.section-drop-zone {
+  position: relative;
+  height: 24px; /* Larger hit area for easier targeting */
+  margin: 8px 0;
+  background: transparent;
+  cursor: row-resize;
+  transition: all 0.2s ease;
+}
+
+/* Visual indicator line */
+.section-drop-zone::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: transparent;
+  transform: translateY(-50%);
+  transition: all 0.2s ease;
+  border-radius: 2px;
+  pointer-events: none; /* Line doesn't interfere with drop detection */
+}
+
+/* Active state - shows blue line */
+.section-drop-zone.drop-active::before {
+  background: linear-gradient(90deg, 
+    transparent 0%, 
+    rgb(59, 130, 246) 10%, 
+    rgb(59, 130, 246) 90%, 
+    transparent 100%);
+  animation: pulse-section 1.5s ease-in-out infinite;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+/* Center dot indicator */
+.section-drop-zone.drop-active::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 8px;
+  height: 8px;
+  background: rgb(59, 130, 246);
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  pointer-events: none;
+}
+
+/* Hover state for better feedback */
+.section-drop-zone:hover::before {
+  background: rgba(59, 130, 246, 0.1);
+  height: 12px;
+  border-radius: 6px;
+}
+
+/* Legacy indicator classes - kept for compatibility but hidden */
+.section-drop-indicator,
+.section-drop-indicator-active {
+  display: none !important;
+}
+
+/* Section drag state effect on content */
+.section-content-drag-disabled {
+  opacity: 0.6;
+  pointer-events: none;
+  user-select: none;
+}
+
+.section-content-drag-disabled .notion-content {
+  filter: grayscale(0.3);
+}
+
+/* ---- CONTENT DRAG STYLES ---- */
+
+/* Content being dragged - enhanced for better visual feedback */
+.notion-content .is-dragging,
+.ProseMirror .is-dragging,
+.dragging-content .notion-content .is-dragging {
+  opacity: 0.7 !important;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(139, 92, 246, 0.1)) !important;
+  border-left: 3px solid #6366f1 !important;
+  border-radius: 6px !important;
+  padding-left: 8px !important;
+  transform: translateX(4px) scale(1.02) !important;
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4) !important;
+  cursor: grabbing !important;
+  transition: none !important; /* No transition during drag */
+  position: relative !important;
+  z-index: 1000 !important;
+}
+
+/* Add pulse animation to indicate draggable state */
+@keyframes drag-ready-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+  }
+}
+
+/* When hovering over drag handle */
+.notion-content > *:hover {
+  animation: drag-ready-pulse 2s ease-in-out infinite;
+}
+
+/* Disable TipTap interactions during content drag */
+.tiptap-drag-disabled {
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
+.tiptap-drag-disabled .ProseMirror {
+  caret-color: transparent !important;
+}
+
+/* Content drop zones within sections */
+.content-drop-zone {
+  height: 2px;
+  margin: 4px 0;
+  background: transparent;
+  transition: all 0.15s ease;
+  border-radius: 2px;
+  position: relative;
+}
+
+.content-drop-zone::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+  border-radius: 2px;
+  transform: scaleX(0);
+  transition: transform 0.15s ease;
+}
+
+.content-drop-zone.active::before,
+.content-drop-zone:hover::before {
+  transform: scaleX(1);
+}
+
+/* Content drag visual feedback */
+.dragging-content .notion-content > * {
+  position: relative;
+  transition: all 0.15s ease;
+}
+
+.dragging-content .notion-content > *:hover {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(139, 92, 246, 0.05)) !important;
+  border-radius: 4px !important;
+  transform: translateX(2px) !important;
+}
+
+/* Prevent cross-contamination between drag types */
+.dragging-section .notion-content {
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
+.dragging-content .section-drag-handle {
+  pointer-events: none !important;
+  opacity: 0.3 !important;
+  cursor: not-allowed !important;
+}
+
+/* ---- INVALID DROP STATES ---- */
+
+.drop-zone.invalid {
+  background: linear-gradient(90deg, #ef4444, #f87171) !important;
+  animation: shake 0.3s ease-in-out !important;
+}
+
+.drop-zone.invalid::after {
+  content: '⚠️';
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+/* ---- ANIMATIONS ---- */
+
+@keyframes pulse-section {
+  0%, 100% { 
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+    opacity: 1;
+  }
+  50% { 
+    box-shadow: 0 4px 16px rgba(59, 130, 246, 0.6);
+    opacity: 0.8;
+  }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+
+@keyframes content-drop-pulse {
+  0%, 100% { 
+    background: linear-gradient(90deg, #6366f1, #8b5cf6);
+    opacity: 0.8;
+  }
+  50% { 
+    background: linear-gradient(90deg, #4f46e5, #7c3aed);
+    opacity: 1;
+  }
+}
+
+/* ---- AUTO-SCROLL INDICATORS ---- */
+
+.drag-scroll-zone-top,
+.drag-scroll-zone-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 100px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  z-index: 100;
+}
+
+.drag-scroll-zone-top {
+  top: 0;
+  background: linear-gradient(to bottom, rgba(59, 130, 246, 0.1), transparent);
+}
+
+.drag-scroll-zone-bottom {
+  bottom: 0;
+  background: linear-gradient(to top, rgba(59, 130, 246, 0.1), transparent);
+}
+
+.drag-scroll-zone-active {
+  opacity: 1;
+}
+
+.drag-scroll-zone-top.drag-scroll-zone-active::after {
+  content: '↑';
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 20px;
+  color: #3b82f6;
+  animation: bounce-up 1s ease-in-out infinite;
+}
+
+.drag-scroll-zone-bottom.drag-scroll-zone-active::after {
+  content: '↓';
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 20px;
+  color: #3b82f6;
+  animation: bounce-down 1s ease-in-out infinite;
+}
+
+@keyframes bounce-up {
+  0%, 100% { transform: translateX(-50%) translateY(0px); }
+  50% { transform: translateX(-50%) translateY(-5px); }
+}
+
+@keyframes bounce-down {
+  0%, 100% { transform: translateX(-50%) translateY(0px); }
+  50% { transform: translateX(-50%) translateY(5px); }
+}
+
+/* ---- DARK MODE ADJUSTMENTS ---- */
+
+.dark .section-drop-zone::before {
+  background: linear-gradient(90deg, #60a5fa, #93c5fd);
+}
+
+.dark .section-drop-indicator-active {
+  background: linear-gradient(90deg, #60a5fa, #93c5fd);
+  box-shadow: 0 2px 8px rgba(96, 165, 250, 0.4);
+}
+
+.dark .dragging-content .notion-content .is-dragging {
+  background: linear-gradient(135deg, rgba(129, 140, 248, 0.15), rgba(167, 139, 250, 0.15)) !important;
+  border-left-color: #818cf8 !important;
+  box-shadow: 0 4px 12px rgba(129, 140, 248, 0.3) !important;
+}
+
+.dark .content-drop-zone::before {
+  background: linear-gradient(90deg, #818cf8, #a78bfa);
+}
+
+.dark .dragging-content .notion-content > *:hover {
+  background: linear-gradient(135deg, rgba(129, 140, 248, 0.08), rgba(167, 139, 250, 0.08)) !important;
+}
+
+.dark .drop-zone.invalid {
+  background: linear-gradient(90deg, #f87171, #fca5a5) !important;
+}
+
+.dark .drag-scroll-zone-top {
+  background: linear-gradient(to bottom, rgba(96, 165, 250, 0.1), transparent);
+}
+
+.dark .drag-scroll-zone-bottom {
+  background: linear-gradient(to top, rgba(96, 165, 250, 0.1), transparent);
+}
+
+.dark .drag-scroll-zone-top.drag-scroll-zone-active::after,
+.dark .drag-scroll-zone-bottom.drag-scroll-zone-active::after {
+  color: #60a5fa;
+}
+
 /* Blockquotes */
 .notion-content blockquote {
   border-left: 3px solid currentColor !important;
@@ -135,15 +540,33 @@
   opacity: 0.8 !important;
 }
 
-/* Placeholder text */
-.notion-content .is-empty::before {
-  color: rgba(55, 53, 47, 0.3);
-  content: attr(data-placeholder);
+/* Placeholder text - TipTap Placeholder extension */
+.ProseMirror p.is-editor-empty:first-child::before,
+.notion-content .ProseMirror p.is-editor-empty:first-child::before,
+.notion-editor-content .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder) !important;
+  color: rgba(55, 53, 47, 0.4) !important;
+  float: left;
+  height: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+/* Additional selectors for TipTap placeholders */
+.ProseMirror .is-empty::before,
+.notion-content .is-empty::before,
+.ProseMirror.is-editor-empty::before {
+  content: attr(data-placeholder) !important;
+  color: rgba(55, 53, 47, 0.4) !important;
   float: left;
   height: 0;
   pointer-events: none;
 }
 
+/* Dark mode placeholder styles */
+.dark .ProseMirror p.is-editor-empty:first-child::before,
+.dark .notion-content .ProseMirror p.is-editor-empty:first-child::before,
+.dark .ProseMirror .is-empty::before,
 .dark .notion-content .is-empty::before {
   color: rgba(255, 255, 255, 0.3);
 }
@@ -186,6 +609,29 @@
   border-left: 2px solid #10b981;
 }
 
+/* Hide drop cursor when dragging sections */
+.dragging-section .ProseMirror-dropcursor {
+  display: none !important;
+}
+
+/* Disable drop effects in editor when dragging sections */
+.dragging-section .notion-content {
+  pointer-events: none !important;
+}
+
+/* Prevent any visual drop indicators in editor during section drag */
+.dragging-section .ProseMirror {
+  caret-color: transparent !important;
+}
+
+.dragging-section .ProseMirror::selection {
+  background: transparent !important;
+}
+
+.dragging-section .ProseMirror *::selection {
+  background: transparent !important;
+}
+
 /* Gap cursor for placing cursor between blocks */
 .ProseMirror-gapcursor {
   display: none;
@@ -218,10 +664,8 @@
   background-color: rgb(55, 65, 81) !important;
 }
 
-/* Smooth transitions */
-.notion-content * {
-  transition: all 0.2s ease;
-}
+/* Smooth transitions - removed global transition to prevent unwanted animations during drag */
+/* Specific elements that need transitions should define them individually */
 
 /* Focus styles */
 .notion-content:focus-visible {
@@ -281,4 +725,160 @@
 .dark .notion-content button:hover,
 .dark .notion-content a:hover {
   box-shadow: 0 2px 4px rgba(255, 255, 255, 0.1);
+}
+
+/* Removed duplicate section drop indicator styles - now using unified drop zones above */
+
+@keyframes dropIndicatorPulse {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Dragging section styles */
+.section-dragging {
+  cursor: move !important;
+}
+
+.section-dragging > * {
+  pointer-events: none;
+}
+
+/* Drop zone hover effect */
+.section-drop-zone-hover {
+  background: rgba(59, 130, 246, 0.05);
+  border-radius: 8px;
+  transition: background 0.2s ease;
+}
+
+.dark .section-drop-zone-hover {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+/* Auto-scroll zones during drag */
+.drag-scroll-zone-top,
+.drag-scroll-zone-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 100px;
+  pointer-events: none;
+  z-index: 30;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.drag-scroll-zone-top {
+  top: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(59, 130, 246, 0.15) 0%,
+    rgba(59, 130, 246, 0.1) 30%,
+    rgba(59, 130, 246, 0.05) 60%,
+    transparent 100%
+  );
+}
+
+.drag-scroll-zone-bottom {
+  bottom: 0;
+  background: linear-gradient(
+    to top,
+    rgba(59, 130, 246, 0.15) 0%,
+    rgba(59, 130, 246, 0.1) 30%,
+    rgba(59, 130, 246, 0.05) 60%,
+    transparent 100%
+  );
+}
+
+/* Show scroll zones when dragging */
+.dragging .drag-scroll-zone-top,
+.dragging .drag-scroll-zone-bottom {
+  opacity: 1;
+}
+
+/* Scroll zone active state */
+.drag-scroll-zone-active {
+  opacity: 1 !important;
+  animation: scrollZonePulse 1s ease-in-out infinite;
+}
+
+@keyframes scrollZonePulse {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Smooth scrolling for container */
+.scroll-smooth {
+  scroll-behavior: smooth;
+}
+
+/* Content drop indicators with animations */
+.content-drop-indicator {
+  position: relative;
+  height: 2px;
+  margin: 2px 0;
+  background: transparent;
+  transition: all 0.2s ease;
+  pointer-events: none;
+}
+
+.content-drop-indicator-active {
+  height: 2px;
+  margin: 4px 0;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgb(34, 197, 94) 10%,
+    rgb(34, 197, 94) 90%,
+    transparent 100%);
+  animation: contentDropPulse 1.2s ease-in-out infinite;
+  pointer-events: auto;
+}
+
+.content-drop-indicator-active::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 6px;
+  height: 6px;
+  background: rgb(34, 197, 94);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.3);
+}
+
+@keyframes contentDropPulse {
+  0%, 100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Invalid drop indicator with shake animation */
+.invalid-drop-indicator {
+  height: 2px;
+  margin: 4px 0;
+  background: rgb(239, 68, 68);
+  animation: invalidDropShake 0.4s ease-in-out;
+}
+
+@keyframes invalidDropShake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-4px);
+  }
+  75% {
+    transform: translateX(4px);
+  }
 }
