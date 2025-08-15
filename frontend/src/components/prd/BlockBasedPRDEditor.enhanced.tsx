@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
@@ -6,14 +6,10 @@ import { prdService, type PRD, type FlexiblePRDSection, type AgentType } from '@
 import { supabase } from '@/lib/supabase'
 import { PRDStatusBadge } from './PRDStatusBadge'
 import { NotionSectionEditor } from './blocks/NotionSectionEditor'
+import type { VirtualContentBlock } from '@/lib/virtual-blocks/types'
 import '@/styles/notion-editor.css'
-import { useDragStore } from '@/stores/dragStateStore'
-import { 
-  getDragType, 
-  extractSectionDragData, 
-  dragDebug
-} from '@/utils/dragDetection'
-import { useDragCleanup } from '@/hooks/useDragCleanup'
+// Removed legacy drag imports - now using @dnd-kit
+import { PRDDndProvider, SortableSection } from './dnd'
 import { 
   FileText, 
   Download, 
@@ -43,6 +39,7 @@ interface EnhancedBlockBasedPRDEditorProps {
   conversationId?: string
   onClose?: () => void
   className?: string
+  enableVirtualBlocks?: boolean // Enable virtual block system
 }
 
 // Sortable Section Wrapper
@@ -128,27 +125,18 @@ const defaultSectionMeta: SectionMeta[] = [
 export function EnhancedBlockBasedPRDEditor({ 
   projectId, 
   onClose,
-  className 
+  className,
+  enableVirtualBlocks = true 
 }: EnhancedBlockBasedPRDEditorProps) {
   const [prd, setPRD] = useState<PRD | null>(null)
+  const [sectionVirtualBlocks, setSectionVirtualBlocks] = useState<Record<string, VirtualContentBlock[]>>({})
   const [sections, setSections] = useState<FlexiblePRDSection[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [savingSection, setSavingSection] = useState<string | null>(null)
   const [showTOC, setShowTOC] = useState(false)
   const [scrollDirection, setScrollDirection] = useState<'up' | 'down' | null>(null)
   
-  // Use centralized drag state
-  const { 
-    type: dragType,
-    draggedSectionId,
-    dropIndicatorIndex,
-    dropIndicatorType,
-    setDropIndicator,
-    clearDropIndicator
-  } = useDragStore()
-  
-  // Initialize drag cleanup system
-  useDragCleanup()
+  // Drag state now handled by @dnd-kit
   const { toast } = useToast()
   
   // Debounce timers for each section
@@ -346,239 +334,24 @@ export function EnhancedBlockBasedPRDEditor({
     sectionTimers.current.set(sectionId, timer as unknown as NodeJS.Timeout)
   }, [prd, toast])
 
-  // Track global drag over handler for cleanup
-  const globalDragOverHandler = useRef<((event: DragEvent) => void) | null>(null)
+  // Removed global drag handler - @dnd-kit handles this
 
-  // Auto-scroll functionality
-  const startAutoScroll = useCallback((direction: 'up' | 'down', speed: number = 5) => {
-    if (!scrollContainerRef.current) return
-    
-    // Clear any existing interval
-    if (autoScrollInterval.current) {
-      clearInterval(autoScrollInterval.current)
-    }
-    
-    autoScrollInterval.current = setInterval(() => {
-      if (scrollContainerRef.current) {
-        const scrollAmount = direction === 'up' ? -speed : speed
-        scrollContainerRef.current.scrollTop += scrollAmount
-      }
-    }, 16) as unknown as NodeJS.Timeout // ~60fps
-  }, [])
+  // Auto-scroll now handled by @dnd-kit modifiers
 
-  const stopAutoScroll = useCallback(() => {
-    if (autoScrollInterval.current) {
-      clearInterval(autoScrollInterval.current)
-      autoScrollInterval.current = null
-    }
-  }, [])
+  // Removed all drag handlers - now handled by @dnd-kit
 
-  // Handle drag start
-  const handleDragStart = useCallback((_e: React.DragEvent, _sectionId: string) => {
-    // Note: Section drag start is now handled by SectionBlock component
-    // This function is kept for compatibility but drag state is managed centrally
-    
-    // Remove any existing handler first
-    if (globalDragOverHandler.current) {
-      document.removeEventListener('dragover', globalDragOverHandler.current)
-    }
-    
-    // Create new handler for auto-scroll (only for section drags)
-    globalDragOverHandler.current = (event: DragEvent) => {
-      if (!scrollContainerRef.current) return
 
-      // Check drag type using reliable detection
-      const detectedDragType = event.dataTransfer ? getDragType(event.dataTransfer) : 'unknown'
-      
-      // Only trigger auto-scroll for section drags
-      if (detectedDragType !== 'section') {
-        return
-      }
-      
-      const container = scrollContainerRef.current
-      const rect = container.getBoundingClientRect()
-      const scrollZoneHeight = 100 // Height of auto-scroll zones
-      
-      // Check if cursor is in top scroll zone
-      if (event.clientY < rect.top + scrollZoneHeight && event.clientY > rect.top) {
-        const speed = Math.max(1, Math.min(10, (scrollZoneHeight - (event.clientY - rect.top)) / 10))
-        startAutoScroll('up', speed)
-        setScrollDirection('up')
-      }
-      // Check if cursor is in bottom scroll zone
-      else if (event.clientY > rect.bottom - scrollZoneHeight && event.clientY < rect.bottom) {
-        const speed = Math.max(1, Math.min(10, ((event.clientY - (rect.bottom - scrollZoneHeight))) / 10))
-        startAutoScroll('down', speed)
-        setScrollDirection('down')
-      }
-      // Stop scrolling if not in any scroll zone
-      else {
-        stopAutoScroll()
-        setScrollDirection(null)
-      }
-    }
-    
-    // Add global listener
-    document.addEventListener('dragover', globalDragOverHandler.current)
-    
-    dragDebug.logDragStart('section', _sectionId, { from: 'BlockBasedPRDEditor' })
-  }, [startAutoScroll, stopAutoScroll])
-
-  // Handle drag over for section drop zones
-  const handleSectionDragOver = useCallback((e: React.DragEvent, targetIndex: number) => {
-    // Use reliable drag type detection
-    const detectedDragType = getDragType(e.dataTransfer)
-    
-    // Only handle section drags
-    if (detectedDragType !== 'section') {
-      // Clear any section drop indicators for non-section drags
-      if (dropIndicatorType === 'section') {
-        clearDropIndicator()
-      }
-      return
-    }
-
-    e.preventDefault()
-    e.stopPropagation()
-    e.dataTransfer.dropEffect = 'move'
-    
-    // Add active class to current drop zone
-    const dropZone = e.currentTarget as HTMLElement
-    if (dropZone && !dropZone.classList.contains('drop-active')) {
-      // Remove active class from all other drop zones
-      document.querySelectorAll('.section-drop-zone.drop-active').forEach(zone => {
-        if (zone !== dropZone) {
-          zone.classList.remove('drop-active')
-        }
-      })
-      dropZone.classList.add('drop-active')
-    }
-    
-    if (draggedSectionId) {
-      // Calculate if we should show the drop indicator
-      const draggedIndex = sections.findIndex(s => s.id === draggedSectionId)
-      if (draggedIndex !== targetIndex && draggedIndex !== targetIndex - 1) {
-        setDropIndicator(targetIndex, 'section')
-        dragDebug.logDragOver('section', `index-${targetIndex}`, true)
-      } else {
-        clearDropIndicator()
-      }
-    }
-  }, [draggedSectionId, sections, dropIndicatorType, setDropIndicator, clearDropIndicator])
-
-  // Handle drag leave
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    // Only clear indicator if leaving the entire sections container
-    const relatedTarget = e.relatedTarget as HTMLElement
-    if (!relatedTarget || !relatedTarget.closest('[data-sections-container]')) {
-      clearDropIndicator()
-      // Remove active class from all drop zones
-      document.querySelectorAll('.section-drop-zone.drop-active').forEach(zone => {
-        zone.classList.remove('drop-active')
-      })
-    }
-  }, [clearDropIndicator])
-
-  // Handle drag end
-  const handleDragEnd = useCallback(() => {
-    // Note: Drag state is now reset by SectionBlock component
-    // This function handles cleanup of auto-scroll and global listeners
-    
-    setScrollDirection(null)
-    stopAutoScroll()
-    
-    // Remove active class from all drop zones
-    document.querySelectorAll('.section-drop-zone.drop-active').forEach(zone => {
-      zone.classList.remove('drop-active')
-    })
-    
-    // Remove global drag event listener
-    if (globalDragOverHandler.current) {
-      document.removeEventListener('dragover', globalDragOverHandler.current)
-      globalDragOverHandler.current = null
-    }
-    
-    dragDebug.logDragEnd('section', true)
-  }, [stopAutoScroll])
-
-  // Handle section drop
-  const handleSectionDrop = useCallback((e: React.DragEvent, targetIndex: number) => {
-    // Use reliable drag type detection
-    const detectedDragType = getDragType(e.dataTransfer)
-    
-    // Only handle section drops
-    if (detectedDragType !== 'section') {
-      return
-    }
-
-    e.preventDefault()
-    e.stopPropagation()
-    
-    // Remove active class from all drop zones
-    document.querySelectorAll('.section-drop-zone.drop-active').forEach(zone => {
-      zone.classList.remove('drop-active')
-    })
-
-    // Extract drag data
-    const dragData = extractSectionDragData(e.dataTransfer)
-    if (!dragData || !dragData.sectionId) {
-      dragDebug.logError('Invalid section drag data', dragData)
-      return
-    }
-
-    const { sectionId } = dragData
-    
-    dragDebug.logDrop('section', sectionId, `index-${targetIndex}`)
-    
-    // Handle reorder directly here since the function is declared later
-    const fromIndex = sections.findIndex(s => s.id === sectionId)
-    
-    if (fromIndex === -1 || fromIndex === targetIndex) return
-
-    // Optimistic update
-    const newSections = [...sections]
-    const [removed] = newSections.splice(fromIndex, 1)
-    
-    // Adjust target index if dragging from before to after
-    const adjustedIndex = fromIndex < targetIndex ? targetIndex - 1 : targetIndex
-    newSections.splice(adjustedIndex, 0, removed)
-    
-    // Update order
-    const reorderedSections = newSections.map((section, index) => ({
-      ...section,
-      order: index + 1
-    }))
-    
-    setSections(reorderedSections)
-    
-    // Clear drop indicator
-    clearDropIndicator()
-  }, [sections, setSections, clearDropIndicator])
-
-  // Handle section reordering
-  const handleSectionReorder = useCallback(async (fromId: string, toIndex: number) => {
+  // Handle section reordering with @dnd-kit
+  const handleSectionReorder = useCallback(async (reorderedSections: FlexiblePRDSection[]) => {
     if (!prd?.id) return
 
-    const fromIndex = sections.findIndex(s => s.id === fromId)
-    
-    if (fromIndex === -1 || fromIndex === toIndex) return
-
-    // Optimistic update
-    const newSections = [...sections]
-    const [removed] = newSections.splice(fromIndex, 1)
-    
-    // Adjust target index if dragging from before to after
-    const adjustedIndex = fromIndex < toIndex ? toIndex - 1 : toIndex
-    newSections.splice(adjustedIndex, 0, removed)
-    
-    // Update order
-    const reorderedSections = newSections.map((section, index) => ({
+    // Update sections with new order
+    const sectionsWithUpdatedOrder = reorderedSections.map((section, index) => ({
       ...section,
       order: index + 1
     }))
     
-    setSections(reorderedSections)
-    clearDropIndicator()
+    setSections(sectionsWithUpdatedOrder)
 
     try {
       // Get session for auth
@@ -588,13 +361,15 @@ export function EnhancedBlockBasedPRDEditor({
         throw new Error('No active session')
       }
       
-      // Save to backend
+      // Save all section orders to backend
       const { error } = await supabase.functions.invoke('prd-management', {
         body: {
-          action: 'reorderSections',
+          action: 'updateSectionOrders',
           prdId: prd.id,
-          sectionId: fromId,
-          newOrder: adjustedIndex + 1
+          sections: sectionsWithUpdatedOrder.map(s => ({
+            id: s.id,
+            order: s.order
+          }))
         },
         headers: {
           Authorization: `Bearer ${session.access_token}`
@@ -747,28 +522,7 @@ export function EnhancedBlockBasedPRDEditor({
       status: section.status,
       validationErrors: [],
       onUpdate: handleSectionUpdate,
-      onDelete: section.required ? undefined : () => handleRemoveSection(section.id),
-      onDragStart: handleDragStart,
-      onDragEnd: handleDragEnd,
-      onDrop: (e: React.DragEvent) => {
-        // Check if this is a content-level drag (should not trigger section reorder)
-        const contentDragData = e.dataTransfer.getData('application/x-tiptap-content')
-        if (contentDragData) {
-          // This is a content drag, don't handle at section level
-          e.preventDefault()
-          e.stopPropagation()
-          return
-        }
-
-        e.preventDefault()
-        if (dropIndicatorIndex !== null) {
-          const fromId = e.dataTransfer.getData('sectionId')
-          if (fromId) {
-            handleSectionReorder(fromId, dropIndicatorIndex)
-          }
-        }
-      },
-      isDraggingSection: dragType === 'section'  // Pass drag state to child
+      onDelete: section.required ? undefined : () => handleRemoveSection(section.id)
     }
 
     // Use NotionSectionEditor for all sections with enhanced Notion-like UI
@@ -778,8 +532,16 @@ export function EnhancedBlockBasedPRDEditor({
         {...commonProps}
         enableSlashCommands={true}
         enableBubbleMenu={true}
+        enableVirtualBlocks={enableVirtualBlocks}
         onContentSync={(structured, rich) => {
           console.log('Content synced:', { structured, rich })
+        }}
+        onBlocksUpdate={(blocks) => {
+          setSectionVirtualBlocks(prev => ({
+            ...prev,
+            [section.id]: blocks
+          }))
+          console.log(`Virtual blocks updated for section ${section.id}:`, blocks)
         }}
       />
     )
@@ -966,9 +728,9 @@ export function EnhancedBlockBasedPRDEditor({
       </div>
 
       {/* Main Content Area with DnD */}
-      <div className={cn("flex-1 relative overflow-hidden", dragType === 'section' && "dragging")}>
-        {/* Auto-scroll zones indicators (visible when dragging) */}
-        {dragType === 'section' && (
+      <div className="flex-1 relative overflow-hidden">
+        {/* Auto-scroll zones indicators - handled by @dnd-kit */}
+        {false && (
           <>
             <div className={cn(
               "drag-scroll-zone-top",
@@ -1007,56 +769,33 @@ export function EnhancedBlockBasedPRDEditor({
           ref={scrollContainerRef}
           className="absolute inset-0 overflow-y-auto bg-muted/50"
         >
-          <div 
-            className="max-w-4xl mx-auto px-8 py-6"
-            data-sections-container
-            onDragLeave={handleDragLeave}
+          <PRDDndProvider 
+            sections={sortedSectionsData}
+            onSectionReorder={handleSectionReorder}
           >
-            <div className="relative">
-              {/* Drop zone at the top - unified with visual indicator */}
-              <div 
-                className="section-drop-zone"
-                onDragOver={(e) => handleSectionDragOver(e, 0)}
-                onDrop={(e) => handleSectionDrop(e, 0)}
-                onDragLeave={(e) => {
-                  // Remove active class when leaving this specific zone
-                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                    e.currentTarget.classList.remove('drop-active')
-                  }
-                }}
-              />
-              
-              {sortedSectionsData.map((section, index) => (
-                <div key={section.id} className="relative">
-                  {/* Section wrapper for drag events */}
-                  <div
-                    ref={(el) => {
-                      if (el) sectionRefs.current.set(section.id, el)
-                    }}
-                    className={cn(
-                      "transition-opacity duration-200",
-                      dragType === 'section' && draggedSectionId === section.id && "opacity-50"
-                    )}
+            <div 
+              className="max-w-4xl mx-auto px-8 py-6"
+              data-sections-container
+            >
+              <div className="relative">
+                {sortedSectionsData.map((section) => (
+                  <SortableSection 
+                    key={section.id} 
+                    id={section.id}
+                    className="mb-4"
                   >
-                    {renderSectionEditor(section)}
-                  </div>
-                  
-                  {/* Drop zone after each section - unified with visual indicator */}
-                  <div 
-                    className="section-drop-zone"
-                    onDragOver={(e) => handleSectionDragOver(e, index + 1)}
-                    onDrop={(e) => handleSectionDrop(e, index + 1)}
-                    onDragLeave={(e) => {
-                      // Remove active class when leaving this specific zone
-                      if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                        e.currentTarget.classList.remove('drop-active')
-                      }
-                    }}
-                  />
-                </div>
-              ))}
+                    <div
+                      ref={(el) => {
+                        if (el) sectionRefs.current.set(section.id, el)
+                      }}
+                    >
+                      {renderSectionEditor(section)}
+                    </div>
+                  </SortableSection>
+                ))}
+              </div>
             </div>
-          </div>
+          </PRDDndProvider>
         </div>
 
         {/* Table of Contents Sidebar */}

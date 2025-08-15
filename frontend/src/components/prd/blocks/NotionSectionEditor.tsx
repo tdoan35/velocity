@@ -9,20 +9,19 @@ import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 // import Dropcursor from '@tiptap/extension-dropcursor' // Disabled - interferes with custom drag
 import Gapcursor from '@tiptap/extension-gapcursor'
+import { TextSelection } from '@tiptap/pm/state'
 import { Button } from '@/components/ui/button'
 import { SectionBlock, type SectionBlockProps, type SectionType } from './SectionBlock'
-import { EnhancedBlockControls } from '../EnhancedBlockControls'
+import { EnhancedBlockControlsDnd } from '../EnhancedBlockControlsDnd'
 import { cn } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useDragStore } from '@/stores/dragStateStore'
-import { 
-  getDragType, 
-  setupContentDragData, 
-  extractContentDragData, 
-  dragDebug,
-  validateDragOperation 
-} from '@/utils/dragDetection'
-import { useDragCleanup } from '@/hooks/useDragCleanup'
+// Removed legacy drag imports - now using @dnd-kit
+import { ContentDndProvider, SortableContentLine, type ContentLine } from '../dnd'
+
+// Virtual Block System imports
+import { VirtualBlockManager } from '@/lib/virtual-blocks/VirtualBlockManager'
+import { BlockType } from '@/lib/virtual-blocks/types'
+import type { VirtualContentBlock } from '@/lib/virtual-blocks/types'
 import { 
   Bold,
   Italic,
@@ -44,14 +43,17 @@ export interface HybridContent {
   richContent: string       // TipTap HTML
   lastEditedIn: 'rich' | 'structured'
   version: number
+  virtualBlocks?: VirtualContentBlock[]  // Virtual blocks parsed from HTML
 }
 
 export interface NotionSectionEditorProps extends Omit<SectionBlockProps, 'children'> {
   placeholder?: string
   enableSlashCommands?: boolean
   enableBubbleMenu?: boolean
+  enableVirtualBlocks?: boolean  // Enable virtual block system
   customCommands?: SlashCommand[]
   onContentSync?: (structured: any, rich: string) => void
+  onBlocksUpdate?: (blocks: VirtualContentBlock[]) => void  // Virtual blocks update callback
   isDraggingSection?: boolean  // New prop to track when sections are being dragged
 }
 
@@ -61,6 +63,7 @@ interface SlashCommand {
   icon: React.ComponentType<{ className?: string }>
   action: (editor: Editor) => void
   keywords?: string[]
+  blockType?: BlockType  // For virtual block type conversion
 }
 
 // Helper function to check if an object has actual content (not just empty arrays/objects)
@@ -77,7 +80,9 @@ const hasActualContent = (obj: any): boolean => {
   })
 }
 
-// Content transformation utilities
+// TEMPORARILY DISABLED: Content transformation utilities - suspected cause of drag/drop issues
+// These transformations might be causing the "Line 1Line 2Line 3" concatenation problem
+/*
 const transformStructuredToRich = (type: SectionType, structured: any): string => {
   let html = ''
   
@@ -313,332 +318,31 @@ const transformStructuredToRich = (type: SectionType, structured: any): string =
   
   return html || ''
 }
+*/
 
-const transformRichToStructured = (type: SectionType, html: string): any => {
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(html, 'text/html')
-  
-  // Check if content has structured elements (headings, lists, etc.)
-  const hasStructuredElements = doc.querySelectorAll('h1, h2, h3, h4, h5, h6, ul, ol, table').length > 0
-  
-  switch (type) {
-    case 'overview': {
-      const result: any = {}
-      
-      // If no structured elements, treat as simple description
-      if (!hasStructuredElements) {
-        const textContent = doc.body.textContent?.trim()
-        if (textContent && textContent.length > 0) {
-          result.description = textContent
-          return result
-        }
-        return {}
-      }
-      
-      // Find Vision section
-      const headings = Array.from(doc.querySelectorAll('h3'))
-      const visionHeading = headings.find(h => h.textContent?.toLowerCase().includes('vision'))
-      if (visionHeading) {
-        const nextElement = visionHeading.nextElementSibling
-        if (nextElement?.tagName === 'P') {
-          result.vision = nextElement.textContent || ''
-        }
-      }
-      
-      // Find Problem Statement
-      const problemHeading = headings.find(h => h.textContent?.toLowerCase().includes('problem'))
-      if (problemHeading) {
-        const nextElement = problemHeading.nextElementSibling
-        if (nextElement?.tagName === 'P') {
-          result.problem = nextElement.textContent || ''
-        }
-      }
-      
-      // Find Target Users
-      const usersHeading = headings.find(h => h.textContent?.toLowerCase().includes('users'))
-      if (usersHeading) {
-        const nextElement = usersHeading.nextElementSibling
-        if (nextElement?.tagName === 'UL') {
-          result.targetUsers = Array.from(nextElement.querySelectorAll('li'))
-            .map(li => li.textContent || '')
-            .filter(text => text.length > 0)
-        }
-      }
-      
-      // If no structured content found but we have headings, add as description
-      if (Object.keys(result).length === 0) {
-        const textContent = doc.body.textContent?.trim()
-        if (textContent && textContent.length > 0) {
-          result.description = textContent
-        }
-      }
-      
-      return result
-    }
-    
-    case 'core_features':
-    case 'additional_features': {
-      const features: any[] = []
-      const headings = Array.from(doc.querySelectorAll('h3'))
-      
-      headings.forEach(heading => {
-        const titleText = heading.textContent || ''
-        // Skip section headers
-        if (titleText.toLowerCase().includes('feature')) return
-        
-        const feature: any = {
-          title: titleText.replace(/^\d+\.\s*/, ''),
-          description: ''
-        }
-        
-        let nextElement = heading.nextElementSibling
-        while (nextElement && nextElement.tagName !== 'H3') {
-          if (nextElement.tagName === 'P') {
-            const text = nextElement.textContent || ''
-            if (text.toLowerCase().startsWith('priority:')) {
-              feature.priority = text.replace(/^priority:\s*/i, '').trim()
-            } else if (!nextElement.querySelector('em')) {
-              feature.description = text
-            }
-          }
-          nextElement = nextElement.nextElementSibling
-        }
-        
-        if (feature.title) {
-          features.push(feature)
-        }
-      })
-      
-      return { features }
-    }
-    
-    case 'technical_architecture': {
-      const result: any = { platforms: [], techStack: {} }
-      const headings = Array.from(doc.querySelectorAll('h3'))
-      
-      // Find Platforms
-      const platformsHeading = headings.find(h => h.textContent?.toLowerCase().includes('platform'))
-      if (platformsHeading) {
-        const nextElement = platformsHeading.nextElementSibling
-        if (nextElement?.tagName === 'UL') {
-          result.platforms = Array.from(nextElement.querySelectorAll('li'))
-            .map(li => li.textContent || '')
-            .filter(text => text.length > 0)
-        }
-      }
-      
-      // Find Technology Stack
-      const techStackHeading = headings.find(h => h.textContent?.toLowerCase().includes('technology stack'))
-      if (techStackHeading) {
-        let sibling = techStackHeading.nextElementSibling
-        while (sibling && sibling.tagName !== 'H3') {
-          if (sibling.tagName === 'H4') {
-            const stackType = sibling.textContent?.toLowerCase()
-            const list = sibling.nextElementSibling
-            if (list?.tagName === 'UL') {
-              const items = Array.from(list.querySelectorAll('li'))
-                .map(li => li.textContent || '')
-                .filter(text => text.length > 0)
-              if (stackType?.includes('frontend')) {
-                result.techStack.frontend = items
-              } else if (stackType?.includes('backend')) {
-                result.techStack.backend = items
-              }
-            }
-          }
-          sibling = sibling.nextElementSibling
-        }
-      }
-      
-      return result
-    }
-    
-    case 'ui_design_patterns': {
-      const result: any = {}
-      const headings3 = Array.from(doc.querySelectorAll('h3'))
-      const _headings4 = Array.from(doc.querySelectorAll('h4'))
-      
-      // Find Design Patterns
-      const patternsHeading = headings3.find(h => h.textContent?.toLowerCase().includes('design patterns'))
-      if (patternsHeading) {
-        result.patterns = []
-        let sibling = patternsHeading.nextElementSibling
-        while (sibling && sibling.tagName !== 'H3') {
-          if (sibling.tagName === 'H4') {
-            const pattern: any = { name: sibling.textContent || '' }
-            let next = sibling.nextElementSibling
-            if (next?.tagName === 'P') {
-              pattern.description = next.textContent || ''
-              next = next.nextElementSibling
-              if (next?.tagName === 'P' && next.textContent?.startsWith('Example:')) {
-                pattern.example = next.textContent.replace(/^Example:\s*/i, '').trim()
-              }
-            }
-            result.patterns.push(pattern)
-          }
-          sibling = sibling.nextElementSibling
-        }
-      }
-      
-      // Find Design System
-      const designSystemHeading = headings3.find(h => h.textContent?.toLowerCase().includes('design system'))
-      if (designSystemHeading) {
-        const next = designSystemHeading.nextElementSibling
-        if (next?.tagName === 'P') {
-          result.designSystem = next.textContent || ''
-        }
-      }
-      
-      // Find Color Scheme
-      const colorSchemeHeading = headings3.find(h => h.textContent?.toLowerCase().includes('color scheme'))
-      if (colorSchemeHeading) {
-        result.colorScheme = {}
-        let sibling = colorSchemeHeading.nextElementSibling
-        while (sibling && sibling.tagName !== 'H3') {
-          if (sibling.tagName === 'P') {
-            const text = sibling.textContent || ''
-            if (text.includes('Primary:')) {
-              result.colorScheme.primary = text.replace(/.*Primary:\s*/i, '').trim()
-            } else if (text.includes('Secondary:')) {
-              result.colorScheme.secondary = text.replace(/.*Secondary:\s*/i, '').trim()
-            } else if (text.includes('Accent:')) {
-              result.colorScheme.accent = text.replace(/.*Accent:\s*/i, '').trim()
-            }
-          }
-          sibling = sibling.nextElementSibling
-        }
-      }
-      
-      return result
-    }
-    
-    case 'ux_flows': {
-      const result: any = {}
-      const headings3 = Array.from(doc.querySelectorAll('h3'))
-      
-      // Find User Journeys
-      const journeysHeading = headings3.find(h => h.textContent?.toLowerCase().includes('user journeys'))
-      if (journeysHeading) {
-        result.userJourneys = []
-        let sibling = journeysHeading.nextElementSibling
-        while (sibling && sibling.tagName !== 'H3') {
-          if (sibling.tagName === 'H4') {
-            const journey: any = { name: sibling.textContent || '' }
-            let next = sibling.nextElementSibling
-            if (next?.tagName === 'P') {
-              journey.description = next.textContent || ''
-              next = next.nextElementSibling
-            }
-            if (next?.tagName === 'P' && next.textContent?.includes('Persona:')) {
-              journey.persona = next.textContent.replace(/.*Persona:\s*/i, '').trim()
-              next = next.nextElementSibling
-            }
-            if (next?.tagName === 'OL') {
-              journey.steps = Array.from(next.querySelectorAll('li'))
-                .map(li => li.textContent || '')
-                .filter(text => text.length > 0)
-            }
-            result.userJourneys.push(journey)
-          }
-          sibling = sibling.nextElementSibling
-        }
-      }
-      
-      // Find Navigation Structure
-      const navHeading = headings3.find(h => h.textContent?.toLowerCase().includes('navigation structure'))
-      if (navHeading) {
-        result.navigationStructure = {}
-        let sibling = navHeading.nextElementSibling
-        while (sibling && sibling.tagName !== 'H3') {
-          if (sibling.tagName === 'P') {
-            const text = sibling.textContent || ''
-            if (text.includes('Type:')) {
-              result.navigationStructure.type = text.replace(/.*Type:\s*/i, '').trim()
-            }
-          } else if (sibling.tagName === 'UL') {
-            result.navigationStructure.mainSections = Array.from(sibling.querySelectorAll('li'))
-              .map(li => li.textContent || '')
-              .filter(text => text.length > 0)
-          }
-          sibling = sibling.nextElementSibling
-        }
-      }
-      
-      return result
-    }
-    
-    case 'tech_integrations': {
-      const result: any = {}
-      const headings3 = Array.from(doc.querySelectorAll('h3'))
-      
-      // Find Integrations
-      const integrationsHeading = headings3.find(h => h.textContent?.toLowerCase().includes('integrations'))
-      if (integrationsHeading) {
-        result.integrations = []
-        let sibling = integrationsHeading.nextElementSibling
-        while (sibling && sibling.tagName !== 'H3') {
-          if (sibling.tagName === 'H4') {
-            const integration: any = { name: sibling.textContent || '' }
-            let next = sibling.nextElementSibling
-            while (next && next.tagName !== 'H4' && next.tagName !== 'H3') {
-              if (next.tagName === 'P') {
-                const text = next.textContent || ''
-                if (text.includes('Type:')) {
-                  integration.type = text.replace(/.*Type:\s*/i, '').trim()
-                } else if (!text.includes('Configuration:')) {
-                  integration.purpose = text
-                }
-              } else if (next.tagName === 'PRE') {
-                try {
-                  integration.configuration = JSON.parse(next.textContent || '{}')
-                } catch {
-                  // Invalid JSON, ignore
-                }
-              }
-              next = next.nextElementSibling
-            }
-            result.integrations.push(integration)
-          }
-          sibling = sibling.nextElementSibling
-        }
-      }
-      
-      // Find APIs
-      const apisHeading = headings3.find(h => h.textContent?.toLowerCase() === 'apis')
-      if (apisHeading) {
-        result.apis = []
-        let sibling = apisHeading.nextElementSibling
-        while (sibling && sibling.tagName !== 'H3') {
-          if (sibling.tagName === 'H4') {
-            const api: any = { name: sibling.textContent || '' }
-            let next = sibling.nextElementSibling
-            while (next && next.tagName !== 'H4' && next.tagName !== 'H3') {
-              if (next.tagName === 'P') {
-                const text = next.textContent || ''
-                if (text.includes('Endpoint:')) {
-                  api.endpoint = text.replace(/.*Endpoint:\s*/i, '').trim()
-                } else if (text.includes('Authentication:')) {
-                  api.authentication = text.replace(/.*Authentication:\s*/i, '').trim()
-                }
-              }
-              next = next.nextElementSibling
-            }
-            result.apis.push(api)
-          }
-          sibling = sibling.nextElementSibling
-        }
-      }
-      
-      return result
-    }
-    
-    default:
-      // For custom sections, try to extract text content
-      const textContent = doc.body.textContent || ''
-      return textContent.trim() || {}
-  }
+// Simplified transformation for testing - just pass through the content
+const transformStructuredToRich = (type: SectionType, structured: any): string => {
+  // Simple pass-through for testing
+  if (typeof structured === 'string') return structured
+  if (structured?.html) return structured.html
+  if (structured?.content) return structured.content
+  return '<p>Test content</p>'
 }
 
+const transformRichToStructured = (type: SectionType, html: string): any => {
+  // Simple pass-through for testing
+  return { html, type }
+}
+
+// Original transformation functions have been removed for testing
+// The original implementations converted between structured data and rich HTML
+// but may have been causing the content concatenation issue
+
+/* Removed large block of commented-out transformation code for clarity.
+   The original functions transformed between structured JSON and rich HTML
+   for different section types (overview, core_features, ui_ux_design, etc.)
+   These functions have been replaced with simplified pass-through versions above
+   for testing purposes to isolate the drag-drop issue. */
 // Section-specific placeholders
 const getSectionPlaceholder = (type: SectionType): string => {
   const placeholders: Record<SectionType, string> = {
@@ -661,49 +365,57 @@ const getSectionCommands = (type: SectionType): SlashCommand[] => {
       id: 'heading1',
       label: 'Heading 1',
       icon: Heading1,
-      action: (editor) => editor.chain().focus().toggleHeading({ level: 1 }).run()
+      action: (editor) => editor.chain().focus().toggleHeading({ level: 1 }).run(),
+      blockType: BlockType.HEADING_1
     },
     {
       id: 'heading2',
       label: 'Heading 2',
       icon: Heading2,
-      action: (editor) => editor.chain().focus().toggleHeading({ level: 2 }).run()
+      action: (editor) => editor.chain().focus().toggleHeading({ level: 2 }).run(),
+      blockType: BlockType.HEADING_2
     },
     {
       id: 'heading3',
       label: 'Heading 3',
       icon: Heading3,
-      action: (editor) => editor.chain().focus().toggleHeading({ level: 3 }).run()
+      action: (editor) => editor.chain().focus().toggleHeading({ level: 3 }).run(),
+      blockType: BlockType.HEADING_3
     },
     {
       id: 'bulletList',
       label: 'Bullet List',
       icon: List,
-      action: (editor) => editor.chain().focus().toggleBulletList().run()
+      action: (editor) => editor.chain().focus().toggleBulletList().run(),
+      blockType: BlockType.BULLET_LIST
     },
     {
       id: 'orderedList',
       label: 'Numbered List',
       icon: ListOrdered,
-      action: (editor) => editor.chain().focus().toggleOrderedList().run()
+      action: (editor) => editor.chain().focus().toggleOrderedList().run(),
+      blockType: BlockType.NUMBERED_LIST
     },
     {
       id: 'taskList',
       label: 'Task List',
       icon: CheckCircle2,
       action: (editor) => editor.chain().focus().toggleTaskList().run()
+      // Note: Task lists don't have a specific virtual block type yet
     },
     {
       id: 'quote',
       label: 'Quote',
       icon: Quote,
-      action: (editor) => editor.chain().focus().toggleBlockquote().run()
+      action: (editor) => editor.chain().focus().toggleBlockquote().run(),
+      blockType: BlockType.QUOTE
     },
     {
       id: 'code',
       label: 'Code Block',
       icon: Code,
-      action: (editor) => editor.chain().focus().toggleCodeBlock().run()
+      action: (editor) => editor.chain().focus().toggleCodeBlock().run(),
+      blockType: BlockType.CODE
     }
   ]
   
@@ -812,6 +524,7 @@ export function NotionSectionEditor({
   placeholder,
   enableSlashCommands = true,
   enableBubbleMenu = true,
+  enableVirtualBlocks = true,  // Enable virtual blocks by default
   customCommands,
   onUpdate,
   onDelete,
@@ -823,6 +536,7 @@ export function NotionSectionEditor({
   onDragOver,
   onDrop,
   onContentSync,
+  onBlocksUpdate,
   isDraggingSection: _isDraggingSection = false,
   className
 }: NotionSectionEditorProps) {
@@ -831,27 +545,28 @@ export function NotionSectionEditor({
   const [slashFilter, setSlashFilter] = useState('')
   const editorRef = useRef<HTMLDivElement>(null)
   
-  // Use centralized drag state
-  const { 
-    type: dragType,
-    sourceContainer,
-    startContentDrag,
-    resetDragState
-  } = useDragStore()
+  // Virtual Block Manager instance
+  const virtualBlockManager = useMemo(() => new VirtualBlockManager(), [])
+  const [virtualBlocks, setVirtualBlocks] = useState<VirtualContentBlock[]>([])
   
-  // Determine if content is being dragged within this section
-  const isDraggingContent = dragType === 'content' && sourceContainer === id
+  // Drag state now handled by @dnd-kit
   
-  // Initialize drag cleanup system for this section
-  useDragCleanup()
+  // Removed useDragCleanup - now handled by @dnd-kit
   
-  // Initialize hybrid content
-  const [hybridContent, setHybridContent] = useState<HybridContent>(() => ({
-    structuredData: content || {},
-    richContent: transformStructuredToRich(type, content || {}),
-    lastEditedIn: 'structured',
-    version: 1
-  }))
+  // Initialize hybrid content with virtual blocks
+  // TEMPORARILY DISABLED: Commenting out transformation to debug drag/drop issues
+  const [hybridContent, setHybridContent] = useState<HybridContent>(() => {
+    const initialHtml = typeof content === 'string' ? content : '<p>Line 1</p><p>Line 2</p><p>Line 3</p>';
+    const blocks = enableVirtualBlocks ? virtualBlockManager.parseHTMLToBlocks(initialHtml) : [];
+    return {
+      structuredData: content || {},
+      // richContent: transformStructuredToRich(type, content || {}),
+      richContent: initialHtml, // Use simple HTML for testing
+      lastEditedIn: 'structured',
+      version: 1,
+      virtualBlocks: blocks
+    }
+  })
   
   // Refs for tracking content updates and preventing loops
   const contentRef = useRef(content)
@@ -903,13 +618,14 @@ export function NotionSectionEditor({
     }),
     // DISABLE Dropcursor completely - it might interfere with our custom drag
     // Dropcursor shows a line where content will be dropped, but we handle this ourselves
-    // ...(dragType === 'section' ? [] : [Dropcursor.configure({
+    // Dropcursor is now safe to use with @dnd-kit
+    // Dropcursor.configure({
     //   color: '#10b981',
     //   width: 2
     // })]),
     // Always include gapcursor for better UX
     Gapcursor
-  ], [type, placeholder, dragType])
+  ], [type, placeholder])
   
   // Initialize TipTap editor
   const editor = useEditor({
@@ -917,23 +633,35 @@ export function NotionSectionEditor({
     content: hybridContent.richContent || undefined,
     editable: isEditable,  // Trust the isEditable prop from parent
     onUpdate: ({ editor }) => {
+      // TEMPORARILY DISABLED: Commenting out transformation to debug drag/drop issues
       // Prevent updates during external sync
       if (isExternalUpdate.current) return
       
       isInternalUpdate.current = true
       const html = editor.getHTML()
-      const structured = transformRichToStructured(type, html)
+      
+      // Parse HTML into virtual blocks if enabled
+      let blocks: VirtualContentBlock[] = []
+      if (enableVirtualBlocks) {
+        blocks = virtualBlockManager.parseHTMLToBlocks(html)
+        setVirtualBlocks(blocks)
+        onBlocksUpdate?.(blocks)
+      }
+      
+      // const structured = transformRichToStructured(type, html)
+      const structured = { html } // Simple pass-through for testing
       
       const newHybridContent: HybridContent = {
         structuredData: structured,
         richContent: html,
         lastEditedIn: 'rich',
-        version: hybridContent.version + 1
+        version: hybridContent.version + 1,
+        virtualBlocks: blocks
       }
       
       setHybridContent(newHybridContent)
       onUpdate(id, structured)
-      onContentSync?.(structured, html)
+      // onContentSync?.(structured, html) // Disabled for testing
     },
     editorProps: {
       attributes: {
@@ -941,14 +669,65 @@ export function NotionSectionEditor({
         'data-section-id': id,
         'data-section-type': type
       },
-      // COMPLETELY DISABLE TIPTAP'S DRAG HANDLING
-      // This prevents TipTap from interfering with our custom drag implementation
-      handleDrop: () => false,  // Always return false to let browser handle it
-      handleDragStart: () => false,  // Disable TipTap's drag start handling
-      handleDrag: () => false,  // Disable TipTap's drag handling
-      handleDragEnd: () => false,  // Disable TipTap's drag end handling
-      handlePaste: () => false, // Also disable paste to avoid conflicts with drag/drop
+      // Re-enable TipTap drag handlers now that we're using @dnd-kit
       handleKeyDown: (view, event) => {
+        // Handle virtual block navigation if enabled
+        if (enableVirtualBlocks && virtualBlocks.length > 0) {
+          // Arrow navigation between blocks
+          if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+            const pos = view.state.selection.from
+            const currentBlock = virtualBlockManager.getBlockAtPosition(hybridContent.richContent, pos)
+            
+            if (currentBlock) {
+              const currentIndex = virtualBlocks.findIndex(b => b.id === currentBlock.id)
+              const targetIndex = event.key === 'ArrowUp' ? currentIndex - 1 : currentIndex + 1
+              
+              if (targetIndex >= 0 && targetIndex < virtualBlocks.length) {
+                // Focus the target block
+                const targetBlock = virtualBlocks[targetIndex]
+                if (targetBlock.domElement) {
+                  // Move cursor to the target block
+                  const targetPos = event.key === 'ArrowUp' 
+                    ? targetBlock.position.end - 1
+                    : targetBlock.position.start + 1
+                  view.dispatch(view.state.tr.setSelection(
+                    TextSelection.near(view.state.doc.resolve(Math.min(targetPos, view.state.doc.content.size)))
+                  ))
+                  return true
+                }
+              }
+            }
+          }
+          
+          // Handle Enter key for new blocks
+          if (event.key === 'Enter' && !event.shiftKey) {
+            const pos = view.state.selection.from
+            const currentBlock = virtualBlockManager.getBlockAtPosition(hybridContent.richContent, pos)
+            
+            if (currentBlock && currentBlock.type !== BlockType.LIST_ITEM) {
+              // Check if we're at the end of a block
+              const selection = view.state.selection
+              const $pos = selection.$from
+              const isAtEnd = $pos.parentOffset === $pos.parent.content.size
+              
+              if (isAtEnd) {
+                // Create a new paragraph block after current block
+                const result = virtualBlockManager.insertBlockAfter(
+                  hybridContent.richContent,
+                  currentBlock.id,
+                  { type: BlockType.PARAGRAPH, content: '' }
+                )
+                
+                if (result.success && result.html) {
+                  // Update editor with new HTML
+                  view.dispatch(view.state.tr.insertText('\n'))
+                  return false // Let TipTap handle the actual insertion
+                }
+              }
+            }
+          }
+        }
+        
         // Handle slash command
         if (event.key === '/' && !showSlashCommand && enableSlashCommands) {
           const coords = view.coordsAtPos(view.state.selection.from)
@@ -995,7 +774,9 @@ export function NotionSectionEditor({
     return oldContent !== newContent
   }, [])
   
+  // TEMPORARILY DISABLED: Commenting out content sync to debug drag/drop issues
   // Sync content when it changes externally (only for significant changes)
+  /*
   useEffect(() => {
     if (editor && !isInternalUpdate.current) {
       // Only update if content has significantly changed from external source
@@ -1020,6 +801,7 @@ export function NotionSectionEditor({
     }
     isInternalUpdate.current = false
   }, [content, type, editor, hasSignificantContentChange, hybridContent.richContent, hybridContent.version])
+  */
   
   // NOTE: Content drag & drop is now handled entirely by EnhancedBlockControls
   // This component only manages section-level operations
@@ -1032,75 +814,50 @@ export function NotionSectionEditor({
     const to = editor.state.selection.from
     editor.commands.deleteRange({ from, to })
     
-    // Execute the command action
+    // If virtual blocks are enabled and this is a block type conversion command
+    if (enableVirtualBlocks && virtualBlocks.length > 0 && command.blockType) {
+      const pos = editor.state.selection.from
+      const currentBlock = virtualBlockManager.getBlockAtPosition(hybridContent.richContent, pos)
+      
+      if (currentBlock) {
+        // Convert the virtual block type
+        const result = virtualBlockManager.convertBlockType(
+          hybridContent.richContent,
+          currentBlock.id,
+          command.blockType
+        )
+        
+        if (result.success && result.html) {
+          // Update editor with converted HTML
+          editor.commands.setContent(result.html)
+          // Parse new blocks
+          const newBlocks = virtualBlockManager.parseHTMLToBlocks(result.html)
+          setVirtualBlocks(newBlocks)
+          onBlocksUpdate?.(newBlocks)
+          setShowSlashCommand(false)
+          setSlashFilter('')
+          return
+        }
+      }
+    }
+    
+    // Execute the default command action
     command.action(editor)
     
     setShowSlashCommand(false)
     setSlashFilter('')
-  }, [editor, slashFilter])
+  }, [editor, slashFilter, enableVirtualBlocks, virtualBlocks, virtualBlockManager, hybridContent, onBlocksUpdate])
   
   // Get emoji for section
   const emoji = getSectionEmoji(type)
   
   // Handle content-level drag events (delegated to EnhancedBlockControls)
-  const handleContentDragStart = useCallback((e: React.DragEvent) => {
-    // Prevent content drag if section is currently being dragged
-    if (!validateDragOperation.canStartContentDrag(dragType)) {
-      e.preventDefault()
-      e.stopPropagation()
-      return
-    }
-    
-    // Stop propagation to prevent section-level drag from triggering
-    e.stopPropagation()
-    
-    // Update global state to indicate content drag
-    startContentDrag('content', id)
-    
-    // Debug logging
-    dragDebug.logDragStart('content', 'block', { section: id })
-  }, [dragType, id, startContentDrag])
-
-  const handleContentDragEnd = useCallback((e: React.DragEvent) => {
-    // Stop propagation to keep drag isolated
-    e.stopPropagation()
-    
-    // Reset global drag state
-    resetDragState()
-    
-    // Debug logging
-    dragDebug.logDragEnd('content', true)
-  }, [resetDragState])
-
-  const handleSectionDragStart = useCallback((e: React.DragEvent, draggedSectionId: string) => {
-    // Only allow section drag if not dragging content
-    if (dragType === 'content') {
-      e.preventDefault()
-      e.stopPropagation()
-      return
-    }
-    onDragStart?.(e, draggedSectionId)
-  }, [dragType, onDragStart])
-
-  const handleSectionDragOver = useCallback((e: React.DragEvent) => {
-    // Only allow section drag over if not dragging content
-    if (dragType === 'content') {
-      e.preventDefault()
-      e.stopPropagation()
-      return
-    }
-    onDragOver?.(e)
-  }, [dragType, onDragOver])
+  // Removed content drag handlers - now handled by @dnd-kit
 
   const handleSectionDrop = useCallback((e: React.DragEvent) => {
-    // Only allow section drop if not dragging content
-    if (dragType === 'content') {
-      e.preventDefault()
-      e.stopPropagation()
-      return
-    }
+    // Handled by @dnd-kit now
     onDrop?.(e, id)
-  }, [dragType, onDrop])
+  }, [onDrop, id])
 
   return (
     <SectionBlock
@@ -1121,26 +878,21 @@ export function NotionSectionEditor({
       onDuplicate={onDuplicate}
       onToggleVisibility={onToggleVisibility}
       onToggleExpanded={onToggleExpanded}
-      onDragStart={handleSectionDragStart}
+      onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      onDragOver={handleSectionDragOver}
+      onDragOver={onDragOver}
       onDrop={handleSectionDrop}
       className={className}
       hideCard={true}
     >
-      <div ref={editorRef} className={cn(
-        "relative",
-        dragType === 'section' && "dragging-section",
-        isDraggingContent && "dragging-content"
-      )}>
+      <div ref={editorRef} className="relative">
         {/* Enhanced Block Controls */}
         {editor && (
-          <EnhancedBlockControls 
+          <EnhancedBlockControlsDnd 
             editor={editor} 
             containerRef={editorRef}
             sectionId={id}
-            onContentDragStart={handleContentDragStart}
-            onContentDragEnd={handleContentDragEnd}
+            virtualBlocks={enableVirtualBlocks ? virtualBlocks : undefined}
             onBlockInsert={(type) => {
               console.log('Block inserted:', type)
             }}

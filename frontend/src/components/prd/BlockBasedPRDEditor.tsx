@@ -8,6 +8,7 @@ import { PRDStatusBadge } from './PRDStatusBadge'
 import { OverviewEditor } from './blocks/OverviewEditor'
 import { FeaturesEditor } from './blocks/FeaturesEditor'
 import { NotionSectionEditor } from './blocks/NotionSectionEditor'
+import { VirtualContentBlock } from '@/lib/virtual-blocks/types'
 import '@/styles/notion-editor.css'
 import { 
   FileText, 
@@ -39,6 +40,7 @@ interface BlockBasedPRDEditorProps {
   conversationId?: string
   onClose?: () => void
   className?: string
+  enableVirtualBlocks?: boolean // Enable virtual block system
 }
 
 interface SectionMeta {
@@ -121,9 +123,11 @@ const defaultSectionMeta: SectionMeta[] = [
 export function BlockBasedPRDEditor({ 
   projectId, 
   onClose,
-  className 
+  className,
+  enableVirtualBlocks = true 
 }: BlockBasedPRDEditorProps) {
   const [prd, setPRD] = useState<PRD | null>(null)
+  const [sectionVirtualBlocks, setSectionVirtualBlocks] = useState<Record<string, VirtualContentBlock[]>>({})
   const [sections, setSections] = useState<FlexiblePRDSection[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [savingSection, setSavingSection] = useState<string | null>(null)
@@ -494,9 +498,17 @@ export function BlockBasedPRDEditor({
             {...commonProps}
             enableSlashCommands={true}
             enableBubbleMenu={true}
+            enableVirtualBlocks={enableVirtualBlocks}
             onContentSync={(structured, rich) => {
               // Optional: Store rich content for future use
               console.log('Content synced:', { structured, rich })
+            }}
+            onBlocksUpdate={(blocks) => {
+              setSectionVirtualBlocks(prev => ({
+                ...prev,
+                [section.id]: blocks
+              }))
+              console.log(`Virtual blocks updated for section ${section.id}:`, blocks)
             }}
           />
         )
@@ -509,6 +521,14 @@ export function BlockBasedPRDEditor({
             type="custom"
             enableSlashCommands={true}
             enableBubbleMenu={true}
+            enableVirtualBlocks={enableVirtualBlocks}
+            onBlocksUpdate={(blocks) => {
+              setSectionVirtualBlocks(prev => ({
+                ...prev,
+                [section.id]: blocks
+              }))
+              console.log(`Virtual blocks updated for section ${section.id}:`, blocks)
+            }}
           />
         )
     }
