@@ -1,8 +1,9 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { useEditor, EditorContent, Editor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
+import { Extension } from '@tiptap/core'
 import { TextSelection } from '@tiptap/pm/state'
 import { Button } from '@/components/ui/button'
 import { 
@@ -18,8 +19,10 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { VirtualBlockManager } from '@/lib/virtual-blocks/VirtualBlockManager'
+import { KeyboardNavigationManager } from '@/lib/virtual-blocks/KeyboardNavigationManager'
 import { BlockType } from '@/lib/virtual-blocks/types'
 import type { VirtualContentBlock } from '@/lib/virtual-blocks/types'
+import { EnhancedBlockControlsDnd } from '@/components/prd/EnhancedBlockControlsDnd'
 
 interface NotionRichTextEditorProps {
   content: {
@@ -47,6 +50,8 @@ export function NotionRichTextEditor({
   enableVirtualBlocks = false,
   onBlocksUpdate
 }: NotionRichTextEditorProps) {
+  const editorRef = useRef<HTMLDivElement>(null)
+  
   // Virtual Block Manager instance
   const virtualBlockManager = useMemo(() => new VirtualBlockManager(), [])
   const [virtualBlocks, setVirtualBlocks] = useState<VirtualContentBlock[]>(() => {
@@ -55,7 +60,26 @@ export function NotionRichTextEditor({
     }
     return []
   })
-  const editor = useEditor({
+
+  // Create a custom extension to handle virtual block keyboard navigation
+  const VirtualBlockKeyboardExtension = useMemo(() => {
+    if (!enableVirtualBlocks) return null
+
+    return Extension.create({
+      name: 'virtualBlockKeyboard',
+      priority: 1000, // High priority to override default behaviors
+      addKeyboardShortcuts() {
+        return {
+          'Enter': ({ editor }) => {
+            // This will be handled by our custom handleKeyDown in editorProps
+            return false
+          }
+        }
+      }
+    })
+  }, [enableVirtualBlocks])
+
+  const editor: Editor | null = useEditor({
     extensions: [
       StarterKit.configure({
         heading: {
@@ -65,7 +89,9 @@ export function NotionRichTextEditor({
       Placeholder.configure({
         placeholder,
         emptyEditorClass: 'is-editor-empty'
-      })
+      }),
+      // Add our custom virtual block keyboard extension if enabled
+      ...(VirtualBlockKeyboardExtension ? [VirtualBlockKeyboardExtension] : [])
     ],
     content: content.html,
     editable,
@@ -93,63 +119,125 @@ export function NotionRichTextEditor({
           className
         )
       },
-      handleKeyDown: (view, event) => {
-        // Handle virtual block navigation if enabled
-        if (enableVirtualBlocks && virtualBlocks.length > 0) {
-          // Arrow navigation between blocks
-          if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-            const pos = view.state.selection.from
-            const currentBlock = virtualBlockManager.getBlockAtPosition(content.html, pos)
-            
-            if (currentBlock) {
-              const currentIndex = virtualBlocks.findIndex(b => b.id === currentBlock.id)
-              const targetIndex = event.key === 'ArrowUp' ? currentIndex - 1 : currentIndex + 1
-              
-              if (targetIndex >= 0 && targetIndex < virtualBlocks.length) {
-                const targetBlock = virtualBlocks[targetIndex]
-                if (targetBlock.position) {
-                  const targetPos = event.key === 'ArrowUp' 
-                    ? targetBlock.position.end - 1
-                    : targetBlock.position.start + 1
-                  view.dispatch(view.state.tr.setSelection(
-                    TextSelection.near(view.state.doc.resolve(Math.min(targetPos, view.state.doc.content.size)))
-                  ))
-                  return true
-                }
-              }
-            }
-          }
+      handleKeyDown: (view, event): boolean => {
+        // Handle virtual block keyboard navigation with TipTap integration
+        if (!enableVirtualBlocks || !keyboardNavManager) return false
+        
+        let handled = false
+        
+        // Handle arrow navigation
+        if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+          const selection = view.state.selection
+          const $from = selection.$from
+          const isAtBoundary = event.key === 'ArrowUp' 
+            ? $from.parentOffset === 0 
+            : $from.parentOffset === $from.parent.content.size
           
-          // Handle Enter key for new blocks
-          if (event.key === 'Enter' && !event.shiftKey) {
-            const pos = view.state.selection.from
-            const currentBlock = virtualBlockManager.getBlockAtPosition(content.html, pos)
+          if (isAtBoundary) {
+            handled = keyboardNavManager.handleArrowNavigation(
+              event.key === 'ArrowUp' ? 'up' : 'down'
+            )
+          }
+        }
+        
+        // Handle Enter key for block creation
+        else if (event.key === 'Enter') {
+          handled = keyboardNavManager.handleEnterKey(event.shiftKey)
+        }
+        
+        // Handle Backspace for block deletion/merging
+        else if (event.key === 'Backspace') {
+          const selection = view.state.selection
+          const $from = selection.$from
+          const isAtStart = $from.parentOffset === 0
+          
+          if (isAtStart) {
+            handled = keyboardNavManager.handleBackspaceKey()
+          }
+        }
+        
+        // Handle Tab indentation
+        else if (event.key === 'Tab') {
+          event.preventDefault()
+          handled = keyboardNavManager.handleTabIndentation(event.shiftKey)
+        }
+        
+        // Handle block duplication
+        else if (event.key === 'd' && (event.ctrlKey || event.metaKey)) {
+          const currentBlock = keyboardNavManager.getCurrentBlock()
+          if (currentBlock) {
+            event.preventDefault()
+            keyboardNavManager.duplicateBlock(currentBlock.id)
+            handled = true
+          }
+        }
+        
+        // Handle block type conversion shortcuts
+        else if (event.ctrlKey || event.metaKey) {
+          const currentBlock = keyboardNavManager.getCurrentBlock()
+          if (currentBlock) {
+            let newType: BlockType | null = null
             
-            if (currentBlock && currentBlock.type !== BlockType.LIST_ITEM) {
-              const selection = view.state.selection
-              const $pos = selection.$from
-              const isAtEnd = $pos.parentOffset === $pos.parent.content.size
-              
-              if (isAtEnd) {
-                // Create a new paragraph block after current block
-                const result = virtualBlockManager.insertBlockAfter(
-                  content.html,
-                  currentBlock.id,
-                  { type: BlockType.PARAGRAPH, content: '' }
-                )
-                
-                if (result.success && result.html) {
-                  // Let TipTap handle the actual insertion
-                  return false
-                }
-              }
+            if (event.altKey) {
+              // Cmd/Ctrl + Alt + number for headings
+              if (event.key === '1') newType = BlockType.HEADING_1
+              else if (event.key === '2') newType = BlockType.HEADING_2
+              else if (event.key === '3') newType = BlockType.HEADING_3
+            } else if (event.shiftKey) {
+              // Cmd/Ctrl + Shift + number for lists
+              if (event.key === '7') newType = BlockType.BULLET_LIST
+              else if (event.key === '8') newType = BlockType.NUMBERED_LIST
+            }
+            
+            if (newType) {
+              event.preventDefault()
+              keyboardNavManager.convertBlockType(currentBlock.id, newType)
+              handled = true
             }
           }
         }
-        return false
+        
+        return handled
       }
     }
   })
+
+  // Initialize KeyboardNavigationManager
+  const keyboardNavManager: KeyboardNavigationManager | null = useMemo(() => {
+    if (!editor || !enableVirtualBlocks) return null
+    
+    return new KeyboardNavigationManager(editor, virtualBlockManager, {
+      onBlockFocus: (blockId) => {
+        console.log('Block focused:', blockId)
+      },
+      onBlockCreate: (blockId, type) => {
+        console.log('Block created:', blockId, type)
+      },
+      onBlockDelete: (blockId) => {
+        console.log('Block deleted:', blockId)
+      },
+      onContentUpdate: (html) => {
+        // Parse and update virtual blocks
+        const blocks = virtualBlockManager.parseHTMLToBlocks(html)
+        setVirtualBlocks(blocks)
+        onBlocksUpdate?.(blocks)
+        
+        // Update the content through onChange
+        const text = editor?.getText() || ''
+        onChange({ html, text })
+      }
+    })
+  }, [editor, enableVirtualBlocks, virtualBlockManager, onBlocksUpdate, onChange])
+
+  // Initialize virtual blocks when editor content changes
+  useEffect(() => {
+    if (enableVirtualBlocks && editor && content.html) {
+      const blocks = virtualBlockManager.parseHTMLToBlocks(content.html)
+      console.log('Virtual blocks parsed:', blocks)
+      setVirtualBlocks(blocks)
+      onBlocksUpdate?.(blocks)
+    }
+  }, [enableVirtualBlocks, editor, content.html, virtualBlockManager, onBlocksUpdate])
 
   // Update editor content when prop changes
   useEffect(() => {
@@ -189,7 +277,55 @@ export function NotionRichTextEditor({
   )
 
   return (
-    <div className="relative">
+    <div className="relative" ref={editorRef}>
+      {/* Debug Info for Virtual Blocks */}
+      {enableVirtualBlocks && (
+        <div className="absolute top-0 right-0 bg-black/10 text-xs p-1 rounded text-gray-600 pointer-events-none z-50">
+          Blocks: {virtualBlocks.length}
+        </div>
+      )}
+
+      {/* Virtual Block Controls Overlay */}
+      {enableVirtualBlocks && virtualBlocks.length > 0 && editor && (
+        <EnhancedBlockControlsDnd
+          editor={editor}
+          containerRef={editorRef}
+          sectionId={sectionType || 'default'}
+          virtualBlocks={virtualBlocks}
+          virtualBlockManager={virtualBlockManager}
+          onBlockInsert={(type) => {
+            // Create a new block of the specified type
+            if (keyboardNavManager) {
+              const currentBlock = keyboardNavManager.getCurrentBlock()
+              if (currentBlock) {
+                keyboardNavManager.createBlockAfter(currentBlock.id, type as BlockType)
+              }
+            }
+          }}
+          onBlockUpdate={(blockId, content) => {
+            const currentHtml = editor.getHTML()
+            const result = virtualBlockManager.updateBlockInHTML(currentHtml, blockId, content)
+            if (result.success && result.html) {
+              const text = editor.getText()
+              onChange({ html: result.html, text })
+            }
+          }}
+          onBlockDelete={(blockId) => {
+            const currentHtml = editor.getHTML()
+            const result = virtualBlockManager.deleteBlock(currentHtml, blockId)
+            if (result.success && result.html) {
+              const text = editor.getText()
+              onChange({ html: result.html, text })
+            }
+          }}
+          onBlockDuplicate={(blockId) => {
+            if (keyboardNavManager) {
+              keyboardNavManager.duplicateBlock(blockId)
+            }
+          }}
+        />
+      )}
+
       {/* Bubble Menu - appears when text is selected */}
       {editor && (
         <BubbleMenu 
@@ -281,7 +417,7 @@ export function NotionRichTextEditor({
       {/* Editor Content */}
       <EditorContent editor={editor} />
       
-      {/* Custom CSS for placeholder */}
+      {/* Custom CSS for placeholder and virtual blocks */}
       <style dangerouslySetInnerHTML={{ __html: `
         .ProseMirror p.is-editor-empty:first-child::before {
           content: attr(data-placeholder);
@@ -292,6 +428,22 @@ export function NotionRichTextEditor({
         }
         .ProseMirror:focus {
           outline: none;
+        }
+        /* Virtual block styling */
+        .ProseMirror p, .ProseMirror h1, .ProseMirror h2, .ProseMirror h3, 
+        .ProseMirror h4, .ProseMirror h5, .ProseMirror h6, .ProseMirror ul, 
+        .ProseMirror ol, .ProseMirror blockquote, .ProseMirror pre {
+          position: relative;
+          transition: background-color 0.15s ease;
+          border-radius: 3px;
+          padding: 2px 4px;
+          margin: 1px 0;
+        }
+        .ProseMirror p:hover, .ProseMirror h1:hover, .ProseMirror h2:hover, 
+        .ProseMirror h3:hover, .ProseMirror h4:hover, .ProseMirror h5:hover, 
+        .ProseMirror h6:hover, .ProseMirror ul:hover, .ProseMirror ol:hover, 
+        .ProseMirror blockquote:hover, .ProseMirror pre:hover {
+          background-color: rgba(0, 0, 0, 0.02);
         }
       `}} />
     </div>

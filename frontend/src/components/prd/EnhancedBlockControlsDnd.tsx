@@ -8,16 +8,28 @@ import {
   Heading1,
   Heading2,
   Heading3,
+  Heading4,
+  Heading5,
+  Heading6,
   List,
   ListOrdered,
   CheckSquare,
   Quote,
-  Code
+  Code,
+  Minus,
+  Image,
+  Table,
+  FileText,
+  Copy,
+  Trash2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import type { VirtualContentBlock } from '@/lib/virtual-blocks/types'
+import type { VirtualContentBlock, BlockType as VirtualBlockType } from '@/lib/virtual-blocks/types'
+import { BlockType } from '@/lib/virtual-blocks/types'
+import { BlockTypeMenu } from './blocks/BlockTypeMenu'
+import type { VirtualBlockManager } from '@/lib/virtual-blocks/VirtualBlockManager'
 
 interface BlockControlsProps {
   editor: Editor | null
@@ -25,11 +37,14 @@ interface BlockControlsProps {
   sectionId: string
   blockId?: string
   virtualBlocks?: VirtualContentBlock[]
+  virtualBlockManager?: VirtualBlockManager
   onBlockInsert?: (type: string) => void
   onBlockUpdate?: (blockId: string, content: string) => void
+  onBlockDelete?: (blockId: string) => void
+  onBlockDuplicate?: (blockId: string) => void
 }
 
-interface BlockType {
+interface TipTapBlockType {
   id: string
   label: string
   icon: React.ComponentType<{ className?: string }>
@@ -37,7 +52,7 @@ interface BlockType {
   shortcut?: string
 }
 
-const blockTypes: BlockType[] = [
+const blockTypes: TipTapBlockType[] = [
   {
     id: 'paragraph',
     label: 'Text',
@@ -103,14 +118,43 @@ const blockTypes: BlockType[] = [
   }
 ]
 
+// Map virtual block types to icons and labels
+const getBlockTypeInfo = (blockType: string) => {
+  const typeMap: Record<string, { icon: React.ComponentType<{ className?: string }>, label: string, color: string }> = {
+    [BlockType.PARAGRAPH]: { icon: Type, label: 'Text', color: 'text-gray-500' },
+    [BlockType.HEADING_1]: { icon: Heading1, label: 'Heading 1', color: 'text-blue-600' },
+    [BlockType.HEADING_2]: { icon: Heading2, label: 'Heading 2', color: 'text-blue-500' },
+    [BlockType.HEADING_3]: { icon: Heading3, label: 'Heading 3', color: 'text-blue-400' },
+    [BlockType.HEADING_4]: { icon: Heading4, label: 'Heading 4', color: 'text-blue-300' },
+    [BlockType.HEADING_5]: { icon: Heading5, label: 'Heading 5', color: 'text-blue-200' },
+    [BlockType.HEADING_6]: { icon: Heading6, label: 'Heading 6', color: 'text-blue-100' },
+    [BlockType.BULLET_LIST]: { icon: List, label: 'Bullet List', color: 'text-purple-500' },
+    [BlockType.NUMBERED_LIST]: { icon: ListOrdered, label: 'Numbered List', color: 'text-purple-500' },
+    [BlockType.LIST_ITEM]: { icon: Minus, label: 'List Item', color: 'text-purple-400' },
+    [BlockType.QUOTE]: { icon: Quote, label: 'Quote', color: 'text-green-500' },
+    [BlockType.CODE]: { icon: Code, label: 'Code Block', color: 'text-orange-500' },
+    [BlockType.DIVIDER]: { icon: Minus, label: 'Divider', color: 'text-gray-400' },
+    [BlockType.IMAGE]: { icon: Image, label: 'Image', color: 'text-pink-500' },
+    [BlockType.TABLE]: { icon: Table, label: 'Table', color: 'text-indigo-500' },
+    [BlockType.TABLE_ROW]: { icon: Table, label: 'Table Row', color: 'text-indigo-400' },
+    [BlockType.TABLE_CELL]: { icon: Table, label: 'Table Cell', color: 'text-indigo-300' },
+    [BlockType.UNKNOWN]: { icon: FileText, label: 'Unknown', color: 'text-gray-400' }
+  }
+  
+  return typeMap[blockType] || typeMap[BlockType.UNKNOWN]
+}
+
 export function EnhancedBlockControlsDnd({ 
   editor, 
   containerRef, 
   sectionId, 
   blockId,
   virtualBlocks,
+  virtualBlockManager,
   onBlockInsert,
-  onBlockUpdate 
+  onBlockUpdate,
+  onBlockDelete,
+  onBlockDuplicate
 }: BlockControlsProps) {
   const [hoveredBlock, setHoveredBlock] = useState<HTMLElement | null>(null)
   const [currentVirtualBlock, setCurrentVirtualBlock] = useState<VirtualContentBlock | null>(null)
@@ -118,6 +162,8 @@ export function EnhancedBlockControlsDnd({
   const [controlsPosition, setControlsPosition] = useState({ top: 0, left: 0 })
   const [showBetweenBlocks, setShowBetweenBlocks] = useState(false)
   const [betweenPosition, setBetweenPosition] = useState({ top: 0 })
+  const [showBlockTypeMenu, setShowBlockTypeMenu] = useState(false)
+  const [blockTypeMenuPosition, setBlockTypeMenuPosition] = useState({ top: 0, left: 0 })
   const controlsRef = useRef<HTMLDivElement>(null)
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -281,7 +327,7 @@ export function EnhancedBlockControlsDnd({
     }
   }, [editor])
 
-  const handleInsertBlock = useCallback((blockType?: BlockType) => {
+  const handleInsertBlock = useCallback((blockType?: TipTapBlockType) => {
     if (!editor || !hoveredBlock) return
     
     try {
@@ -317,23 +363,169 @@ export function EnhancedBlockControlsDnd({
     if (!editor || !hoveredBlock) return
     
     try {
-      // Find the position after the current block
-      const pos = editor.view.posAtDOM(hoveredBlock, hoveredBlock.childNodes.length)
-      
-      // Insert a new paragraph and focus it
-      editor.chain()
-        .focus()
-        .insertContentAt(pos + 1, '<p></p>')
-        .setTextSelection(pos + 2) // Position cursor inside the new paragraph
-        .run()
-      
-      onBlockInsert?.('paragraph')
+      // If we have virtualBlockManager, use it for block operations
+      if (virtualBlockManager && currentVirtualBlock) {
+        const currentHtml = editor.getHTML()
+        const result = virtualBlockManager.insertBlockAfter(
+          currentHtml,
+          currentVirtualBlock.id,
+          { type: BlockType.PARAGRAPH, content: '' }
+        )
+        
+        if (result.success && result.html) {
+          editor.commands.setContent(result.html)
+          onBlockInsert?.('paragraph')
+        }
+      } else {
+        // Fallback to original TipTap method
+        const pos = editor.view.posAtDOM(hoveredBlock, hoveredBlock.childNodes.length)
+        editor.chain()
+          .focus()
+          .insertContentAt(pos + 1, '<p></p>')
+          .setTextSelection(pos + 2)
+          .run()
+        onBlockInsert?.('paragraph')
+      }
     } catch (error) {
       console.error('Error inserting new line:', error)
-      // Fallback: just add content at the end
       editor.chain().focus().insertContent('<p></p>').run()
     }
-  }, [editor, hoveredBlock, onBlockInsert])
+  }, [editor, hoveredBlock, currentVirtualBlock, virtualBlockManager, onBlockInsert])
+
+  const handleDeleteBlock = useCallback(() => {
+    if (!editor || !currentVirtualBlock || !virtualBlockManager) return
+    
+    try {
+      const currentHtml = editor.getHTML()
+      const result = virtualBlockManager.deleteBlock(currentHtml, currentVirtualBlock.id)
+      
+      if (result.success && result.html) {
+        editor.commands.setContent(result.html)
+        onBlockDelete?.(currentVirtualBlock.id)
+        setShowControls(false)
+      }
+    } catch (error) {
+      console.error('Error deleting block:', error)
+    }
+  }, [editor, currentVirtualBlock, virtualBlockManager, onBlockDelete])
+
+  const handleDuplicateBlock = useCallback(() => {
+    if (!editor || !currentVirtualBlock || !virtualBlockManager) return
+    
+    try {
+      const currentHtml = editor.getHTML()
+      const result = virtualBlockManager.duplicateBlock(currentHtml, currentVirtualBlock.id)
+      
+      if (result.success && result.html) {
+        editor.commands.setContent(result.html)
+        onBlockDuplicate?.(currentVirtualBlock.id)
+      }
+    } catch (error) {
+      console.error('Error duplicating block:', error)
+    }
+  }, [editor, currentVirtualBlock, virtualBlockManager, onBlockDuplicate])
+
+  // Get block-specific actions based on the current block type
+  const getBlockActions = useCallback((blockType: string) => {
+    const actions: Array<{ icon: React.ComponentType<{ className?: string }>, label: string, onClick: () => void }> = []
+    
+    if (!editor) return actions
+    
+    switch (blockType) {
+      case BlockType.PARAGRAPH:
+        actions.push(
+          { icon: Heading1, label: 'Convert to Heading 1', onClick: () => editor.chain().focus().toggleHeading({ level: 1 }).run() },
+          { icon: List, label: 'Convert to Bullet List', onClick: () => editor.chain().focus().toggleBulletList().run() },
+          { icon: Quote, label: 'Convert to Quote', onClick: () => editor.chain().focus().toggleBlockquote().run() }
+        )
+        break
+      case BlockType.HEADING_1:
+      case BlockType.HEADING_2:
+      case BlockType.HEADING_3:
+        actions.push(
+          { icon: Type, label: 'Convert to Paragraph', onClick: () => editor.chain().focus().setParagraph().run() },
+          { icon: Heading2, label: 'Convert to Heading 2', onClick: () => editor.chain().focus().toggleHeading({ level: 2 }).run() },
+          { icon: Heading3, label: 'Convert to Heading 3', onClick: () => editor.chain().focus().toggleHeading({ level: 3 }).run() }
+        )
+        break
+      case BlockType.BULLET_LIST:
+        actions.push(
+          { icon: ListOrdered, label: 'Convert to Numbered List', onClick: () => editor.chain().focus().toggleOrderedList().run() },
+          { icon: Type, label: 'Convert to Paragraph', onClick: () => editor.chain().focus().setParagraph().run() }
+        )
+        break
+      case BlockType.NUMBERED_LIST:
+        actions.push(
+          { icon: List, label: 'Convert to Bullet List', onClick: () => editor.chain().focus().toggleBulletList().run() },
+          { icon: Type, label: 'Convert to Paragraph', onClick: () => editor.chain().focus().setParagraph().run() }
+        )
+        break
+      case BlockType.QUOTE:
+        actions.push(
+          { icon: Type, label: 'Convert to Paragraph', onClick: () => editor.chain().focus().setParagraph().run() },
+          { icon: Code, label: 'Convert to Code Block', onClick: () => editor.chain().focus().toggleCodeBlock().run() }
+        )
+        break
+      case BlockType.CODE:
+        actions.push(
+          { icon: Type, label: 'Convert to Paragraph', onClick: () => editor.chain().focus().setParagraph().run() },
+          { icon: Quote, label: 'Convert to Quote', onClick: () => editor.chain().focus().toggleBlockquote().run() }
+        )
+        break
+    }
+    
+    return actions
+  }, [editor])
+
+  // Handle block type menu
+  const handleOpenBlockTypeMenu = useCallback(() => {
+    if (!hoveredBlock) return
+    
+    const rect = hoveredBlock.getBoundingClientRect()
+    const containerRect = containerRef.current?.getBoundingClientRect()
+    
+    if (containerRect) {
+      setBlockTypeMenuPosition({
+        top: rect.bottom - containerRect.top + 5,
+        left: rect.left - containerRect.left
+      })
+      setShowBlockTypeMenu(true)
+    }
+  }, [hoveredBlock, containerRef])
+
+  const handleBlockTypeSelect = useCallback((blockType: VirtualBlockType) => {
+    if (!editor || !hoveredBlock) return
+    
+    // Get the appropriate command based on block type
+    const blockCommands: Record<VirtualBlockType, () => void> = {
+      [BlockType.PARAGRAPH]: () => editor.chain().focus().setParagraph().run(),
+      [BlockType.HEADING_1]: () => editor.chain().focus().toggleHeading({ level: 1 }).run(),
+      [BlockType.HEADING_2]: () => editor.chain().focus().toggleHeading({ level: 2 }).run(),
+      [BlockType.HEADING_3]: () => editor.chain().focus().toggleHeading({ level: 3 }).run(),
+      [BlockType.HEADING_4]: () => editor.chain().focus().toggleHeading({ level: 4 }).run(),
+      [BlockType.HEADING_5]: () => editor.chain().focus().toggleHeading({ level: 5 }).run(),
+      [BlockType.HEADING_6]: () => editor.chain().focus().toggleHeading({ level: 6 }).run(),
+      [BlockType.BULLET_LIST]: () => editor.chain().focus().toggleBulletList().run(),
+      [BlockType.NUMBERED_LIST]: () => editor.chain().focus().toggleOrderedList().run(),
+      [BlockType.LIST_ITEM]: () => editor.chain().focus().liftListItem('listItem').run(),
+      [BlockType.QUOTE]: () => editor.chain().focus().toggleBlockquote().run(),
+      [BlockType.CODE]: () => editor.chain().focus().toggleCodeBlock().run(),
+      [BlockType.DIVIDER]: () => editor.chain().focus().setHorizontalRule().run(),
+      [BlockType.IMAGE]: () => {}, // No-op for now, images need special handling
+      [BlockType.TABLE]: () => {}, // No-op for now, tables need special handling
+      [BlockType.TABLE_ROW]: () => {}, // No-op for now, table rows need special handling
+      [BlockType.TABLE_CELL]: () => {}, // No-op for now, table cells need special handling
+      [BlockType.UNKNOWN]: () => editor.chain().focus().setParagraph().run() // Fallback to paragraph
+    }
+    
+    const command = blockCommands[blockType]
+    if (command) {
+      command()
+      onBlockUpdate?.(currentVirtualBlock?.id || '', blockType)
+    }
+    
+    setShowBlockTypeMenu(false)
+  }, [editor, hoveredBlock, currentVirtualBlock, onBlockUpdate])
 
   return (
     <>
@@ -387,6 +579,77 @@ export function EnhancedBlockControlsDnd({
               }
             }}
           >
+            {/* Block Type Indicator - Clickable to open menu */}
+            {currentVirtualBlock && (
+              <motion.button
+                className={cn(
+                  "flex items-center gap-1 px-2 py-1 rounded-md",
+                  "bg-white dark:bg-gray-800",
+                  "border border-gray-200 dark:border-gray-700",
+                  "shadow-sm hover:shadow-md",
+                  "min-w-0",
+                  "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700",
+                  "transition-all duration-150"
+                )}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.1 }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleOpenBlockTypeMenu}
+                onMouseDown={(e) => e.preventDefault()}
+                title="Click to change block type"
+              >
+                {(() => {
+                  const blockInfo = getBlockTypeInfo(currentVirtualBlock.type)
+                  const BlockIcon = blockInfo.icon
+                  return (
+                    <>
+                      <BlockIcon className={cn("h-3.5 w-3.5 flex-shrink-0", blockInfo.color)} />
+                      <span className={cn(
+                        "text-xs font-medium truncate max-w-[80px]",
+                        blockInfo.color
+                      )}>
+                        {blockInfo.label}
+                      </span>
+                    </>
+                  )
+                })()}
+              </motion.button>
+            )}
+
+            {/* Block-specific Actions */}
+            {currentVirtualBlock && (
+              <div className="flex items-center gap-0.5">
+                {getBlockActions(currentVirtualBlock.type).slice(0, 3).map((action, index) => {
+                  const ActionIcon = action.icon
+                  return (
+                    <motion.button
+                      key={index}
+                      className={cn(
+                        "p-1 rounded",
+                        "bg-white dark:bg-gray-800",
+                        "border border-gray-200 dark:border-gray-700",
+                        "hover:bg-gray-50 dark:hover:bg-gray-700",
+                        "shadow-sm hover:shadow-md",
+                        "transition-all duration-150"
+                      )}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={action.onClick}
+                      onMouseDown={(e) => e.preventDefault()}
+                      title={action.label}
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.1, delay: index * 0.02 }}
+                    >
+                      <ActionIcon className="h-3 w-3 text-gray-500 dark:text-gray-400" />
+                    </motion.button>
+                  )
+                })}
+              </div>
+            )}
+
             {/* Add New Line Button */}
             <motion.button
               className={cn(
@@ -405,6 +668,48 @@ export function EnhancedBlockControlsDnd({
             >
               <Plus className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
             </motion.button>
+
+            {/* Duplicate Block Button */}
+            {virtualBlockManager && currentVirtualBlock && (
+              <motion.button
+                className={cn(
+                  "p-1.5 rounded-md",
+                  "bg-white dark:bg-gray-800",
+                  "border border-gray-200 dark:border-gray-700",
+                  "hover:bg-blue-50 dark:hover:bg-blue-900/20",
+                  "shadow-sm hover:shadow-md",
+                  "transition-all duration-150"
+                )}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleDuplicateBlock}
+                onMouseDown={(e) => e.preventDefault()}
+                title="Duplicate block"
+              >
+                <Copy className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400 hover:text-blue-500" />
+              </motion.button>
+            )}
+
+            {/* Delete Block Button */}
+            {virtualBlockManager && currentVirtualBlock && (
+              <motion.button
+                className={cn(
+                  "p-1.5 rounded-md",
+                  "bg-white dark:bg-gray-800",
+                  "border border-gray-200 dark:border-gray-700",
+                  "hover:bg-red-50 dark:hover:bg-red-900/20",
+                  "shadow-sm hover:shadow-md",
+                  "transition-all duration-150"
+                )}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleDeleteBlock}
+                onMouseDown={(e) => e.preventDefault()}
+                title="Delete block"
+              >
+                <Trash2 className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400 hover:text-red-500" />
+              </motion.button>
+            )}
 
             {/* Drag Handle - Now using @dnd-kit */}
             <div
@@ -465,6 +770,15 @@ export function EnhancedBlockControlsDnd({
       {isDragging && (
         <div className="absolute left-0 right-0 h-0.5 bg-blue-500 z-40 pointer-events-none animate-pulse" />
       )}
+
+      {/* Block Type Conversion Menu */}
+      <BlockTypeMenu
+        position={blockTypeMenuPosition}
+        onTypeSelect={handleBlockTypeSelect}
+        onClose={() => setShowBlockTypeMenu(false)}
+        currentType={currentVirtualBlock?.type}
+        isVisible={showBlockTypeMenu}
+      />
     </>
   )
 }
