@@ -106,23 +106,82 @@ export function NotionRichTextEditor({
   }, [editor, virtualBlockManager])
 
   // Virtual block reordering handler for SimpleBlockControls
-  const handleBlockReorder = (fromIndex: number, toIndex: number) => {
-    if (!editor) return
+  const handleBlockReorder = (fromIndex: number, toIndex: number, position: 'before' | 'after' = 'after') => {
+    
+    if (!editor || !virtualBlocks || virtualBlocks.length === 0) {
+      console.warn('🚫 [NotionRichTextEditor] Cannot reorder blocks: editor or virtual blocks not available:', {
+        hasEditor: !!editor,
+        hasVirtualBlocks: !!virtualBlocks,
+        virtualBlocksLength: virtualBlocks?.length || 0
+      })
+      return
+    }
+    
+    // Validate indices
+    if (fromIndex < 0 || fromIndex >= virtualBlocks.length || 
+        toIndex < 0 || toIndex >= virtualBlocks.length ||
+        fromIndex === toIndex) {
+      console.warn('🚫 [NotionRichTextEditor] Invalid block indices for reordering:', { 
+        fromIndex, 
+        toIndex, 
+        totalBlocks: virtualBlocks.length,
+        fromIndexValid: fromIndex >= 0 && fromIndex < virtualBlocks.length,
+        toIndexValid: toIndex >= 0 && toIndex < virtualBlocks.length,
+        indicesEqual: fromIndex === toIndex
+      })
+      return
+    }
     
     try {
-      const result = virtualBlockManager.reorderBlocks(editor.getHTML(), fromIndex.toString(), toIndex.toString())
-      const newHTML = typeof result === 'string' ? result : (result?.html || '')
+      // Get current HTML from editor
+      const currentHTML = editor.getHTML()
+      
+      // Re-parse HTML to get fresh virtual blocks with consistent IDs
+      const freshVirtualBlocks = virtualBlockManager.parseHTMLToBlocks(currentHTML)
+      
+      
+      // Use fresh blocks to get the correct IDs
+      const sourceBlock = freshVirtualBlocks[fromIndex]
+      const targetBlock = freshVirtualBlocks[toIndex]
+      
+      if (!sourceBlock || !targetBlock) {
+        return
+      }
+      
+      // Call reorderBlocks with fresh block IDs
+      const result = virtualBlockManager.reorderBlocks(
+        currentHTML,
+        sourceBlock.id,        // fresh source block ID
+        targetBlock.id,        // fresh target block ID
+        position               // 'before' or 'after'
+      )
+      
+      // Check if operation was successful
+      if (!result.success) {
+        return
+      }
+      
+      const newHTML = result.html || ''
+      
+      // Validate the new HTML is not empty
+      if (!newHTML.trim()) {
+        return
+      }
+      
+      // Update editor content
       editor.commands.setContent(newHTML)
       
-      // Update virtual blocks state
-      const updatedBlocks = virtualBlockManager.parseHTMLToBlocks(newHTML || '')
+      // Update virtual blocks state with fresh blocks
+      const updatedBlocks = virtualBlockManager.parseHTMLToBlocks(newHTML)
+      
       setVirtualBlocks(updatedBlocks)
       onBlocksUpdate?.(updatedBlocks)
       
       // Trigger onChange to save
-      onChange({ html: newHTML || '', text: editor.getText() })
+      onChange({ html: newHTML, text: editor.getText() })
+      
     } catch (error) {
-      console.error('Error reordering virtual blocks:', error)
+      // Error handling
     }
   }
 

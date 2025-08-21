@@ -11,7 +11,7 @@ interface SimpleBlockControlsProps {
   onBlockInsert?: () => void
   virtualBlocks?: VirtualContentBlock[]
   enableVirtualBlocks?: boolean
-  onBlockReorder?: (fromIndex: number, toIndex: number) => void
+  onBlockReorder?: (fromIndex: number, toIndex: number, position?: 'before' | 'after') => void
 }
 
 export function SimpleBlockControls({ 
@@ -39,12 +39,15 @@ export function SimpleBlockControls({
 
   // Helper function to find virtual block by DOM element
   const findVirtualBlockByElement = useCallback((element: HTMLElement): VirtualContentBlock | null => {
-    if (!enableVirtualBlocks || virtualBlocks.length === 0) return null
+    if (!enableVirtualBlocks || virtualBlocks.length === 0) {
+      return null
+    }
     
     const blockText = element.textContent || ''
     const blockTagName = element.tagName.toLowerCase()
     
-    return virtualBlocks.find(vb => {
+    
+    const matchedBlock = virtualBlocks.find(vb => {
       const textMatch = vb.content.text === blockText
       const tagMatch = (
         (blockTagName === 'p' && vb.type === 'paragraph') ||
@@ -56,15 +59,22 @@ export function SimpleBlockControls({
         (blockTagName === 'blockquote' && vb.type === 'quote') ||
         (blockTagName === 'pre' && vb.type === 'code')
       )
+      
       return textMatch && tagMatch
     }) || null
+    
+    return matchedBlock
   }, [enableVirtualBlocks, virtualBlocks])
 
   // Drag and drop event handlers
   const handleDragOver = useCallback((e: DragEvent) => {
-    if (!isDragging || !draggedBlockId) return
-    
+    // Always prevent default to enable drop, even if conditions aren't met
     e.preventDefault()
+    
+    if (!isDragging || !draggedBlockId) {
+      return
+    }
+    
     e.dataTransfer!.dropEffect = 'move'
     
     const target = e.target as HTMLElement
@@ -86,9 +96,13 @@ export function SimpleBlockControls({
   }, [isDragging, draggedBlockId, findDropZone])
 
   const handleDrop = useCallback((e: DragEvent) => {
+    
     e.preventDefault()
     
-    if (!isDragging || !draggedBlockId || !onBlockReorder) return
+    // Early return checks
+    if (!isDragging || !draggedBlockId || !onBlockReorder) {
+      return
+    }
     
     const target = e.target as HTMLElement
     const dropZone = findDropZone(target)
@@ -102,22 +116,19 @@ export function SimpleBlockControls({
         const targetIndex = virtualBlocks.findIndex(block => block.id === targetVirtualBlock.id)
         
         if (draggedIndex !== -1 && targetIndex !== -1) {
-          console.log('Dropping virtual block:', { 
-            draggedBlockId, 
-            targetBlockId: targetVirtualBlock.id, 
-            fromIndex: draggedIndex, 
-            toIndex: targetIndex 
-          })
           
           // Determine if dropping above or below based on mouse position
           const dropZoneRect = dropZone.getBoundingClientRect()
           const dropZoneMiddle = dropZoneRect.top + dropZoneRect.height / 2
           const dropAbove = e.clientY < dropZoneMiddle
           
-          // Adjust target index based on drop position
-          const finalTargetIndex = dropAbove ? targetIndex : targetIndex + 1
+          // Pass the position information to the handler
+          const position = dropAbove ? 'before' : 'after'
           
-          onBlockReorder(draggedIndex, finalTargetIndex)
+          // Validate target index is within bounds
+          if (targetIndex >= 0 && targetIndex < virtualBlocks.length) {
+            onBlockReorder(draggedIndex, targetIndex, position)
+          }
         }
       }
     }
@@ -193,14 +204,36 @@ export function SimpleBlockControls({
     container.addEventListener('mouseleave', handleMouseLeave)
     
     // Add drag and drop event listeners
-    container.addEventListener('dragover', handleDragOver)
-    container.addEventListener('drop', handleDrop)
+    container.addEventListener('dragover', handleDragOver, { passive: false })
+    container.addEventListener('drop', handleDrop, { passive: false })
+    
+    // Add additional drag event listeners for better debugging
+    const handleDragEnter = (e: DragEvent) => {
+      // Prevent default to ensure drop event fires
+      e.preventDefault()
+    }
+    
+    const handleDragLeave = (e: DragEvent) => {
+      // No-op, just for cleanup
+    }
+    
+    // Add dragend event listener to detect when drag operation ends
+    const handleDragEnd = (e: DragEvent) => {
+      // No-op, just for cleanup
+    }
+    
+    container.addEventListener('dragenter', handleDragEnter)
+    container.addEventListener('dragleave', handleDragLeave)
+    container.addEventListener('dragend', handleDragEnd)
 
     return () => {
       container.removeEventListener('mousemove', handleMouseMove)
       container.removeEventListener('mouseleave', handleMouseLeave)
       container.removeEventListener('dragover', handleDragOver)
       container.removeEventListener('drop', handleDrop)
+      container.removeEventListener('dragenter', handleDragEnter)
+      container.removeEventListener('dragleave', handleDragLeave)
+      container.removeEventListener('dragend', handleDragEnd)
       if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current)
     }
   }, [containerRef, editor, handleDragOver, handleDrop])
@@ -323,6 +356,7 @@ export function SimpleBlockControls({
               draggable={enableVirtualBlocks && !!currentVirtualBlock}
               onDragStart={(e: React.DragEvent) => {
                 if (currentVirtualBlock && hoveredBlock) {
+                  
                   // Set drag data for virtual block
                   e.dataTransfer.setData('text/virtual-block-id', currentVirtualBlock.id)
                   e.dataTransfer.setData('text/virtual-block-type', currentVirtualBlock.type)
@@ -334,23 +368,23 @@ export function SimpleBlockControls({
                   
                   // Add visual feedback to the block
                   hoveredBlock.style.opacity = '0.5'
-                  
-                  console.log('Dragging virtual block:', currentVirtualBlock.type, currentVirtualBlock.id)
                 } else {
                   // Prevent drag if no virtual block
                   e.preventDefault()
                 }
               }}
-              onDragEnd={() => {
+              onDragEnd={(e: React.DragEvent) => {
                 // Reset visual feedback
                 if (hoveredBlock) {
                   hoveredBlock.style.opacity = ''
                 }
                 
                 // Reset drag state if not already reset by drop
-                setIsDragging(false)
-                setDraggedBlockId(null)
-                setDropIndicatorPosition({ top: 0, show: false })
+                if (isDragging) {
+                  setIsDragging(false)
+                  setDraggedBlockId(null)
+                  setDropIndicatorPosition({ top: 0, show: false })
+                }
               }}
             >
               <GripVertical className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />

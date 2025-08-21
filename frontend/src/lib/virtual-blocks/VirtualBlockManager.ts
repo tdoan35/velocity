@@ -333,36 +333,40 @@ export class VirtualBlockManager {
         };
       }
       
+      // Find the indices of source and target blocks
+      const sourceIndex = blocks.findIndex(block => block.id === sourceBlockId);
+      const targetIndex = blocks.findIndex(block => block.id === targetBlockId);
+      
       // Extract source block HTML
       const sourceHtml = html.slice(sourceBlock.position.start, sourceBlock.position.end);
       
-      // Remove source block
+      // Calculate the target position for insertion BEFORE removing the source
+      let insertPosition: number;
+      
+      if (sourceIndex < targetIndex) {
+        // Moving forward: insert after target (position needs adjustment after removal)
+        insertPosition = position === 'before' ? targetBlock.position.start : targetBlock.position.end;
+        // Adjust for source removal
+        const sourceLength = sourceBlock.position.end - sourceBlock.position.start;
+        insertPosition -= sourceLength;
+      } else {
+        // Moving backward: insert relative to target (no adjustment needed)
+        insertPosition = position === 'before' ? targetBlock.position.start : targetBlock.position.end;
+      }
+      
+      // Remove source block from HTML
       let updatedHtml = removeHtmlBetweenPositions(
         html,
         sourceBlock.position.start,
         sourceBlock.position.end
       );
       
-      // Recalculate target position after removal
-      const updatedBlocks = this.parseHTMLToBlocks(updatedHtml);
-      const updatedTarget = findBlockById(updatedBlocks, targetBlockId);
-      
-      if (!updatedTarget) {
-        return {
-          success: false,
-          error: 'Failed to find target block after source removal'
-        };
-      }
-      
-      // Insert at new position
-      const insertPosition = position === 'before' 
-        ? updatedTarget.position.start 
-        : updatedTarget.position.end;
-      
+      // Insert source HTML at the calculated position
       updatedHtml = insertHtmlAtPosition(updatedHtml, sourceHtml, insertPosition);
       
       // Validate
       const validation = validateHtml(updatedHtml);
+      
       if (!validation.isValid) {
         return {
           success: false,
