@@ -18,19 +18,24 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { FlexiblePRDSection } from '@/services/prdService'
+import type { VirtualContentBlock } from '@/lib/virtual-blocks/types'
 
 interface SectionBlockEditorProps {
   section: FlexiblePRDSection
   onSave: (sectionId: string, content: { html: string; text: string }) => Promise<void>
   isExpanded?: boolean
   enableClickToEdit?: boolean
+  enableVirtualBlocks?: boolean
+  onBlocksUpdate?: (sectionId: string, blocks: VirtualContentBlock[]) => void
 }
 
 export function SectionBlockEditor({ 
   section, 
   onSave,
   isExpanded: initialExpanded = true,
-  enableClickToEdit = true
+  enableClickToEdit = true,
+  enableVirtualBlocks = true,
+  onBlocksUpdate
 }: SectionBlockEditorProps) {
   const { getTemplate, isTemplatePlaceholder } = usePRDTemplates()
   const [isExpanded, setIsExpanded] = useState(initialExpanded)
@@ -253,6 +258,9 @@ export function SectionBlockEditor({
                   onBlur={handleEditorBlur}
                   placeholder="Click to start writing..."
                   editable={true} // Always editable in click-to-edit mode
+                  enableVirtualBlocks={enableVirtualBlocks}
+                  onBlocksUpdate={(blocks) => onBlocksUpdate?.(section.id, blocks)}
+                  sectionId={section.id}
                 />
               </div>
             </div>
@@ -290,6 +298,9 @@ export function SectionBlockEditor({
                     content={editContent}
                     onChange={setEditContent}
                     placeholder="Start writing..."
+                    enableVirtualBlocks={enableVirtualBlocks}
+                    onBlocksUpdate={(blocks) => onBlocksUpdate?.(section.id, blocks)}
+                    sectionId={section.id}
                   />
                 ) : (
                   <Textarea

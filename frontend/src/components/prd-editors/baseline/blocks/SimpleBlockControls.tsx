@@ -3,19 +3,25 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Editor } from '@tiptap/react'
 import { GripVertical, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import type { VirtualContentBlock } from '@/lib/virtual-blocks/types'
 
 interface SimpleBlockControlsProps {
   editor: Editor | null
   containerRef: React.RefObject<HTMLDivElement | null>
   onBlockInsert?: () => void
+  virtualBlocks?: VirtualContentBlock[]
+  enableVirtualBlocks?: boolean
 }
 
 export function SimpleBlockControls({ 
   editor, 
   containerRef,
-  onBlockInsert
+  onBlockInsert,
+  virtualBlocks = [],
+  enableVirtualBlocks = true
 }: SimpleBlockControlsProps) {
   const [hoveredBlock, setHoveredBlock] = useState<HTMLElement | null>(null)
+  const [currentVirtualBlock, setCurrentVirtualBlock] = useState<VirtualContentBlock | null>(null)
   const [showControls, setShowControls] = useState(false)
   const [controlsPosition, setControlsPosition] = useState({ top: 0, left: 0 })
   const controlsRef = useRef<HTMLDivElement>(null)
@@ -36,6 +42,31 @@ export function SimpleBlockControls({
       if (block && block !== currentBlock) {
         currentBlock = block
         setHoveredBlock(block)
+        
+        // Find corresponding virtual block if enabled
+        let virtualBlock: VirtualContentBlock | null = null
+        if (enableVirtualBlocks && virtualBlocks.length > 0) {
+          const blockText = block.textContent || ''
+          const blockTagName = block.tagName.toLowerCase()
+          
+          virtualBlock = virtualBlocks.find(vb => {
+            // Match by text content and tag type
+            const textMatch = vb.content.text === blockText
+            const tagMatch = (
+              (blockTagName === 'p' && vb.type === 'paragraph') ||
+              (blockTagName === 'h1' && vb.type === 'heading_1') ||
+              (blockTagName === 'h2' && vb.type === 'heading_2') ||
+              (blockTagName === 'h3' && vb.type === 'heading_3') ||
+              (blockTagName === 'ul' && vb.type === 'bullet_list') ||
+              (blockTagName === 'ol' && vb.type === 'numbered_list') ||
+              (blockTagName === 'blockquote' && vb.type === 'quote') ||
+              (blockTagName === 'pre' && vb.type === 'code')
+            )
+            return textMatch && tagMatch
+          }) || null
+        }
+        
+        setCurrentVirtualBlock(virtualBlock)
         
         // Clear any pending hide timeout
         if (hideTimeoutRef.current) {
@@ -72,6 +103,7 @@ export function SimpleBlockControls({
         hideTimeoutRef.current = setTimeout(() => {
           currentBlock = null
           setHoveredBlock(null)
+          setCurrentVirtualBlock(null)
           setShowControls(false)
         }, 200)
       }
@@ -136,6 +168,7 @@ export function SimpleBlockControls({
                 // Hide controls if target is invalid
                 hideTimeoutRef.current = setTimeout(() => {
                   setHoveredBlock(null)
+                  setCurrentVirtualBlock(null)
                   setShowControls(false)
                 }, 200)
                 return
@@ -148,6 +181,7 @@ export function SimpleBlockControls({
                 // Hide controls if not going back to editor
                 hideTimeoutRef.current = setTimeout(() => {
                   setHoveredBlock(null)
+                  setCurrentVirtualBlock(null)
                   setShowControls(false)
                 }, 200)
               }
@@ -184,7 +218,29 @@ export function SimpleBlockControls({
                 "transition-all duration-150"
               )}
               whileHover={{ scale: 1.05 }}
-              title="Drag to reorder"
+              title={currentVirtualBlock ? `Drag ${currentVirtualBlock.type} to reorder` : "Drag to reorder"}
+              draggable={enableVirtualBlocks && !!currentVirtualBlock}
+              onDragStart={(e: React.DragEvent) => {
+                if (currentVirtualBlock && hoveredBlock) {
+                  // Set drag data for virtual block
+                  e.dataTransfer.setData('text/virtual-block-id', currentVirtualBlock.id)
+                  e.dataTransfer.setData('text/virtual-block-type', currentVirtualBlock.type)
+                  e.dataTransfer.effectAllowed = 'move'
+                  
+                  // Add visual feedback to the block
+                  hoveredBlock.style.opacity = '0.5'
+                  
+                  console.log('Dragging virtual block:', currentVirtualBlock.type, currentVirtualBlock.id)
+                } else {
+                  // Prevent drag if no virtual block
+                  e.preventDefault()
+                }
+              }}
+              onDragEnd={() => {
+                if (hoveredBlock) {
+                  hoveredBlock.style.opacity = ''
+                }
+              }}
             >
               <GripVertical className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
             </motion.div>

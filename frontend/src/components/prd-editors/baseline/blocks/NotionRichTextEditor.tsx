@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from 'react'
+import { useEffect, useRef, useMemo, useState } from 'react'
 import { useEditor, EditorContent, Editor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import StarterKit from '@tiptap/starter-kit'
@@ -19,6 +19,8 @@ import { cn } from '@/lib/utils'
 import { SimpleBlockControls } from './SimpleBlockControls'
 import { VirtualBlockManager } from '@/lib/virtual-blocks/VirtualBlockManager'
 import { AutoConversionManager } from '@/lib/virtual-blocks/AutoConversionManager'
+import { useVirtualBlockDragIntegration } from '../../block-based/hooks/useVirtualBlockDragIntegration'
+import type { VirtualContentBlock } from '@/lib/virtual-blocks/types'
 
 interface NotionRichTextEditorProps {
   content: {
@@ -30,6 +32,9 @@ interface NotionRichTextEditorProps {
   placeholder?: string
   className?: string
   editable?: boolean
+  enableVirtualBlocks?: boolean
+  onBlocksUpdate?: (blocks: VirtualContentBlock[]) => void
+  sectionId?: string
 }
 
 export function NotionRichTextEditor({ 
@@ -38,9 +43,15 @@ export function NotionRichTextEditor({
   onBlur,
   placeholder = 'Click to start typing...',
   className,
-  editable = true
+  editable = true,
+  enableVirtualBlocks = true,
+  onBlocksUpdate,
+  sectionId = 'baseline-editor'
 }: NotionRichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
+  
+  // Virtual block state management
+  const [virtualBlocks, setVirtualBlocks] = useState<VirtualContentBlock[]>([])
   
 
 
@@ -62,6 +73,13 @@ export function NotionRichTextEditor({
       const html = editor.getHTML()
       const text = editor.getText()
       onChange({ html, text })
+      
+      // Parse HTML to virtual blocks if enabled
+      if (enableVirtualBlocks) {
+        const blocks = virtualBlockManager.parseHTMLToBlocks(html)
+        setVirtualBlocks(blocks)
+        onBlocksUpdate?.(blocks)
+      }
     },
     onBlur: () => {
       onBlur?.()
@@ -88,12 +106,57 @@ export function NotionRichTextEditor({
     return new AutoConversionManager(editor, virtualBlockManager)
   }, [editor, virtualBlockManager])
 
+  // Virtual block drag integration
+  useVirtualBlockDragIntegration({
+    editor,
+    virtualBlocks,
+    virtualBlockManager,
+    enabled: enableVirtualBlocks,
+    containerRef: editorRef,
+    sectionId,
+    onBlockReorder: (fromIndex, toIndex) => {
+      if (!editor) return
+      
+      try {
+        const result = virtualBlockManager.reorderBlocks(editor.getHTML(), fromIndex, toIndex)
+        const newHTML = typeof result === 'string' ? result : result.html
+        editor.commands.setContent(newHTML)
+        
+        // Update virtual blocks state
+        const updatedBlocks = virtualBlockManager.parseHTMLToBlocks(newHTML)
+        setVirtualBlocks(updatedBlocks)
+        onBlocksUpdate?.(updatedBlocks)
+        
+        // Trigger onChange to save
+        onChange({ html: newHTML, text: editor.getText() })
+      } catch (error) {
+        console.error('Error reordering virtual blocks:', error)
+      }
+    }
+  })
+
   // Update editor content when prop changes
   useEffect(() => {
     if (editor && content.html !== editor.getHTML()) {
       editor.commands.setContent(content.html)
+      
+      // Parse initial virtual blocks
+      if (enableVirtualBlocks && content.html) {
+        const blocks = virtualBlockManager.parseHTMLToBlocks(content.html)
+        setVirtualBlocks(blocks)
+        onBlocksUpdate?.(blocks)
+      }
     }
-  }, [content.html, editor])
+  }, [content.html, editor, enableVirtualBlocks, virtualBlockManager, onBlocksUpdate])
+  
+  // Initialize virtual blocks on first load
+  useEffect(() => {
+    if (editor && enableVirtualBlocks && content.html && virtualBlocks.length === 0) {
+      const blocks = virtualBlockManager.parseHTMLToBlocks(content.html)
+      setVirtualBlocks(blocks)
+      onBlocksUpdate?.(blocks)
+    }
+  }, [editor, enableVirtualBlocks, content.html, virtualBlocks.length, virtualBlockManager, onBlocksUpdate])
 
   // Add auto-conversion keyboard handling for baseline editor
   useEffect(() => {
@@ -158,10 +221,12 @@ export function NotionRichTextEditor({
   return (
     <div className="relative" ref={editorRef}>
 
-      {/* Simple Block Controls - Only + and Drag */}
+      {/* Simple Block Controls with Virtual Block Support */}
       <SimpleBlockControls
         editor={editor}
         containerRef={editorRef}
+        virtualBlocks={virtualBlocks}
+        enableVirtualBlocks={enableVirtualBlocks}
         onBlockInsert={() => {
           // Simple block insertion - just add a new paragraph
           console.log('New block inserted')

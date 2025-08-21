@@ -6,6 +6,7 @@ import { prdService, type PRD, type FlexiblePRDSection } from '@/services/prdSer
 import { useToast } from '@/hooks/use-toast'
 import { SectionBlockEditor } from './blocks/SectionBlockEditor'
 import { supabase } from '@/lib/supabase'
+import type { VirtualContentBlock } from '@/lib/virtual-blocks/types'
 
 interface BlockNotionPRDEditorProps {
   projectId: string
@@ -14,6 +15,7 @@ interface BlockNotionPRDEditorProps {
 export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
   const [prd, setPRD] = useState<PRD | null>(null)
   const [sections, setSections] = useState<FlexiblePRDSection[]>([])
+  const [, setSectionVirtualBlocks] = useState<Record<string, VirtualContentBlock[]>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -149,6 +151,13 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
     }
   }, [prd, toast])
 
+  const handleBlocksUpdate = useCallback((sectionId: string, blocks: VirtualContentBlock[]) => {
+    setSectionVirtualBlocks(prev => ({
+      ...prev,
+      [sectionId]: blocks
+    }))
+  }, [])
+
   // Loading state
   if (isLoading) {
     return (
@@ -253,6 +262,8 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
                 section={section}
                 onSave={handleSectionUpdate}
                 enableClickToEdit={true}
+                enableVirtualBlocks={true}
+                onBlocksUpdate={handleBlocksUpdate}
               />
             ))}
         </div>
