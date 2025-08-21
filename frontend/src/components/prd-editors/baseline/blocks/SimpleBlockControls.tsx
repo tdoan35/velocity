@@ -11,6 +11,7 @@ interface SimpleBlockControlsProps {
   onBlockInsert?: () => void
   virtualBlocks?: VirtualContentBlock[]
   enableVirtualBlocks?: boolean
+  onBlockReorder?: (fromIndex: number, toIndex: number) => void
 }
 
 export function SimpleBlockControls({ 
@@ -18,14 +19,114 @@ export function SimpleBlockControls({
   containerRef,
   onBlockInsert,
   virtualBlocks = [],
-  enableVirtualBlocks = true
+  enableVirtualBlocks = true,
+  onBlockReorder
 }: SimpleBlockControlsProps) {
   const [hoveredBlock, setHoveredBlock] = useState<HTMLElement | null>(null)
   const [currentVirtualBlock, setCurrentVirtualBlock] = useState<VirtualContentBlock | null>(null)
   const [showControls, setShowControls] = useState(false)
   const [controlsPosition, setControlsPosition] = useState({ top: 0, left: 0 })
+  const [isDragging, setIsDragging] = useState(false)
+  const [draggedBlockId, setDraggedBlockId] = useState<string | null>(null)
+  const [dropIndicatorPosition, setDropIndicatorPosition] = useState<{ top: number; show: boolean }>({ top: 0, show: false })
   const controlsRef = useRef<HTMLDivElement>(null)
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Helper function to find drop zone (closest block element)
+  const findDropZone = useCallback((element: HTMLElement): HTMLElement | null => {
+    return element.closest('.ProseMirror > *') as HTMLElement
+  }, [])
+
+  // Helper function to find virtual block by DOM element
+  const findVirtualBlockByElement = useCallback((element: HTMLElement): VirtualContentBlock | null => {
+    if (!enableVirtualBlocks || virtualBlocks.length === 0) return null
+    
+    const blockText = element.textContent || ''
+    const blockTagName = element.tagName.toLowerCase()
+    
+    return virtualBlocks.find(vb => {
+      const textMatch = vb.content.text === blockText
+      const tagMatch = (
+        (blockTagName === 'p' && vb.type === 'paragraph') ||
+        (blockTagName === 'h1' && vb.type === 'heading_1') ||
+        (blockTagName === 'h2' && vb.type === 'heading_2') ||
+        (blockTagName === 'h3' && vb.type === 'heading_3') ||
+        (blockTagName === 'ul' && vb.type === 'bullet_list') ||
+        (blockTagName === 'ol' && vb.type === 'numbered_list') ||
+        (blockTagName === 'blockquote' && vb.type === 'quote') ||
+        (blockTagName === 'pre' && vb.type === 'code')
+      )
+      return textMatch && tagMatch
+    }) || null
+  }, [enableVirtualBlocks, virtualBlocks])
+
+  // Drag and drop event handlers
+  const handleDragOver = useCallback((e: DragEvent) => {
+    if (!isDragging || !draggedBlockId) return
+    
+    e.preventDefault()
+    e.dataTransfer!.dropEffect = 'move'
+    
+    const target = e.target as HTMLElement
+    const dropZone = findDropZone(target)
+    
+    if (dropZone && containerRef.current) {
+      const containerRect = containerRef.current.getBoundingClientRect()
+      const dropZoneRect = dropZone.getBoundingClientRect()
+      const dropZoneMiddle = dropZoneRect.top + dropZoneRect.height / 2
+      
+      // Determine if we should drop above or below
+      const dropAbove = e.clientY < dropZoneMiddle
+      const indicatorTop = dropAbove 
+        ? dropZoneRect.top - containerRect.top 
+        : dropZoneRect.bottom - containerRect.top
+      
+      setDropIndicatorPosition({ top: indicatorTop, show: true })
+    }
+  }, [isDragging, draggedBlockId, findDropZone])
+
+  const handleDrop = useCallback((e: DragEvent) => {
+    e.preventDefault()
+    
+    if (!isDragging || !draggedBlockId || !onBlockReorder) return
+    
+    const target = e.target as HTMLElement
+    const dropZone = findDropZone(target)
+    
+    if (dropZone) {
+      const targetVirtualBlock = findVirtualBlockByElement(dropZone)
+      
+      if (targetVirtualBlock && targetVirtualBlock.id !== draggedBlockId) {
+        // Find indices
+        const draggedIndex = virtualBlocks.findIndex(block => block.id === draggedBlockId)
+        const targetIndex = virtualBlocks.findIndex(block => block.id === targetVirtualBlock.id)
+        
+        if (draggedIndex !== -1 && targetIndex !== -1) {
+          console.log('Dropping virtual block:', { 
+            draggedBlockId, 
+            targetBlockId: targetVirtualBlock.id, 
+            fromIndex: draggedIndex, 
+            toIndex: targetIndex 
+          })
+          
+          // Determine if dropping above or below based on mouse position
+          const dropZoneRect = dropZone.getBoundingClientRect()
+          const dropZoneMiddle = dropZoneRect.top + dropZoneRect.height / 2
+          const dropAbove = e.clientY < dropZoneMiddle
+          
+          // Adjust target index based on drop position
+          const finalTargetIndex = dropAbove ? targetIndex : targetIndex + 1
+          
+          onBlockReorder(draggedIndex, finalTargetIndex)
+        }
+      }
+    }
+    
+    // Reset drag state
+    setIsDragging(false)
+    setDraggedBlockId(null)
+    setDropIndicatorPosition({ top: 0, show: false })
+  }, [isDragging, draggedBlockId, onBlockReorder, findDropZone, findVirtualBlockByElement, virtualBlocks])
 
   useEffect(() => {
     if (!containerRef.current || !editor) return
@@ -43,29 +144,8 @@ export function SimpleBlockControls({
         currentBlock = block
         setHoveredBlock(block)
         
-        // Find corresponding virtual block if enabled
-        let virtualBlock: VirtualContentBlock | null = null
-        if (enableVirtualBlocks && virtualBlocks.length > 0) {
-          const blockText = block.textContent || ''
-          const blockTagName = block.tagName.toLowerCase()
-          
-          virtualBlock = virtualBlocks.find(vb => {
-            // Match by text content and tag type
-            const textMatch = vb.content.text === blockText
-            const tagMatch = (
-              (blockTagName === 'p' && vb.type === 'paragraph') ||
-              (blockTagName === 'h1' && vb.type === 'heading_1') ||
-              (blockTagName === 'h2' && vb.type === 'heading_2') ||
-              (blockTagName === 'h3' && vb.type === 'heading_3') ||
-              (blockTagName === 'ul' && vb.type === 'bullet_list') ||
-              (blockTagName === 'ol' && vb.type === 'numbered_list') ||
-              (blockTagName === 'blockquote' && vb.type === 'quote') ||
-              (blockTagName === 'pre' && vb.type === 'code')
-            )
-            return textMatch && tagMatch
-          }) || null
-        }
-        
+        // Find corresponding virtual block using helper function
+        const virtualBlock = findVirtualBlockByElement(block)
         setCurrentVirtualBlock(virtualBlock)
         
         // Clear any pending hide timeout
@@ -111,13 +191,19 @@ export function SimpleBlockControls({
 
     container.addEventListener('mousemove', handleMouseMove)
     container.addEventListener('mouseleave', handleMouseLeave)
+    
+    // Add drag and drop event listeners
+    container.addEventListener('dragover', handleDragOver)
+    container.addEventListener('drop', handleDrop)
 
     return () => {
       container.removeEventListener('mousemove', handleMouseMove)
       container.removeEventListener('mouseleave', handleMouseLeave)
+      container.removeEventListener('dragover', handleDragOver)
+      container.removeEventListener('drop', handleDrop)
       if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current)
     }
-  }, [containerRef, editor])
+  }, [containerRef, editor, handleDragOver, handleDrop])
 
   const handleAddNewLine = useCallback(() => {
     if (!editor || !hoveredBlock) return
@@ -138,6 +224,21 @@ export function SimpleBlockControls({
 
   return (
     <>
+      {/* Drop Indicator */}
+      <AnimatePresence>
+        {dropIndicatorPosition.show && (
+          <motion.div
+            className="absolute left-0 right-0 h-0.5 bg-blue-500 z-40 pointer-events-none"
+            initial={{ opacity: 0, scaleX: 0 }}
+            animate={{ opacity: 1, scaleX: 1 }}
+            exit={{ opacity: 0, scaleX: 0 }}
+            style={{
+              top: `${dropIndicatorPosition.top}px`,
+            }}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Main Block Controls */}
       <AnimatePresence>
         {showControls && (
@@ -207,7 +308,7 @@ export function SimpleBlockControls({
             </motion.button>
 
             {/* Drag Handle */}
-            <motion.div
+            <div
               className={cn(
                 "drag-handle",
                 "p-1.5 rounded-md cursor-move",
@@ -215,9 +316,9 @@ export function SimpleBlockControls({
                 "border border-gray-200 dark:border-gray-700",
                 "hover:bg-gray-50 dark:hover:bg-gray-700",
                 "shadow-sm hover:shadow-md",
-                "transition-all duration-150"
+                "transition-all duration-150",
+                "hover:scale-105"
               )}
-              whileHover={{ scale: 1.05 }}
               title={currentVirtualBlock ? `Drag ${currentVirtualBlock.type} to reorder` : "Drag to reorder"}
               draggable={enableVirtualBlocks && !!currentVirtualBlock}
               onDragStart={(e: React.DragEvent) => {
@@ -226,6 +327,10 @@ export function SimpleBlockControls({
                   e.dataTransfer.setData('text/virtual-block-id', currentVirtualBlock.id)
                   e.dataTransfer.setData('text/virtual-block-type', currentVirtualBlock.type)
                   e.dataTransfer.effectAllowed = 'move'
+                  
+                  // Set drag state
+                  setIsDragging(true)
+                  setDraggedBlockId(currentVirtualBlock.id)
                   
                   // Add visual feedback to the block
                   hoveredBlock.style.opacity = '0.5'
@@ -237,13 +342,19 @@ export function SimpleBlockControls({
                 }
               }}
               onDragEnd={() => {
+                // Reset visual feedback
                 if (hoveredBlock) {
                   hoveredBlock.style.opacity = ''
                 }
+                
+                // Reset drag state if not already reset by drop
+                setIsDragging(false)
+                setDraggedBlockId(null)
+                setDropIndicatorPosition({ top: 0, show: false })
               }}
             >
               <GripVertical className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
-            </motion.div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

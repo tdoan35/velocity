@@ -19,7 +19,6 @@ import { cn } from '@/lib/utils'
 import { SimpleBlockControls } from './SimpleBlockControls'
 import { VirtualBlockManager } from '@/lib/virtual-blocks/VirtualBlockManager'
 import { AutoConversionManager } from '@/lib/virtual-blocks/AutoConversionManager'
-import { useVirtualBlockDragIntegration } from '../../block-based/hooks/useVirtualBlockDragIntegration'
 import type { VirtualContentBlock } from '@/lib/virtual-blocks/types'
 
 interface NotionRichTextEditorProps {
@@ -48,7 +47,7 @@ export function NotionRichTextEditor({
   onBlocksUpdate,
   sectionId = 'baseline-editor'
 }: NotionRichTextEditorProps) {
-  const editorRef = useRef<HTMLDivElement>(null)
+  const editorRef = useRef<HTMLDivElement>(null!)
   
   // Virtual block state management
   const [virtualBlocks, setVirtualBlocks] = useState<VirtualContentBlock[]>([])
@@ -106,34 +105,26 @@ export function NotionRichTextEditor({
     return new AutoConversionManager(editor, virtualBlockManager)
   }, [editor, virtualBlockManager])
 
-  // Virtual block drag integration
-  useVirtualBlockDragIntegration({
-    editor,
-    virtualBlocks,
-    virtualBlockManager,
-    enabled: enableVirtualBlocks,
-    containerRef: editorRef,
-    sectionId,
-    onBlockReorder: (fromIndex, toIndex) => {
-      if (!editor) return
+  // Virtual block reordering handler for SimpleBlockControls
+  const handleBlockReorder = (fromIndex: number, toIndex: number) => {
+    if (!editor) return
+    
+    try {
+      const result = virtualBlockManager.reorderBlocks(editor.getHTML(), fromIndex.toString(), toIndex.toString())
+      const newHTML = typeof result === 'string' ? result : (result?.html || '')
+      editor.commands.setContent(newHTML)
       
-      try {
-        const result = virtualBlockManager.reorderBlocks(editor.getHTML(), fromIndex, toIndex)
-        const newHTML = typeof result === 'string' ? result : result.html
-        editor.commands.setContent(newHTML)
-        
-        // Update virtual blocks state
-        const updatedBlocks = virtualBlockManager.parseHTMLToBlocks(newHTML)
-        setVirtualBlocks(updatedBlocks)
-        onBlocksUpdate?.(updatedBlocks)
-        
-        // Trigger onChange to save
-        onChange({ html: newHTML, text: editor.getText() })
-      } catch (error) {
-        console.error('Error reordering virtual blocks:', error)
-      }
+      // Update virtual blocks state
+      const updatedBlocks = virtualBlockManager.parseHTMLToBlocks(newHTML || '')
+      setVirtualBlocks(updatedBlocks)
+      onBlocksUpdate?.(updatedBlocks)
+      
+      // Trigger onChange to save
+      onChange({ html: newHTML || '', text: editor.getText() })
+    } catch (error) {
+      console.error('Error reordering virtual blocks:', error)
     }
-  })
+  }
 
   // Update editor content when prop changes
   useEffect(() => {
@@ -227,6 +218,7 @@ export function NotionRichTextEditor({
         containerRef={editorRef}
         virtualBlocks={virtualBlocks}
         enableVirtualBlocks={enableVirtualBlocks}
+        onBlockReorder={handleBlockReorder}
         onBlockInsert={() => {
           // Simple block insertion - just add a new paragraph
           console.log('New block inserted')
