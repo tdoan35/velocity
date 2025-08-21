@@ -248,8 +248,7 @@ export function SectionBlockEditor({
               <div 
                 onClick={() => !isEditing && setIsEditing(true)}
                 className={cn(
-                  "min-h-[100px] rounded-md transition-colors",
-                  !isEditing && "hover:bg-muted/30 cursor-text"
+                  "min-h-[100px] rounded-md transition-colors"
                 )}
               >
                 <NotionRichTextEditor
