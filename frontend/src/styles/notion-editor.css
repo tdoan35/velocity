@@ -17,6 +17,76 @@
   font-feature-settings: "liga" 0; /* the above doesn't seem to work in Edge */
 }
 
+/* Virtual Block Drag Integration Styles */
+.virtual-blocks-enabled .ProseMirror {
+  /* Ensure proper stacking context for drag overlays */
+  position: relative;
+  z-index: 1;
+}
+
+.virtual-block-element {
+  /* Add subtle visual indicators for virtual blocks */
+  position: relative;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.virtual-block-element:hover {
+  background-color: rgba(55, 53, 47, 0.03);
+  box-shadow: 0 0 0 1px rgba(55, 53, 47, 0.1);
+}
+
+.virtual-block-element[data-draggable="true"] {
+  cursor: grab;
+}
+
+.virtual-block-element[data-draggable="true"]:active {
+  cursor: grabbing;
+}
+
+/* Drag feedback styles */
+.virtual-block-element.dragging {
+  opacity: 0.5;
+  transform: rotate(2deg);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+  z-index: 50;
+}
+
+.virtual-block-element.drag-over {
+  border-top: 2px solid #2563eb;
+  background-color: rgba(37, 99, 235, 0.05);
+}
+
+/* Block type specific styling hints */
+.virtual-block-element[data-virtual-block-type="heading_1"] {
+  border-left: 3px solid transparent;
+}
+
+.virtual-block-element[data-virtual-block-type="heading_1"]:hover {
+  border-left-color: #2563eb;
+}
+
+.virtual-block-element[data-virtual-block-type="heading_2"]:hover {
+  border-left-color: #059669;
+}
+
+.virtual-block-element[data-virtual-block-type="heading_3"]:hover {
+  border-left-color: #d97706;
+}
+
+.virtual-block-element[data-virtual-block-type="bullet_list"]:hover,
+.virtual-block-element[data-virtual-block-type="numbered_list"]:hover {
+  border-left-color: #7c3aed;
+}
+
+.virtual-block-element[data-virtual-block-type="quote"]:hover {
+  border-left-color: #6b7280;
+}
+
+.virtual-block-element[data-virtual-block-type="code"]:hover {
+  border-left-color: #dc2626;
+}
+
 .ProseMirror pre {
   white-space: pre-wrap;
 }

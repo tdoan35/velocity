@@ -15,14 +15,22 @@ import { SectionBlock, type SectionBlockProps, type SectionType } from './Sectio
 import { EnhancedBlockControlsDnd } from '../components/EnhancedBlockControlsDnd'
 import { cn } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
-// Removed legacy drag imports - now using @dnd-kit
-import { ContentDndProvider, SortableContentLine, type ContentLine } from '../dnd'
+// Enhanced @dnd-kit imports with virtual block support
+import { 
+  ContentDndProvider, 
+  VirtualBlockDndProvider,
+  VirtualBlockSortable,
+  SortableContentLine, 
+  type ContentLine 
+} from '../dnd'
 
 // Virtual Block System imports
 import { VirtualBlockManager } from '@/lib/virtual-blocks/VirtualBlockManager'
 import { KeyboardNavigationManager } from '@/lib/virtual-blocks/KeyboardNavigationManager'
+import { AutoConversionManager } from '@/lib/virtual-blocks/AutoConversionManager'
 import { BlockType } from '@/lib/virtual-blocks/types'
 import type { VirtualContentBlock } from '@/lib/virtual-blocks/types'
+import { useVirtualBlockDragIntegration } from '../hooks/useVirtualBlockDragIntegration'
 import { 
   Bold,
   Italic,
@@ -708,7 +716,7 @@ export function NotionSectionEditor({
           }
         }
         
-        // All other keyboard navigation handled by KeyboardNavigationManager via useEffect
+        // All other keyboard navigation and auto-conversion handled by useEffect
         return false
       }
     }
@@ -739,6 +747,65 @@ export function NotionSectionEditor({
       }
     })
   }, [editor, enableVirtualBlocks, virtualBlockManager, onBlocksUpdate])
+
+  // Initialize AutoConversionManager
+  const autoConversionManager = useMemo(() => {
+    if (!editor || !enableVirtualBlocks) return null
+    
+    return new AutoConversionManager(editor, virtualBlockManager)
+  }, [editor, enableVirtualBlocks, virtualBlockManager])
+
+  // Handle virtual block reordering
+  const handleVirtualBlockReorder = useCallback((reorderedBlocks: VirtualContentBlock[]) => {
+    if (!editor || !enableVirtualBlocks) return
+    
+    try {
+      console.log('Reordering virtual blocks:', reorderedBlocks.map(b => ({ id: b.id, type: b.type })))
+      
+      // Update the virtual blocks state
+      setVirtualBlocks(reorderedBlocks)
+      
+      // Notify parent component about the block changes
+      onBlocksUpdate?.(reorderedBlocks)
+      
+      // The HTML will be regenerated automatically through the editor update cycle
+    } catch (error) {
+      console.error('Error reordering virtual blocks:', error)
+    }
+  }, [editor, enableVirtualBlocks, onBlocksUpdate])
+
+  // Handle virtual block move (alternative handler)
+  const handleVirtualBlockMove = useCallback((fromIndex: number, toIndex: number) => {
+    if (!editor || !enableVirtualBlocks || !virtualBlocks.length) return
+    
+    try {
+      console.log('Moving virtual block:', { fromIndex, toIndex })
+      
+      // Use VirtualBlockManager to handle the reordering
+      const newHtml = virtualBlockManager.reorderBlocks(fromIndex, toIndex)
+      
+      if (newHtml) {
+        // Update the editor content with the new HTML
+        editor.commands.setContent(newHtml)
+        
+        // The virtual blocks will be re-parsed automatically through the onUpdate handler
+        console.log('Virtual block move completed')
+      }
+    } catch (error) {
+      console.error('Error moving virtual block:', error)
+    }
+  }, [editor, enableVirtualBlocks, virtualBlocks, virtualBlockManager])
+
+  // Integrate virtual block drag functionality with TipTap elements
+  useVirtualBlockDragIntegration({
+    editor,
+    virtualBlocks,
+    virtualBlockManager,
+    enabled: enableVirtualBlocks,
+    containerRef: editorRef,
+    sectionId: id,
+    onBlockReorder: handleVirtualBlockMove
+  })
   
   // Get current virtual block for context
   const currentVirtualBlock = useMemo(() => {
@@ -807,7 +874,7 @@ export function NotionSectionEditor({
   
   // TEMPORARILY DISABLED: Commenting out content sync to debug drag/drop issues
   // Sync content when it changes externally (only for significant changes)
-  // Integrate KeyboardNavigationManager with editor
+  // Integrate KeyboardNavigationManager and AutoConversionManager with editor
   useEffect(() => {
     if (!editor || !keyboardNavManager || !enableVirtualBlocks) return
     
@@ -819,6 +886,14 @@ export function NotionSectionEditor({
       if (!editor.isFocused) return
       
       let handled = false
+      
+      // Handle auto-conversion patterns first (space or Enter key)
+      if (autoConversionManager && (event.key === ' ' || event.key === 'Enter')) {
+        const converted = autoConversionManager.handleAutoConversionTrigger(event)
+        if (converted) {
+          return // Block was converted, prevent all other processing
+        }
+      }
       
       // Handle arrow navigation
       if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
@@ -908,7 +983,7 @@ export function NotionSectionEditor({
         editorElement.removeEventListener('keydown', handleKeyDown, true)
       }
     }
-  }, [editor, keyboardNavManager, enableVirtualBlocks, showSlashCommand])
+  }, [editor, keyboardNavManager, autoConversionManager, enableVirtualBlocks, showSlashCommand])
   
   /*
   useEffect(() => {
@@ -1027,15 +1102,20 @@ export function NotionSectionEditor({
             containerRef={editorRef}
             sectionId={id}
             virtualBlocks={enableVirtualBlocks ? virtualBlocks : undefined}
+            virtualBlockManager={enableVirtualBlocks ? virtualBlockManager : undefined}
             onBlockInsert={(type) => {
               console.log('Block inserted:', type)
             }}
           />
         )}
         
+        {/* TipTap Editor Content with Virtual Block Drag Integration */}
         <EditorContent 
           editor={editor} 
-          className="notion-editor-content"
+          className={cn(
+            "notion-editor-content",
+            enableVirtualBlocks && virtualBlocks.length > 0 && "virtual-blocks-enabled"
+          )}
         />
         
         {/* Enhanced Bubble Menu for text formatting */}

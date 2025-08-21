@@ -30,6 +30,7 @@ import type { VirtualContentBlock, BlockType as VirtualBlockType } from '@/lib/v
 import { BlockType } from '@/lib/virtual-blocks/types'
 import { BlockTypeMenu } from '../blocks/BlockTypeMenu'
 import type { VirtualBlockManager } from '@/lib/virtual-blocks/VirtualBlockManager'
+import { VirtualBlockSortable } from '../dnd/VirtualBlockSortable'
 
 interface BlockControlsProps {
   editor: Editor | null

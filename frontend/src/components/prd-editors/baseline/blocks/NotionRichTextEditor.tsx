@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useMemo } from 'react'
 import { useEditor, EditorContent, Editor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import StarterKit from '@tiptap/starter-kit'
@@ -17,6 +17,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SimpleBlockControls } from './SimpleBlockControls'
+import { VirtualBlockManager } from '@/lib/virtual-blocks/VirtualBlockManager'
+import { AutoConversionManager } from '@/lib/virtual-blocks/AutoConversionManager'
 
 interface NotionRichTextEditorProps {
   content: {
@@ -77,12 +79,51 @@ export function NotionRichTextEditor({
 
 
 
+  // Initialize VirtualBlockManager for auto-conversion (baseline mode)
+  const virtualBlockManager = useMemo(() => new VirtualBlockManager(), [])
+  
+  // Initialize AutoConversionManager
+  const autoConversionManager = useMemo(() => {
+    if (!editor) return null
+    return new AutoConversionManager(editor, virtualBlockManager)
+  }, [editor, virtualBlockManager])
+
   // Update editor content when prop changes
   useEffect(() => {
     if (editor && content.html !== editor.getHTML()) {
       editor.commands.setContent(content.html)
     }
   }, [content.html, editor])
+
+  // Add auto-conversion keyboard handling for baseline editor
+  useEffect(() => {
+    if (!editor || !autoConversionManager) return
+    
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Check if the editor is focused
+      if (!editor.isFocused) return
+      
+      // Handle auto-conversion patterns (space or Enter key)
+      if (event.key === ' ' || event.key === 'Enter') {
+        const converted = autoConversionManager.handleAutoConversionTrigger(event)
+        if (converted) {
+          // Prevent default and stop propagation if conversion happened
+          event.preventDefault()
+          event.stopPropagation()
+        }
+      }
+    }
+    
+    // Add event listener to the editor element
+    const editorElement = editorRef.current
+    if (editorElement) {
+      editorElement.addEventListener('keydown', handleKeyDown, true)
+      
+      return () => {
+        editorElement.removeEventListener('keydown', handleKeyDown, true)
+      }
+    }
+  }, [editor, autoConversionManager])
 
   if (!editor) {
     return null
