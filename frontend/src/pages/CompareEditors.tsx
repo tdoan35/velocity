@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react'
-import { NotionPRDEditor } from '@/components/prd/NotionPRDEditor'
-import { EnhancedBlockBasedPRDEditor } from '@/components/prd/BlockBasedPRDEditor.enhanced'
-import { NotionPRDEditorEnhanced } from '@/components/prd/NotionPRDEditor.enhanced'
-import { PRDEditorV2 } from '@/components/prd/PRDEditorV2'
-import { usePRDEditorStore } from '@/stores/prdEditorStoreSimple'
+import { NotionPRDEditor } from '@/components/prd-editors/notion-original'
+import { EnhancedBlockBasedPRDEditor } from '@/components/prd-editors/block-based'
+import { NotionPRDEditorEnhanced } from '@/components/prd-editors/notion-enhanced'
+import { PRDEditorV2, usePRDEditorStore } from '@/components/prd-editors/editor-v2'
 import { Button } from '@/components/ui/button'
 import { TestContentDrag } from '@/components/test/TestContentDrag'
 

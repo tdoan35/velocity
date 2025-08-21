@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react'
-import { PRDEditorV2 } from '@/components/prd/PRDEditorV2'
-import { usePRDEditorStore } from '@/stores/prdEditorStoreSimple'
+import { PRDEditorV2, usePRDEditorStore } from '@/components/prd-editors/editor-v2'
 import { Button } from '@/components/ui/button'
 import { RotateCcw, Database, FileJson } from 'lucide-react'
 

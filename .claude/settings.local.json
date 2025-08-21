@@ -81,9 +81,13 @@
       "Bash(jq:*)",
       "Bash(python3:*)",
       "mcp__playwright__browser_navigate_forward",
-      "mcp__taskmaster-ai__remove_task"
+      "mcp__taskmaster-ai__remove_task",
+      "Bash(cp:*)"
     ],
-    "defaultMode": "acceptEdits"
+    "defaultMode": "acceptEdits",
+    "additionalDirectories": [
+      "C:\\c\\Users\\Ty\\Desktop\\velocity"
+    ]
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [

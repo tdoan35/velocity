@@ -6,8 +6,8 @@
  */
 
 import React, { useState } from 'react'
-import { NotionSectionEditor } from '@/components/prd/blocks/NotionSectionEditor'
-import { VirtualContentBlock } from '@/lib/virtual-blocks/types'
+import { NotionSectionEditor } from '@/components/prd-editors/block-based/blocks/NotionSectionEditor'
+import type { VirtualContentBlock } from '@/lib/virtual-blocks/types'
 
 // Sample content for testing
 const sampleContent = `

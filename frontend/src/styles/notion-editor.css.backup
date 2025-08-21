@@ -75,7 +75,7 @@
 /* Disable section-level drop indicators during content drag */
 .dragging-content .section-drop-indicator {
   display: none !important;
-} */
+}
 
 /* Section drop indicators */
 .section-drop-indicator {
@@ -317,14 +317,14 @@
 }
 
 /* Disable TipTap interactions during content drag */
-/* .tiptap-drag-disabled { 
+.tiptap-drag-disabled {
   pointer-events: none !important;
   user-select: none !important;
-} */
+}
 
-/* .tiptap-drag-disabled .ProseMirror { 
+.tiptap-drag-disabled .ProseMirror {
   caret-color: transparent !important;
-} */
+}
 
 /* Content drop zones within sections */
 .content-drop-zone {
@@ -367,17 +367,16 @@
 }
 
 /* Prevent cross-contamination between drag types */
-/* .dragging-section .notion-content {
-/*   pointer-events: none !important;
-/*   user-select: none !important;
-/* }
-/* 
-/* .dragging-content .section-drag-handle {
-/*   pointer-events: none !important;
-/*   opacity: 0.3 !important;
-/*   cursor: not-allowed !important;
-/* }
-*/
+.dragging-section .notion-content {
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
+.dragging-content .section-drag-handle {
+  pointer-events: none !important;
+  opacity: 0.3 !important;
+  cursor: not-allowed !important;
+}
 
 /* ---- INVALID DROP STATES ---- */
 

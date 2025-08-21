@@ -12,11 +12,17 @@ export interface PRDSection {
   order: number;
   agent: AgentType;
   required: boolean;
-  content: Record<string, any>;
+  content: {
+    html: string;
+    text: string;
+  };
   status: SectionStatus;
   isCustom: boolean;
   description?: string;
-  template?: Record<string, any>;
+  template?: {
+    html: string;
+    text: string;
+  };
 }
 
 export interface AgentSectionConfig {
@@ -49,13 +55,7 @@ export const AGENT_SECTION_CONFIGS: Record<AgentType, AgentSectionConfig> = {
         agent: 'project_manager',
         required: true,
         isCustom: false,
-        description: 'Project vision, problem statement, and target users',
-        template: {
-          vision: '',
-          problem: '',
-          targetUsers: [],
-          businessGoals: []
-        }
+        description: 'Project vision, problem statement, and target users'
       },
       {
         id: 'core_features',
@@ -63,10 +63,7 @@ export const AGENT_SECTION_CONFIGS: Record<AgentType, AgentSectionConfig> = {
         agent: 'project_manager',
         required: true,
         isCustom: false,
-        description: 'Essential features that define the core product value',
-        template: {
-          features: []
-        }
+        description: 'Essential features that define the core product value'
       },
       {
         id: 'additional_features',
@@ -74,10 +71,7 @@ export const AGENT_SECTION_CONFIGS: Record<AgentType, AgentSectionConfig> = {
         agent: 'project_manager',
         required: false,
         isCustom: false,
-        description: 'Nice-to-have features for future iterations',
-        template: {
-          features: []
-        }
+        description: 'Nice-to-have features for future iterations'
       }
     ],
     introPrompt: `I'm the Project Manager and I'll help you define your project's vision and core features. I'm responsible for:
@@ -100,17 +94,7 @@ Let's start by understanding your project vision. What problem are you trying to
         agent: 'design_assistant',
         required: true,
         isCustom: false,
-        description: 'Design system, component patterns, and visual guidelines',
-        template: {
-          designSystem: {
-            colors: {},
-            typography: {},
-            spacing: {},
-            components: []
-          },
-          patterns: [],
-          accessibility: []
-        }
+        description: 'Design system, component patterns, and visual guidelines'
       },
       {
         id: 'ux_flows',
@@ -118,13 +102,7 @@ Let's start by understanding your project vision. What problem are you trying to
         agent: 'design_assistant',
         required: true,
         isCustom: false,
-        description: 'User journey maps, interaction flows, and navigation patterns',
-        template: {
-          userJourneys: [],
-          navigationStructure: {},
-          interactionPatterns: [],
-          responsiveStrategy: ''
-        }
+        description: 'User journey maps, interaction flows, and navigation patterns'
       }
     ],
     introPrompt: `I'm the Design Assistant and I'll help you create intuitive UI patterns and user experience flows. I'm responsible for:
@@ -147,24 +125,7 @@ Based on the core features defined, let's design how users will interact with yo
         agent: 'engineering_assistant',
         required: true,
         isCustom: false,
-        description: 'System architecture, technology stack, and implementation approach',
-        template: {
-          platforms: [],
-          techStack: {
-            frontend: [],
-            backend: [],
-            database: [],
-            infrastructure: []
-          },
-          architecture: {
-            pattern: '',
-            components: [],
-            dataFlow: ''
-          },
-          security: [],
-          scalability: [],
-          performance: []
-        }
+        description: 'System architecture, technology stack, and implementation approach'
       }
     ],
     introPrompt: `I'm the Engineering Assistant and I'll help you define the technical architecture. I'm responsible for:
@@ -187,14 +148,7 @@ Let's design the technical foundation for your application based on the features
         agent: 'config_helper',
         required: true,
         isCustom: false,
-        description: 'Third-party services, APIs, and integration configurations',
-        template: {
-          integrations: [],
-          apiConfigurations: [],
-          environmentVariables: [],
-          deploymentConfig: {},
-          monitoring: []
-        }
+        description: 'Third-party services, APIs, and integration configurations'
       }
     ],
     introPrompt: `I'm the Config Helper and I'll help you set up the necessary integrations and configurations. I'm responsible for:
@@ -243,13 +197,50 @@ export function initializePRDSections(): PRDSection[] {
   const sections: PRDSection[] = [];
   let order = 1;
 
+  // Define rich text templates for each section type
+  const sectionTemplates: Record<string, { html: string; text: string }> = {
+    'overview': {
+      html: `<h2>Vision</h2><p class="template-placeholder">What is your app's core vision?</p><h2>Problem</h2><p class="template-placeholder">What problem does it solve?</p><h2>Target Users</h2><p class="template-placeholder">Who are your target users?</p><h2>Business Goals</h2><p class="template-placeholder">What are your business objectives?</p>`,
+      text: 'Vision: What is your app\'s core vision? Problem: What problem does it solve? Target Users: Who are your target users? Business Goals: What are your business objectives?'
+    },
+    'core_features': {
+      html: `<h2>Core Features</h2><ul><li class="template-placeholder">Essential feature 1</li><li class="template-placeholder">Essential feature 2</li><li class="template-placeholder">Essential feature 3</li></ul>`,
+      text: 'Core Features: Essential feature 1, Essential feature 2, Essential feature 3'
+    },
+    'additional_features': {
+      html: `<h2>Additional Features</h2><ul><li class="template-placeholder">Nice-to-have feature 1</li><li class="template-placeholder">Future enhancement 2</li></ul>`,
+      text: 'Additional Features: Nice-to-have feature 1, Future enhancement 2'
+    },
+    'ui_design_patterns': {
+      html: `<h2>Design System</h2><p class="template-placeholder">Define your visual design approach</p><h2>Component Patterns</h2><p class="template-placeholder">Describe UI component patterns</p><h2>Accessibility</h2><p class="template-placeholder">Accessibility requirements</p>`,
+      text: 'Design System: Define your visual design approach. Component Patterns: Describe UI component patterns. Accessibility: Accessibility requirements'
+    },
+    'ux_flows': {
+      html: `<h2>User Journeys</h2><p class="template-placeholder">Map key user flows</p><h2>Navigation Structure</h2><p class="template-placeholder">Define app navigation</p><h2>Interaction Patterns</h2><p class="template-placeholder">Describe user interactions</p>`,
+      text: 'User Journeys: Map key user flows. Navigation Structure: Define app navigation. Interaction Patterns: Describe user interactions'
+    },
+    'technical_architecture': {
+      html: `<h2>Platforms</h2><p class="template-placeholder">Target platforms (iOS, Android, Web)</p><h2>Tech Stack</h2><p class="template-placeholder">Frontend, backend, database technologies</p><h2>Architecture Pattern</h2><p class="template-placeholder">System architecture approach</p><h2>Security</h2><p class="template-placeholder">Security considerations</p>`,
+      text: 'Platforms: Target platforms (iOS, Android, Web). Tech Stack: Frontend, backend, database technologies. Architecture Pattern: System architecture approach. Security: Security considerations'
+    },
+    'tech_integrations': {
+      html: `<h2>Third-Party Services</h2><p class="template-placeholder">External APIs and services</p><h2>Authentication</h2><p class="template-placeholder">Auth providers and methods</p><h2>Environment Configuration</h2><p class="template-placeholder">Environment variables and config</p>`,
+      text: 'Third-Party Services: External APIs and services. Authentication: Auth providers and methods. Environment Configuration: Environment variables and config'
+    }
+  };
+
   for (const agentType of AGENT_SEQUENCE) {
     const agentConfig = AGENT_SECTION_CONFIGS[agentType];
     for (const sectionConfig of agentConfig.sections) {
+      const template = sectionTemplates[sectionConfig.id] || {
+        html: '<p class="template-placeholder">Start writing...</p>',
+        text: 'Start writing...'
+      };
+      
       sections.push({
         ...sectionConfig,
         order,
-        content: sectionConfig.template || {},
+        content: template,
         status: 'pending'
       });
       order++;
@@ -309,7 +300,7 @@ export function updateSectionStatus(
 export function updateSectionContent(
   sections: PRDSection[],
   sectionId: string,
-  content: Record<string, any>
+  content: { html: string; text: string }
 ): PRDSection[] {
   return sections.map(s => 
     s.id === sectionId ? { ...s, content, status: 'completed' } : s
@@ -332,7 +323,10 @@ export function addCustomSection(
     order: maxOrder + 1,
     agent,
     required,
-    content: {},
+    content: {
+      html: '<p class="template-placeholder">Start writing...</p>',
+      text: 'Start writing...'
+    },
     status: 'pending',
     isCustom: true
   };
@@ -384,4 +378,46 @@ export function calculatePRDCompletion(sections: PRDSection[]): number {
   
   const completedRequired = requiredSections.filter(s => s.status === 'completed');
   return Math.round((completedRequired.length / requiredSections.length) * 100);
+}
+
+/**
+ * Extract plain text from HTML content
+ */
+export function extractTextFromHtml(html: string): string {
+  // Simple text extraction - strips HTML tags and normalizes whitespace
+  return html
+    .replace(/<[^>]*>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Validate rich text content
+ */
+export function validateRichTextContent(content: { html: string; text: string }): {
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
+} {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (!content.html || content.html.length < 20) {
+    errors.push('Content is too short');
+  }
+
+  if (!content.text || content.text.length < 10) {
+    errors.push('Text content is missing');
+  }
+
+  // Check for template placeholders still present
+  if (content.html.includes('template-placeholder')) {
+    warnings.push('Template placeholders should be replaced with actual content');
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings
+  };
 }

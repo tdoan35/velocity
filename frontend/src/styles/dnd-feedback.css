@@ -1,0 +1,154 @@
+/* @dnd-kit Visual Feedback Styles */
+
+/* Smooth transitions for drag states */
+.dnd-transition {
+  transition: transform 250ms ease, opacity 250ms ease, box-shadow 250ms ease;
+}
+
+/* Section being dragged */
+.section-dragging {
+  opacity: 0.5;
+  transform: scale(0.98);
+  pointer-events: none;
+}
+
+/* Section that can receive a drop */
+.section-over {
+  background-color: rgba(59, 130, 246, 0.05);
+  border-color: rgba(59, 130, 246, 0.3);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+/* Content line being dragged */
+.content-dragging {
+  opacity: 0.4;
+  transform: scale(0.97);
+  pointer-events: none;
+}
+
+/* Content line hover state */
+.content-over {
+  background-color: rgba(16, 185, 129, 0.05);
+  border-left: 3px solid rgba(16, 185, 129, 0.5);
+}
+
+/* Drop indicator animation */
+@keyframes dropIndicatorPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scaleX(0.95);
+  }
+}
+
+.drop-indicator {
+  animation: dropIndicatorPulse 1.5s ease-in-out infinite;
+}
+
+/* Auto-scroll zones */
+.auto-scroll-zone {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 100px;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.auto-scroll-zone-top {
+  top: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(59, 130, 246, 0.1) 0%,
+    transparent 100%
+  );
+}
+
+.auto-scroll-zone-bottom {
+  bottom: 0;
+  background: linear-gradient(
+    to top,
+    rgba(59, 130, 246, 0.1) 0%,
+    transparent 100%
+  );
+}
+
+.auto-scroll-zone-active {
+  background: linear-gradient(
+    to bottom,
+    rgba(59, 130, 246, 0.2) 0%,
+    transparent 100%
+  );
+}
+
+/* Drag handle styles */
+.drag-handle {
+  cursor: move;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.drag-handle:hover {
+  background-color: rgba(156, 163, 175, 0.1);
+  transform: scale(1.05);
+}
+
+.drag-handle:active {
+  background-color: rgba(156, 163, 175, 0.2);
+  transform: scale(0.95);
+}
+
+/* Disabled state */
+.drag-disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Drag overlay shadow */
+.drag-overlay {
+  box-shadow: 
+    0 20px 25px -5px rgba(0, 0, 0, 0.1),
+    0 10px 10px -5px rgba(0, 0, 0, 0.04),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+/* Performance optimizations */
+.will-change-transform {
+  will-change: transform;
+}
+
+.hardware-accelerated {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .section-over {
+    background-color: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.5);
+  }
+
+  .content-over {
+    background-color: rgba(16, 185, 129, 0.1);
+    border-left-color: rgba(16, 185, 129, 0.7);
+  }
+
+  .drag-handle:hover {
+    background-color: rgba(156, 163, 175, 0.2);
+  }
+
+  .drag-overlay {
+    box-shadow: 
+      0 20px 25px -5px rgba(0, 0, 0, 0.5),
+      0 10px 10px -5px rgba(0, 0, 0, 0.3),
+      0 0 0 1px rgba(255, 255, 255, 0.1);
+  }
+}

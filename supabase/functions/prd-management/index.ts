@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { corsHeaders } from '../_shared/cors.ts'
 import { requireAuth } from '../_shared/auth.ts'
 import { logger } from '../_shared/logger.ts'
+import { createContentExtractionService } from '../_shared/ai/content-extraction-service.ts'
 import {
   PRDSection,
   AgentType,
@@ -17,18 +18,19 @@ import {
   getNextAgent,
   areAgentSectionsComplete,
   getAgentPrompts,
+  validateRichTextContent,
+  extractTextFromHtml,
   AGENT_SECTION_CONFIGS
 } from '../shared/prd-sections-config.ts'
 
 interface PRDRequest {
   action: 'create' | 'update' | 'get' | 'finalize' | 'generateSuggestions' | 'validateSection' | 
           'updateSection' | 'addSection' | 'removeSection' | 'reorderSections' | 'getAgentStatus' |
-          'initializeSections'
+          'initializeSections' | 'extractStructuredData'
   conversationId?: string
   projectId?: string
   prdId?: string
   sectionId?: string
-  section?: string // For backward compatibility
   data?: any
   context?: any
   agent?: AgentType
@@ -62,7 +64,7 @@ Deno.serve(async (req) => {
 
     // Parse request body
     const body: PRDRequest = await req.json()
-    const { action, conversationId, projectId, prdId, sectionId, section, data, context, agent, title, required, newOrder } = body
+    const { action, conversationId, projectId, prdId, sectionId, data, context, agent, title, required, newOrder } = body
 
     // Log request
     await logger.info('PRD management request', {
@@ -87,12 +89,7 @@ Deno.serve(async (req) => {
         break
 
       case 'update':
-        // Backward compatibility for old section updates
-        if (section && !sectionId) {
-          response = await updatePRDSectionLegacy(supabase, authResult.userId, prdId!, section, data)
-        } else {
-          response = await updatePRDSectionFlexible(supabase, authResult.userId, prdId!, sectionId!, data)
-        }
+        response = await updatePRDSectionFlexible(supabase, authResult.userId, prdId!, sectionId!, data)
         break
 
       case 'updateSection':
@@ -120,7 +117,7 @@ Deno.serve(async (req) => {
         break
 
       case 'generateSuggestions':
-        response = await generateSuggestions(supabase, prdId!, sectionId || section!, agent, context)
+        response = await generateSuggestions(supabase, prdId!, sectionId!, agent, context)
         break
 
       case 'validateSection':
@@ -133,6 +130,10 @@ Deno.serve(async (req) => {
 
       case 'initializeSections':
         response = await initializeSectionsForPRD(supabase, authResult.userId, prdId!)
+        break
+
+      case 'extractStructuredData':
+        response = await extractStructuredDataFromSection(supabase, authResult.userId, prdId!, sectionId!)
         break
 
       default:
@@ -242,7 +243,7 @@ async function updatePRDSectionFlexible(
   userId: string,
   prdId: string,
   sectionId: string,
-  data: any
+  data: { html: string; text: string }
 ) {
   // Verify user owns the PRD
   const { data: prd, error: prdError } = await supabase
@@ -730,7 +731,7 @@ async function generateSuggestions(
 async function validatePRDSectionFlexible(
   prdId: string,
   sectionId: string,
-  data: any,
+  data: { html: string; text: string },
   supabase: any
 ): Promise<{ valid: boolean; errors: string[]; warnings: string[] }> {
   const { data: prd } = await supabase
@@ -750,47 +751,53 @@ async function validatePRDSectionFlexible(
     }
   }
 
-  const errors: string[] = []
-  const warnings: string[] = []
+  // Use the rich text validation helper
+  const validationResult = validateRichTextContent(data)
+  const errors = [...validationResult.errors]
+  const warnings = [...validationResult.warnings]
 
-  // Validate based on section template structure
+  // Section-specific validation using content analysis
+  const htmlLower = data.html.toLowerCase()
+  
   switch (sectionId) {
     case 'overview':
-      if (!data.vision || data.vision.length < 10) {
-        errors.push('Vision statement is too short or missing')
+      if (!htmlLower.includes('<h2>vision</h2>') && !htmlLower.includes('vision')) {
+        warnings.push('Overview should include a Vision section')
       }
-      if (!data.problem || data.problem.length < 20) {
-        errors.push('Problem statement needs more detail')
+      if (!htmlLower.includes('<h2>problem</h2>') && !htmlLower.includes('problem')) {
+        warnings.push('Overview should include a Problem section')
       }
-      if (!data.targetUsers || data.targetUsers.length === 0) {
-        errors.push('Target users must be specified')
+      if (!htmlLower.includes('<h2>target users</h2>') && !htmlLower.includes('target')) {
+        warnings.push('Overview should include Target Users')
       }
       break
 
     case 'core_features':
-      if (!data.features || !Array.isArray(data.features) || data.features.length < 3) {
-        errors.push('At least 3 core features are required')
+      if (!htmlLower.includes('<ul>') && !htmlLower.includes('<ol>')) {
+        warnings.push('Core features should be structured as a list')
+      }
+      // Check if there are at least some list items
+      const listItems = (data.html.match(/<li>/gi) || []).length
+      if (listItems < 3) {
+        warnings.push('Consider adding at least 3 core features')
       }
       break
 
     case 'ui_design_patterns':
-      if (!data.designSystem || !data.patterns) {
-        warnings.push('Design system and patterns should be defined')
+      if (!htmlLower.includes('design') && !htmlLower.includes('component')) {
+        warnings.push('UI Design section should describe design patterns')
       }
       break
 
     case 'technical_architecture':
-      if (!data.platforms || data.platforms.length === 0) {
-        errors.push('Target platforms must be specified')
-      }
-      if (!data.techStack) {
-        errors.push('Technology stack must be defined')
+      if (!htmlLower.includes('platform') && !htmlLower.includes('tech')) {
+        warnings.push('Technical Architecture should specify platforms and tech stack')
       }
       break
 
     case 'tech_integrations':
-      if (!data.integrations || data.integrations.length === 0) {
-        warnings.push('No integrations specified')
+      if (!htmlLower.includes('service') && !htmlLower.includes('api') && !htmlLower.includes('integration')) {
+        warnings.push('Tech Integrations should specify external services or APIs')
       }
       break
   }
@@ -851,27 +858,56 @@ async function initializeSectionsForPRD(
   }
 }
 
-// Legacy function for backward compatibility
-async function updatePRDSectionLegacy(
+async function extractStructuredDataFromSection(
   supabase: any,
   userId: string,
   prdId: string,
-  sectionName: string,
-  data: any
+  sectionId: string
 ) {
-  // Map old section names to new section IDs
-  const sectionMapping: Record<string, string> = {
-    'overview': 'overview',
-    'core_features': 'core_features',
-    'additional_features': 'additional_features',
-    'technical_requirements': 'technical_architecture',
-    'success_metrics': 'success_metrics'
+  // Verify user owns the PRD
+  const { data: prd, error: prdError } = await supabase
+    .from('prds')
+    .select('*')
+    .eq('id', prdId)
+    .eq('user_id', userId)
+    .single()
+
+  if (prdError || !prd) {
+    throw new Error('PRD not found or access denied')
   }
 
-  const sectionId = sectionMapping[sectionName]
-  if (!sectionId) {
-    throw new Error(`Invalid section name: ${sectionName}`)
+  const sections: PRDSection[] = prd.sections || []
+  const section = getSectionById(sections, sectionId)
+  
+  if (!section) {
+    throw new Error(`Section ${sectionId} not found`)
   }
 
-  return updatePRDSectionFlexible(supabase, userId, prdId, sectionId, data)
+  // Initialize the content extraction service
+  const extractionService = createContentExtractionService()
+  
+  // Extract structured data from the rich text content
+  const structuredData = await extractionService.extractStructuredData(
+    section.content.html,
+    sectionId
+  )
+  
+  // Validate the extracted data
+  const validation = extractionService.validateExtractedData(structuredData, sectionId)
+  
+  // Check if content is still template
+  const isTemplate = extractionService.isTemplateContent(section.content.html)
+  
+  return {
+    sectionId,
+    sectionTitle: section.title,
+    agent: section.agent,
+    status: section.status,
+    isTemplate,
+    structuredData,
+    validation,
+    richTextContent: section.content,
+    message: 'Structured data extracted successfully from rich text content'
+  }
 }
+

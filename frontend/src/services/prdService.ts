@@ -24,10 +24,17 @@ export interface FlexiblePRDSection {
   order: number
   agent: AgentType | 'human'
   required: boolean
-  content: Record<string, any>
+  content: {
+    html: string
+    text: string
+  }
   status: SectionStatus
   isCustom: boolean
   description?: string
+  template?: {
+    html: string
+    text: string
+  }
 }
 
 export interface PRD {
@@ -123,7 +130,7 @@ class PRDService {
       if (updates.sections && updates.sections.length > 0) {
         // Update each modified section through the edge function
         for (const section of updates.sections) {
-          if (section.content && Object.keys(section.content).length > 0) {
+          if (section.content && section.content.html && section.content.text) {
             const { data, error } = await supabase.functions.invoke('prd-management', {
               body: {
                 action: 'updateSection',
@@ -279,69 +286,32 @@ class PRDService {
         }
         markdown += `\n`
         
-        // Render section content based on structure
-        if (section.content) {
-          switch (section.id) {
-            case 'overview':
-              if (section.content.vision) {
-                markdown += `### Vision\n${section.content.vision}\n\n`
-              }
-              if (section.content.problem) {
-                markdown += `### Problem Statement\n${section.content.problem}\n\n`
-              }
-              if (section.content.targetUsers && Array.isArray(section.content.targetUsers)) {
-                markdown += `### Target Users\n`
-                section.content.targetUsers.forEach((user: string) => {
-                  markdown += `- ${user}\n`
-                })
-                markdown += `\n`
-              }
-              break
-              
-            case 'core_features':
-            case 'additional_features':
-              if (section.content.features && Array.isArray(section.content.features)) {
-                section.content.features.forEach((feature: any, index: number) => {
-                  markdown += `### ${index + 1}. ${feature.title || feature.name || 'Feature'}\n`
-                  markdown += `${feature.description || ''}\n\n`
-                })
-              }
-              break
-              
-            case 'technical_architecture':
-              if (section.content.platforms && Array.isArray(section.content.platforms)) {
-                markdown += `### Platforms\n`
-                section.content.platforms.forEach((platform: string) => {
-                  markdown += `- ${platform}\n`
-                })
-                markdown += `\n`
-              }
-              if (section.content.techStack) {
-                markdown += `### Technology Stack\n`
-                if (section.content.techStack.frontend?.length > 0) {
-                  markdown += `**Frontend:**\n`
-                  section.content.techStack.frontend.forEach((tech: string) => {
-                    markdown += `- ${tech}\n`
-                  })
-                }
-                if (section.content.techStack.backend?.length > 0) {
-                  markdown += `**Backend:**\n`
-                  section.content.techStack.backend.forEach((tech: string) => {
-                    markdown += `- ${tech}\n`
-                  })
-                }
-                markdown += `\n`
-              }
-              break
-              
-            default:
-              // For other sections, output as JSON or text
-              if (typeof section.content === 'string') {
-                markdown += section.content + '\n\n'
-              } else {
-                markdown += `\`\`\`json\n${JSON.stringify(section.content, null, 2)}\n\`\`\`\n\n`
-              }
-          }
+        // Render section content based on rich text structure
+        if (section.content && section.content.html) {
+          // Convert HTML to Markdown-friendly format
+          // Remove template placeholders for cleaner export
+          let htmlContent = section.content.html
+            .replace(/class="template-placeholder"/g, '')
+            .replace(/<h2>/g, '### ')
+            .replace(/<\/h2>/g, '\n')
+            .replace(/<h3>/g, '#### ')
+            .replace(/<\/h3>/g, '\n')
+            .replace(/<p>/g, '')
+            .replace(/<\/p>/g, '\n\n')
+            .replace(/<ul>/g, '')
+            .replace(/<\/ul>/g, '\n')
+            .replace(/<ol>/g, '')
+            .replace(/<\/ol>/g, '\n')
+            .replace(/<li>/g, '- ')
+            .replace(/<\/li>/g, '\n')
+            .replace(/<[^>]*>/g, '') // Remove any remaining HTML tags
+            .replace(/\n{3,}/g, '\n\n') // Clean up excessive newlines
+            .trim()
+          
+          markdown += htmlContent + '\n\n'
+        } else if (section.content && section.content.text) {
+          // Fallback to plain text if HTML is not available
+          markdown += section.content.text + '\n\n'
         }
       })
     } else {
@@ -417,6 +387,43 @@ class PRDService {
       this.autoSaveTimeout = null
     }
   }
+}
+
+// Rich text content validation
+export function validateRichTextContent(content: { html: string; text: string }): {
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
+} {
+  const errors: string[] = []
+  const warnings: string[] = []
+
+  if (!content.html || content.html.length < 20) {
+    errors.push('Content is too short')
+  }
+
+  if (!content.text || content.text.length < 10) {
+    errors.push('Text content is missing')
+  }
+
+  // Check for template placeholders still present
+  if (content.html.includes('template-placeholder')) {
+    warnings.push('Template placeholders should be replaced with actual content')
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings
+  }
+}
+
+// Helper function for HTML text extraction
+export function extractTextFromHtml(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 export const prdService = new PRDService()
