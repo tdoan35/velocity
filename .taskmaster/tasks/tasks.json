@@ -2346,11 +2346,287 @@
             "testStrategy": "All unit tests pass with 100% coverage for new components, integration tests validate end-to-end drag functionality, Playwright tests pass consistently, and performance benchmarks show sub-100ms drag operations with zero console errors."
           }
         ]
+      },
+      {
+        "id": 26,
+        "title": "Implement Supabase OAuth Integration for ProjectDesign Page",
+        "description": "Add Supabase OAuth integration to the ProjectDesign page, allowing users to connect their Supabase accounts to enable backend capabilities for their projects with a streamlined connection flow.",
+        "details": "## Implementation Details\n\n1. **UI Component Implementation**\n   - Replace the \"Open Editor\" button with a \"Connect Supabase\" button in the ProjectDesign page header\n   - Create a connection status indicator showing current state (disconnected/connecting/connected)\n   - Implement a loading state for the button during the OAuth process\n   - Design and implement a success confirmation UI for completed connections\n   ```tsx\n   const SupabaseConnectButton = ({ projectId, isConnected }) => {\n     const [isConnecting, setIsConnecting] = useState(false);\n     \n     const handleConnect = async () => {\n       setIsConnecting(true);\n       await initiateSupabaseOAuth(projectId);\n     };\n     \n     return (\n       <Button \n         onClick={handleConnect} \n         disabled={isConnecting || isConnected}\n         variant={isConnected ? \"success\" : \"primary\"}\n       >\n         {isConnecting ? \"Connecting...\" : isConnected ? \"Supabase Connected\" : \"Connect Supabase\"}\n       </Button>\n     );\n   };\n   ```\n\n2. **OAuth Flow Implementation**\n   - Implement OAuth initialization using Supabase Management API\n   - Create OAuth callback handler endpoint in the API routes\n   - Set up secure state parameter validation to prevent CSRF attacks\n   - Handle OAuth error cases and provide user feedback\n   ```tsx\n   // API route: /api/supabase/oauth/initialize\n   export default async function handler(req, res) {\n     const { projectId } = req.body;\n     const state = generateSecureState(projectId);\n     \n     // Store state in session for validation on callback\n     req.session.oauthState = state;\n     await req.session.save();\n     \n     const authUrl = `https://api.supabase.com/oauth/authorize?client_id=${process.env.SUPABASE_CLIENT_ID}&response_type=code&state=${state}&redirect_uri=${encodeURIComponent(process.env.OAUTH_REDIRECT_URI)}`;\n     \n     res.status(200).json({ authUrl });\n   }\n   ```\n\n3. **Supabase Project Setup**\n   - Implement automatic Supabase project creation upon successful OAuth\n   - Configure default database schema for Velocity projects\n   - Set up necessary tables, functions, and policies\n   - Generate and securely store API keys\n   ```tsx\n   async function setupSupabaseProject(accessToken, projectId) {\n     // Create new Supabase project\n     const response = await fetch('https://api.supabase.com/v1/projects', {\n       method: 'POST',\n       headers: {\n         'Authorization': `Bearer ${accessToken}`,\n         'Content-Type': 'application/json'\n       },\n       body: JSON.stringify({\n         name: `velocity-${projectId}`,\n         region: 'us-east-1',\n         db_pass: generateSecurePassword(),\n         plan: 'free'\n       })\n     });\n     \n     const projectData = await response.json();\n     \n     // Initialize schema and tables\n     await initializeProjectSchema(accessToken, projectData.id);\n     \n     return projectData;\n   }\n   ```\n\n4. **Database Integration**\n   - Create database schema for storing Supabase connection details\n   - Implement secure storage of Supabase API keys and project information\n   - Associate Supabase projects with Velocity projects in the database\n   ```sql\n   -- Database schema for Supabase connections\n   CREATE TABLE supabase_connections (\n     id SERIAL PRIMARY KEY,\n     project_id UUID REFERENCES projects(id) ON DELETE CASCADE,\n     supabase_project_id VARCHAR(255) NOT NULL,\n     supabase_project_ref VARCHAR(255) NOT NULL,\n     api_url VARCHAR(255) NOT NULL,\n     anon_key VARCHAR(255) NOT NULL,\n     service_role_key VARCHAR(255) NOT NULL ENCRYPTED,\n     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),\n     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()\n   );\n   \n   CREATE INDEX idx_supabase_connections_project_id ON supabase_connections(project_id);\n   ```\n\n5. **UI State Management**\n   - Update ProjectDesign page to reflect Supabase connection status\n   - Enable \"Build\" button only when Supabase is connected\n   - Implement connection status persistence across page reloads\n   - Add connection details to project context\n   ```tsx\n   // In ProjectContext.tsx\n   interface ProjectContextType {\n     // existing fields\n     supabaseConnection: {\n       isConnected: boolean;\n       projectRef?: string;\n       apiUrl?: string;\n     } | null;\n     connectSupabase: () => Promise<void>;\n   }\n   ```\n\n6. **Performance Optimization**\n   - Implement connection caching to minimize API calls\n   - Optimize OAuth flow to complete in under 30 seconds\n   - Use optimistic UI updates for immediate feedback\n   - Implement proper error handling and retry mechanisms\n   ```tsx\n   // Connection status caching\n   const useSupabaseConnectionStatus = (projectId) => {\n     const [status, setStatus] = useState({ isConnected: false, isLoading: true });\n     const statusCacheKey = `supabase-connection-${projectId}`;\n     \n     useEffect(() => {\n       // Try to get from cache first\n       const cachedStatus = sessionStorage.getItem(statusCacheKey);\n       if (cachedStatus) {\n         setStatus(JSON.parse(cachedStatus));\n       }\n       \n       // Then fetch fresh data\n       fetchConnectionStatus(projectId).then(freshStatus => {\n         setStatus(freshStatus);\n         sessionStorage.setItem(statusCacheKey, JSON.stringify(freshStatus));\n       });\n     }, [projectId]);\n     \n     return status;\n   };\n   ```\n\n7. **Security Considerations**\n   - Implement proper token handling and secure storage\n   - Use HttpOnly cookies for sensitive information\n   - Implement rate limiting on OAuth endpoints\n   - Add proper logging for security auditing\n   - Ensure secure transmission of API keys\n   ```tsx\n   // Secure token storage in HttpOnly cookie\n   res.setHeader('Set-Cookie', [\n     `supabase_token=${encodeURIComponent(token)}; HttpOnly; Path=/; Max-Age=${60*60*24*7}; SameSite=Strict; Secure`\n   ]);\n   ```\n\n8. **Error Handling and Monitoring**\n   - Implement comprehensive error handling throughout the OAuth flow\n   - Add detailed logging for troubleshooting\n   - Create user-friendly error messages\n   - Set up monitoring for OAuth success rate\n   ```tsx\n   try {\n     const result = await connectSupabase(projectId);\n     logger.info(`Supabase connection successful for project ${projectId}`);\n     return result;\n   } catch (error) {\n     logger.error(`Supabase connection failed for project ${projectId}:`, error);\n     captureException(error); // Send to error monitoring service\n     throw new UserFacingError('Failed to connect to Supabase. Please try again.');\n   }\n   ```",
+        "testStrategy": "## Test Strategy\n\n1. **Unit Testing OAuth Components**\n   - Test SupabaseConnectButton component rendering in all states (disconnected, connecting, connected)\n   - Verify OAuth initialization function properly generates secure state parameters\n   - Test OAuth callback handler with various response scenarios\n   - Validate error handling for all OAuth failure cases\n   ```tsx\n   test('SupabaseConnectButton shows connecting state during OAuth process', async () => {\n     render(<SupabaseConnectButton projectId=\"test-id\" isConnected={false} />);\n     const button = screen.getByText('Connect Supabase');\n     fireEvent.click(button);\n     expect(await screen.findByText('Connecting...')).toBeInTheDocument();\n   });\n   ```\n\n2. **Integration Testing OAuth Flow**\n   - Test complete OAuth flow with mock Supabase Management API\n   - Verify state parameter validation prevents CSRF attacks\n   - Test successful project creation and configuration\n   - Validate database updates after successful connection\n   ```tsx\n   test('OAuth flow successfully creates Supabase project', async () => {\n     // Mock Supabase API responses\n     mockSupabaseAPI.onPost('/v1/projects').reply(200, { id: 'test-project-id', ref: 'test-ref' });\n     \n     // Initiate OAuth flow\n     await initiateOAuthFlow('test-project-id');\n     \n     // Complete OAuth callback\n     await completeOAuthCallback('test-code', 'valid-state');\n     \n     // Verify database was updated\n     const connection = await getSupabaseConnection('test-project-id');\n     expect(connection).toHaveProperty('supabase_project_id', 'test-project-id');\n   });\n   ```\n\n3. **Database Schema Testing**\n   - Verify connection details are properly stored in the database\n   - Test encryption of sensitive API keys\n   - Validate foreign key constraints and cascading deletes\n   - Test connection retrieval and update operations\n   ```sql\n   -- Test query to verify schema\n   SELECT column_name, data_type, is_nullable \n   FROM information_schema.columns \n   WHERE table_name = 'supabase_connections';\n   ```\n\n4. **UI State Testing**\n   - Test that Build button is enabled only when Supabase is connected\n   - Verify connection status is correctly displayed in the UI\n   - Test connection status persistence across page reloads\n   - Validate optimistic UI updates during connection process\n   ```tsx\n   test('Build button is enabled only when Supabase is connected', async () => {\n     render(<ProjectDesign projectId=\"test-id\" />);\n     \n     // Initially disabled\n     const buildButton = screen.getByText('Build');\n     expect(buildButton).toBeDisabled();\n     \n     // Connect Supabase\n     const connectButton = screen.getByText('Connect Supabase');\n     fireEvent.click(connectButton);\n     \n     // Mock successful connection\n     await act(async () => {\n       mockSuccessfulConnection();\n     });\n     \n     // Now enabled\n     expect(buildButton).not.toBeDisabled();\n   });\n   ```\n\n5. **Performance Testing**\n   - Measure OAuth flow completion time to ensure < 30 seconds target\n   - Test connection caching effectiveness\n   - Verify API call optimization\n   - Measure UI responsiveness during connection process\n   ```tsx\n   test('OAuth flow completes within 30 seconds', async () => {\n     const startTime = Date.now();\n     \n     await initiateAndCompleteOAuthFlow('test-project-id');\n     \n     const duration = Date.now() - startTime;\n     expect(duration).toBeLessThan(30000);\n   });\n   ```\n\n6. **Security Testing**\n   - Test CSRF protection in OAuth flow\n   - Verify secure storage of API keys\n   - Test rate limiting on OAuth endpoints\n   - Validate proper handling of expired tokens\n   ```tsx\n   test('OAuth flow rejects invalid state parameters', async () => {\n     // Initiate OAuth with valid state\n     await initiateOAuthFlow('test-project-id');\n     \n     // Attempt callback with invalid state\n     const result = await completeOAuthCallback('test-code', 'invalid-state');\n     \n     expect(result.status).toBe('error');\n     expect(result.message).toContain('Invalid state parameter');\n   });\n   ```\n\n7. **End-to-End Testing**\n   - Test complete user journey from project creation to Supabase connection\n   - Verify project setup in Supabase after connection\n   - Test disconnection and reconnection scenarios\n   - Validate error recovery flows\n   ```tsx\n   test('User can connect Supabase and see connection status', async () => {\n     // Setup test\n     cy.login();\n     cy.visit('/projects/test-project');\n     \n     // Connect Supabase\n     cy.contains('Connect Supabase').click();\n     \n     // Mock OAuth process\n     cy.mockOAuthFlow();\n     \n     // Verify success state\n     cy.contains('Supabase Connected').should('be.visible');\n     cy.contains('Build').should('be.enabled');\n   });\n   ```\n\n8. **Success Rate Monitoring**\n   - Implement analytics to track OAuth success rate\n   - Set up alerts for success rate dropping below 95% target\n   - Test monitoring system with simulated failures\n   - Validate logging of connection attempts and results\n   ```tsx\n   test('Connection analytics properly track success rate', async () => {\n     // Simulate 100 connection attempts with 96 successes\n     for (let i = 0; i < 100; i++) {\n       if (i < 96) {\n         mockSuccessfulConnection('test-project-' + i);\n       } else {\n         mockFailedConnection('test-project-' + i);\n       }\n     }\n     \n     // Check analytics\n     const analytics = await getConnectionAnalytics();\n     expect(analytics.successRate).toBe(96);\n     expect(analytics.isAboveTarget).toBe(true);\n   });\n   ```",
+        "status": "pending",
+        "dependencies": [
+          20,
+          23
+        ],
+        "priority": "high",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Set up environment variables and database schema",
+            "description": "Configure environment variables for Supabase API integration and create database schema for storing connection details",
+            "dependencies": [],
+            "details": "Following section 1.1-1.3 of the implementation plan, set up required environment variables in .env.local and .env.production files (SUPABASE_CLIENT_ID, SUPABASE_CLIENT_SECRET, OAUTH_REDIRECT_URI). Create database migration at db/migrations/20250122_add_supabase_connections.sql to add the supabase_connections table with fields for project_id, supabase_project_id, api_url, anon_key, and service_role_key (encrypted). Update prisma schema at prisma/schema.prisma (lines 120-130) to include the new model.\n<info added on 2025-08-22T23:05:30.787Z>\nFirst, read docs/implementation-plans/supabase-oauth-integration-plan-2025-01-22.md to understand the full context and architecture. Then, following Phase 1: Core OAuth Infrastructure (Week 1) section 1.1-1.2 (lines 145-173) of the implementation plan,\n</info added on 2025-08-22T23:05:30.787Z>",
+            "status": "pending",
+            "testStrategy": "Verify database migration runs successfully. Test environment variable loading in development and production environments. Validate schema constraints with sample data insertion and retrieval."
+          },
+          {
+            "id": 2,
+            "title": "Implement OAuth service layer",
+            "description": "Create service functions for handling Supabase OAuth initialization, callback processing, and token management",
+            "dependencies": [
+              "26.1"
+            ],
+            "details": "Following section 2.1-2.4 of the implementation plan, implement the OAuth service layer at src/services/supabaseOAuth.ts (lines 15-120). Create functions for initiateSupabaseOAuth(), handleOAuthCallback(), validateOAuthState(), and exchangeCodeForToken(). Implement secure state parameter generation and validation to prevent CSRF attacks. Add token storage and retrieval functions with proper encryption.\n<info added on 2025-08-22T23:06:52.813Z>\nFirst, read docs/implementation-plans/supabase-oauth-integration-plan-2025-01-22.md to understand the full context. Focus on Phase 1: Core OAuth Infrastructure section 1.3 (lines 173-186) for OAuth Service Layer specifications. Then implement the OAuth service layer\n</info added on 2025-08-22T23:06:52.813Z>",
+            "status": "pending",
+            "testStrategy": "Unit test each OAuth function with mocked API responses. Verify secure state generation and validation. Test token exchange with mock Supabase API. Validate error handling for various failure scenarios."
+          },
+          {
+            "id": 3,
+            "title": "Create Supabase connection state management",
+            "description": "Implement state management for Supabase connection status and integration with project context",
+            "dependencies": [
+              "26.2"
+            ],
+            "details": "Following section 3.1-3.3 of the implementation plan, create a custom hook at src/hooks/useSupabaseConnection.ts (lines 10-85) to manage connection state. Implement functions to check connection status, initiate connection, and store connection details. Update the ProjectContext at src/contexts/ProjectContext.tsx (lines 45-60) to include Supabase connection state and methods. Add connection caching to minimize API calls as specified in lines 70-85 of the implementation plan.\n<info added on 2025-08-22T23:08:37.805Z>\nFirst, read docs/implementation-plans/supabase-oauth-integration-plan-2025-01-22.md for full context. Focus on Phase 1: Core OAuth Infrastructure section 1.4 (lines 187-214) for State Management specifications. Then create a custom hook\n</info added on 2025-08-22T23:08:37.805Z>",
+            "status": "pending",
+            "testStrategy": "Test hook behavior with various connection states. Verify context integration and state persistence. Test caching mechanism with simulated page reloads."
+          },
+          {
+            "id": 4,
+            "title": "Develop UI components for Supabase connection",
+            "description": "Create the SupabaseConnectButton component and connection status indicator with proper loading states",
+            "dependencies": [
+              "26.3"
+            ],
+            "details": "Following section 4.1-4.3 of the implementation plan, implement the SupabaseConnectButton component at src/components/supabase/SupabaseConnectButton.tsx (lines 10-60) with states for disconnected, connecting, and connected. Create the ConnectionStatusIndicator component at src/components/supabase/ConnectionStatusIndicator.tsx (lines 5-40) to show current connection state. Implement loading animations and success confirmation UI as specified in lines 45-70 of the implementation plan.\n<info added on 2025-08-22T23:08:52.850Z>\nFirst, read docs/implementation-plans/supabase-oauth-integration-plan-2025-01-22.md for context. Focus on Phase 2: UI Integration section 2.1-2.2 (lines 217-252) for UI component specifications. Then implement the SupabaseConnectButton component...\n</info added on 2025-08-22T23:08:52.850Z>",
+            "status": "pending",
+            "testStrategy": "Test component rendering in all states. Verify button behavior during connection flow. Test accessibility compliance. Validate responsive design on different screen sizes."
+          },
+          {
+            "id": 5,
+            "title": "Integrate Supabase connection into ProjectDesign page",
+            "description": "Update the ProjectDesign page to include Supabase connection functionality and status display",
+            "dependencies": [
+              "26.3",
+              "26.4"
+            ],
+            "details": "Following section 5.1-5.3 of the implementation plan, modify src/pages/projects/[id]/design.tsx (lines 120-150) to replace the 'Open Editor' button with the SupabaseConnectButton. Add connection status display to the project header. Update the page to reflect connection status and enable/disable the 'Build' button based on connection state. Implement connection status persistence across page reloads using the project context.\n<info added on 2025-08-22T23:09:07.152Z>\nFirst, read docs/implementation-plans/supabase-oauth-integration-plan-2025-01-22.md for context. Focus on Phase 2: UI Integration section 2.3 (lines 253-319) for ProjectDesign Integration details. Then modify src/pages/projects/[id]/design.tsx...\n</info added on 2025-08-22T23:09:07.152Z>",
+            "status": "pending",
+            "testStrategy": "Test page rendering with various connection states. Verify button state changes based on connection status. Test navigation flow after successful connection. Validate error message display for failed connections."
+          },
+          {
+            "id": 6,
+            "title": "Implement OAuth callback handling API routes",
+            "description": "Create API routes for OAuth initialization and callback handling with proper error management",
+            "dependencies": [
+              "26.2"
+            ],
+            "details": "Following section 6.1-6.4 of the implementation plan, create API routes at src/pages/api/supabase/oauth/initialize.ts (lines 5-40) and src/pages/api/supabase/oauth/callback.ts (lines 5-80). Implement secure state validation, code exchange for tokens, and error handling. Set up automatic Supabase project creation upon successful OAuth as specified in lines 90-130, including default database schema setup for Velocity projects.\n<info added on 2025-08-22T23:09:20.858Z>\nFirst, read docs/implementation-plans/supabase-oauth-integration-plan-2025-01-22.md for context. Focus on Phase 3: OAuth Flow Implementation section 3.1-3.2 (lines 322-348) and Phase 4: Backend Integration section 4.1 (lines 353-373) for API route specifications. Then create API routes at src/pages/api/supabase/oauth/initialize.ts (lines 5-40) and src/pages/api/supabase/oauth/callback.ts (lines 5-80). Implement secure state validation, code exchange for tokens, and error handling. Set up automatic Supabase project creation upon successful OAuth as specified in lines 90-130, including default database schema setup for Velocity projects.\n</info added on 2025-08-22T23:09:20.858Z>",
+            "status": "pending",
+            "testStrategy": "Test API routes with various request scenarios. Verify state validation prevents CSRF attacks. Test successful and failed OAuth flows. Validate Supabase project creation and schema initialization."
+          },
+          {
+            "id": 7,
+            "title": "Implement security measures and token handling",
+            "description": "Add security features including secure token storage, rate limiting, and audit logging",
+            "dependencies": [
+              "26.2",
+              "26.6"
+            ],
+            "details": "Following section 7.1-7.4 of the implementation plan, implement secure token storage using HttpOnly cookies at src/utils/auth/tokenStorage.ts (lines 10-50). Add rate limiting middleware for OAuth endpoints at src/middleware/rateLimit.ts (lines 5-30). Implement comprehensive security logging at src/utils/logging/securityLogger.ts (lines 5-40) for audit purposes. Ensure secure transmission of API keys as specified in lines 60-80 of the implementation plan.\n<info added on 2025-08-22T23:09:34.087Z>\nFirst, read docs/implementation-plans/supabase-oauth-integration-plan-2025-01-22.md for context. Focus on Security Considerations section (lines 391-413) and Phase 4: Backend Integration section 4.2 (lines 374-383) for security specifications. Then implement secure token storage...\n</info added on 2025-08-22T23:09:34.087Z>",
+            "status": "pending",
+            "testStrategy": "Test token storage security with various scenarios. Verify rate limiting prevents abuse. Test logging captures required security events. Validate secure transmission of sensitive data."
+          },
+          {
+            "id": 8,
+            "title": "Implement testing and validation procedures",
+            "description": "Create comprehensive tests for the OAuth flow and implement monitoring for connection success rates",
+            "dependencies": [
+              "26.1",
+              "26.2",
+              "26.3",
+              "26.4",
+              "26.5",
+              "26.6",
+              "26.7"
+            ],
+            "details": "Following section 8.1-8.4 of the implementation plan, create end-to-end tests at tests/e2e/supabaseConnection.spec.ts (lines 10-100) to validate the complete OAuth flow. Implement unit tests for individual components at tests/unit/supabase/*.test.ts. Set up monitoring for OAuth success rates at src/utils/monitoring/oauthMetrics.ts (lines 5-40). Create user-friendly error messages and recovery paths as specified in lines 50-70 of the implementation plan.\n<info added on 2025-08-22T23:09:46.255Z>\nFirst, read docs/implementation-plans/supabase-oauth-integration-plan-2025-01-22.md for full context. Focus on Testing Strategy section (lines 415-438) and Success Criteria section (lines 479-500) for testing requirements and success metrics. Then create end-to-end tests...\n</info added on 2025-08-22T23:09:46.255Z>",
+            "status": "pending",
+            "testStrategy": "Run end-to-end tests simulating complete user flow. Verify all unit tests pass with good coverage. Test error scenarios and recovery paths. Validate monitoring captures required metrics for success rate tracking."
+          }
+        ]
+      },
+      {
+        "id": 27,
+        "title": "Implement Editor/Preview Page for Velocity",
+        "description": "Create a full-stack development environment with a four-panel layout that provides code editing, real-time preview, file exploration, and AI assistance for both frontend and backend development with Supabase integration.",
+        "details": "## Implementation Details\n\n1. **Route Setup and Authentication**\n   - Create a new route `/project/:id/editor` in the application router\n   - Implement authentication middleware to verify user access\n   - Add project ownership validation using Supabase RLS policies\n   - Set up route parameters and query handling for initial file selection\n\n2. **Four-Panel Responsive Layout**\n   - Implement a responsive grid layout with four main panels:\n     - File Explorer (left): Collapsible, resizable panel\n     - Code Editor (center-left): Monaco-based editor with tabs\n     - Live Preview (center-right): Device simulation with Appetize.io\n     - AI Assistant (right): Collapsible, context-aware helper\n   - Use CSS Grid with responsive breakpoints for different screen sizes\n   - Implement panel resizing with drag handles using react-resizable\n   - Add panel collapse/expand functionality with state persistence\n\n3. **Enhanced File Explorer Integration**\n   - Extend existing FileExplorer component to support both frontend and backend files\n   - Implement file type categorization (Frontend/Backend/Config)\n   - Add visual indicators for file types and status (modified, new, etc.)\n   - Implement context menus for file operations (create, rename, delete)\n   - Add drag-and-drop functionality for file organization\n\n4. **Monaco Editor Integration**\n   - Configure Monaco editor for multiple language support:\n     - JavaScript/TypeScript for React Native\n     - SQL for database operations\n     - JSON for configuration files\n   - Implement syntax highlighting and IntelliSense for all supported languages\n   - Add file type detection and appropriate editor configuration\n   - Implement auto-save functionality with debouncing\n   - Add keyboard shortcuts for common operations\n\n5. **Real-Time Preview System**\n   - Integrate with Appetize.io for mobile preview (leveraging Task #4)\n   - Implement hot reload functionality for frontend changes\n   - Create backend preview system for API and database operations\n   - Develop preview refresh mechanism with minimal latency\n   - Add preview device selection and orientation controls\n   - Implement preview error handling and status indicators\n\n6. **Supabase Backend Integration**\n   - Create database schema editor with visual and code views\n   - Implement Edge Function development environment\n   - Add real-time database browser with CRUD operations\n   - Create API testing panel with request/response visualization\n   - Implement SQL query editor with execution capabilities\n   - Add database migration management tools\n\n7. **AI-Powered Code Generation**\n   - Integrate existing Claude AI system (from Task #3)\n   - Enhance context awareness with current file and project structure\n   - Implement code suggestion and completion features\n   - Add full-stack code generation with frontend-backend coordination\n   - Create AI assistant panel with conversation history\n   - Implement code explanation and documentation generation\n\n8. **Performance Optimization**\n   - Implement code splitting and lazy loading for editor components\n   - Add caching for preview generation to reduce rebuild time\n   - Optimize file operations with batched updates\n   - Implement efficient state management with Zustand\n   - Add background processing for resource-intensive operations\n   - Create performance monitoring and reporting system\n\n9. **Deployment Pipeline Integration**\n   - Add one-click deployment capabilities for frontend and backend\n   - Implement deployment configuration management\n   - Create deployment history and rollback functionality\n   - Add environment variable management for different stages\n   - Implement deployment status monitoring and notifications\n\n10. **User Experience Enhancements**\n    - Add keyboard shortcuts for common operations\n    - Implement user preferences for editor and preview settings\n    - Create onboarding tooltips for first-time users\n    - Add progress indicators for long-running operations\n    - Implement error handling with user-friendly messages\n    - Create session persistence for editor state",
+        "testStrategy": "## Test Strategy\n\n1. **Unit Testing Core Components**\n   - Test route authentication and authorization with various user scenarios\n   - Verify panel layout responsiveness across different screen sizes\n   - Test file explorer operations (create, rename, delete, move)\n   - Validate Monaco editor configuration for different file types\n   - Test AI assistant context awareness and response quality\n   - Verify Supabase integration for database and Edge Function operations\n\n2. **Integration Testing**\n   - Test end-to-end workflow from code editing to preview generation\n   - Verify hot reload functionality for frontend and backend changes\n   - Test file synchronization between explorer and editor\n   - Validate AI code generation with subsequent preview updates\n   - Test database operations from schema changes to preview updates\n   - Verify deployment pipeline from editor to live environment\n\n3. **Performance Testing**\n   - Measure page load time (target: < 2 seconds)\n   - Test hot reload latency (target: < 1 second)\n   - Verify editor responsiveness with large files\n   - Measure preview generation time for complex applications\n   - Test system performance with multiple panels active\n   - Validate memory usage during extended editing sessions\n\n4. **User Experience Testing**\n   - Conduct usability testing with different user personas\n   - Test accessibility compliance (WCAG 2.1 AA)\n   - Verify keyboard navigation and shortcuts\n   - Test error handling and recovery scenarios\n   - Validate session persistence across page reloads\n   - Measure user session retention (target: > 80% after 10 minutes)\n\n5. **Cross-Browser and Device Testing**\n   - Test on major browsers (Chrome, Firefox, Safari, Edge)\n   - Verify functionality on different operating systems\n   - Test on various screen sizes and resolutions\n   - Validate touch interactions on touch-enabled devices\n   - Test with different network conditions (fast, slow, intermittent)\n\n6. **Security Testing**\n   - Verify authentication and authorization mechanisms\n   - Test for common vulnerabilities (XSS, CSRF)\n   - Validate secure handling of API keys and credentials\n   - Test rate limiting and abuse prevention\n   - Verify data isolation between different users and projects\n\n7. **Acceptance Criteria Validation**\n   - Verify all key requirements are implemented and functional\n   - Test code generation accuracy (target: > 85%)\n   - Validate user session retention (target: > 80% after 10 minutes)\n   - Verify uptime and reliability (target: 99.5%)\n   - Test integration with existing components and systems",
+        "status": "pending",
+        "dependencies": [
+          26,
+          4,
+          3,
+          2,
+          20
+        ],
+        "priority": "high",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Route Setup and Page Infrastructure",
+            "description": "Implement authentication, routing, and basic page structure for the editor/preview page",
+            "dependencies": [],
+            "details": "Begin by reading the implementation plan (docs/implementation-plans/editor-preview-page-implementation-plan-2025-01-22.md) and architecture documents. Focus on Phase 1, Week 1-2 (lines 10-45) to implement the route `/project/:id/editor` with authentication middleware, project ownership validation using Supabase RLS policies, and route parameter handling. Create the basic four-panel responsive layout structure with CSS Grid and implement panel resizing with react-resizable. Set up state management with Zustand for editor state persistence.\n<info added on 2025-08-22T23:17:58.147Z>\nUpdated subtask 27.1 with the requested documentation references and corrected section numbers.\n</info added on 2025-08-22T23:17:58.147Z>",
+            "status": "pending",
+            "testStrategy": "Test route authentication with various user scenarios (authenticated, unauthenticated, authorized, unauthorized). Verify panel layout responsiveness across different screen sizes. Test panel resizing and collapsing functionality."
+          },
+          {
+            "id": 2,
+            "title": "Enhanced File Explorer for Full-Stack",
+            "description": "Extend the existing FileExplorer component to support both frontend and backend files",
+            "dependencies": [
+              "27.1"
+            ],
+            "details": "Review the implementation plan sections on File Explorer (lines 50-75) and extend the existing FileExplorer component to support both frontend and backend files. Implement file type categorization (Frontend/Backend/Config) with visual indicators for file types and status. Add context menus for file operations (create, rename, delete) and implement drag-and-drop functionality for file organization. Create folder structure for backend files including database schemas, edge functions, and API routes.\n<info added on 2025-08-22T23:18:13.009Z>\nFirst, read both docs/implementation-plans/editor-preview-page-implementation-plan-2025-01-22.md and docs/feature-plans/editor-preview-page-architecture.md for complete context. Focus on section 1.2 Enhanced File Explorer (lines 236-244) of the implementation plan and Architecture section 4 File System & Project Management (lines 143-206) for full-stack project structure. Then extend the existing FileExplorer component to support both frontend and backend files. Implement file type categorization (Frontend/Backend/Config) with visual indicators for file types and status. Add context menus for file operations (create, rename, delete) and implement drag-and-drop functionality for file organization. Create folder structure for backend files including database schemas, edge functions, and API routes.\n</info added on 2025-08-22T23:18:13.009Z>",
+            "status": "pending",
+            "testStrategy": "Test file explorer operations (create, rename, delete, move) for both frontend and backend files. Verify file type detection and categorization. Test context menu operations and drag-and-drop functionality."
+          },
+          {
+            "id": 3,
+            "title": "Enhanced Editor Container with Backend Support",
+            "description": "Configure Monaco editor for multiple language support including SQL and backend JavaScript/TypeScript",
+            "dependencies": [
+              "27.1",
+              "27.2"
+            ],
+            "details": "Following the implementation plan (lines 80-110), configure Monaco editor for multiple language support including JavaScript/TypeScript for React Native, SQL for database operations, and JSON for configuration files. Implement syntax highlighting and IntelliSense for all supported languages. Add file type detection and appropriate editor configuration based on file extension. Implement auto-save functionality with debouncing and add keyboard shortcuts for common operations.\n<info added on 2025-08-22T23:18:29.944Z>\nLooking at the user request, I need to generate new text that starts with the specific phrase and then continues with the existing details. The user wants me to prepend specific instructions about reading documentation files.\n\nFirst, read both docs/implementation-plans/editor-preview-page-implementation-plan-2025-01-22.md and docs/feature-plans/editor-preview-page-architecture.md for complete context. Focus on section 1.3 Enhanced Editor Container (lines 245-263) of the implementation plan. Then configure Monaco editor for multiple language support including JavaScript/TypeScript for React Native, SQL for database operations, and JSON for configuration files. Implement syntax highlighting and IntelliSense for all supported languages. Add file type detection and appropriate editor configuration based on file extension. Implement auto-save functionality with debouncing and add keyboard shortcuts for common operations.\n</info added on 2025-08-22T23:18:29.944Z>",
+            "status": "pending",
+            "testStrategy": "Test Monaco editor configuration for different file types. Verify syntax highlighting and IntelliSense functionality. Test auto-save with various change scenarios. Validate keyboard shortcuts for common operations."
+          },
+          {
+            "id": 4,
+            "title": "Backend File Management Components",
+            "description": "Create specialized components for managing database schemas, edge functions, and API routes",
+            "dependencies": [
+              "27.2",
+              "27.3"
+            ],
+            "details": "Based on the implementation plan (lines 115-145), create database schema editor with visual and code views. Implement Edge Function development environment with appropriate templates and scaffolding. Add real-time database browser with CRUD operations and create API testing panel with request/response visualization. Implement SQL query editor with execution capabilities and add database migration management tools.\n<info added on 2025-08-22T23:18:44.320Z>\nFirst, read both docs/implementation-plans/editor-preview-page-implementation-plan-2025-01-22.md and docs/feature-plans/editor-preview-page-architecture.md for complete context. Focus on Phase 2: Supabase Backend Integration sections 2.1-2.3 (lines 256-318) of the implementation plan and Architecture section 5 Enhanced Preview System (lines 208-232). Then create database schema editor with visual and code views. Implement Edge Function development environment with appropriate templates and scaffolding. Add real-time database browser with CRUD operations and create API testing panel with request/response visualization. Implement SQL query editor with execution capabilities and add database migration management tools.\n</info added on 2025-08-22T23:18:44.320Z>",
+            "status": "pending",
+            "testStrategy": "Test database schema editor with various schema definitions. Verify Edge Function development environment with function creation and testing. Test database browser CRUD operations and API testing panel functionality."
+          },
+          {
+            "id": 5,
+            "title": "Full-Stack Preview Panel Integration",
+            "description": "Implement preview system for both frontend and backend components",
+            "dependencies": [
+              "27.3",
+              "27.4"
+            ],
+            "details": "Following the implementation plan (lines 150-180), integrate with Appetize.io for mobile preview. Implement preview system for backend components including API endpoints and database operations. Create unified preview panel that can switch between frontend and backend views. Add preview device selection and orientation controls for frontend and request method selection for backend. Implement preview error handling and status indicators.\n<info added on 2025-08-22T23:18:59.635Z>\nFirst, read both docs/implementation-plans/editor-preview-page-implementation-plan-2025-01-22.md and docs/feature-plans/editor-preview-page-architecture.md for complete context. Focus on Phase 3: Enhanced Preview System sections 3.1-3.3 (lines 319-379) of the implementation plan and Architecture section 5 (lines 208-232) for preview system details. Then integrate with Appetize.io for mobile preview. Implement preview system for backend components including API endpoints and database operations. Create unified preview panel that can switch between frontend and backend views. Add preview device selection and orientation controls for frontend and request method selection for backend. Implement preview error handling and status indicators.\n</info added on 2025-08-22T23:18:59.635Z>",
+            "status": "pending",
+            "testStrategy": "Test frontend preview with various device configurations. Verify backend preview functionality for API endpoints and database operations. Test switching between frontend and backend preview modes."
+          },
+          {
+            "id": 6,
+            "title": "Hot Reload Enhancement for Backend",
+            "description": "Implement hot reload functionality for backend changes including database schemas and edge functions",
+            "dependencies": [
+              "27.4",
+              "27.5"
+            ],
+            "details": "Based on the implementation plan (lines 185-210), develop hot reload functionality for backend changes. Implement efficient change detection for database schemas and edge functions. Create preview refresh mechanism with minimal latency for backend components. Add background compilation and deployment for edge functions during development. Implement database schema change detection and migration generation.\n<info added on 2025-08-22T23:19:13.844Z>\nFirst, read both docs/implementation-plans/editor-preview-page-implementation-plan-2025-01-22.md and docs/feature-plans/editor-preview-page-architecture.md for complete context. Focus on section 3.2 Hot Reload Enhancement (lines 337-365) of the implementation plan. Then develop hot reload functionality for backend changes. Implement efficient change detection for database schemas and edge functions. Create preview refresh mechanism with minimal latency for backend components. Add background compilation and deployment for edge functions during development. Implement database schema change detection and migration generation.\n</info added on 2025-08-22T23:19:13.844Z>",
+            "status": "pending",
+            "testStrategy": "Test hot reload functionality with various backend change scenarios. Verify change detection for database schemas and edge functions. Test preview refresh latency and background compilation/deployment."
+          },
+          {
+            "id": 7,
+            "title": "Error Handling and Debugging Console",
+            "description": "Implement comprehensive error handling and debugging tools for both frontend and backend development",
+            "dependencies": [
+              "27.5",
+              "27.6"
+            ],
+            "details": "Following the implementation plan (lines 215-240), create unified error handling system for both frontend and backend errors. Implement debugging console with log visualization and filtering capabilities. Add error highlighting in code editor with quick-fix suggestions. Create error notification system with severity levels and actionable feedback. Implement runtime inspection tools for both frontend and backend components.\n<info added on 2025-08-22T23:19:26.857Z>\nFirst, read both docs/implementation-plans/editor-preview-page-implementation-plan-2025-01-22.md and docs/feature-plans/editor-preview-page-architecture.md for complete context. Focus on section 3.3 Error Handling and Debugging (lines 366-379) of the implementation plan. Then create unified error handling system for both frontend and backend errors. Implement debugging console with log visualization and filtering capabilities. Add error highlighting in code editor with quick-fix suggestions. Create error notification system with severity levels and actionable feedback. Implement runtime inspection tools for both frontend and backend components.\n</info added on 2025-08-22T23:19:26.857Z>",
+            "status": "pending",
+            "testStrategy": "Test error handling with various error scenarios in both frontend and backend. Verify debugging console functionality with log visualization and filtering. Test error highlighting and quick-fix suggestions in code editor."
+          },
+          {
+            "id": 8,
+            "title": "AI Assistant Integration for Full-Stack",
+            "description": "Enhance the AI assistant to provide context-aware help for both frontend and backend development",
+            "dependencies": [
+              "27.3",
+              "27.4"
+            ],
+            "details": "Based on the implementation plan (lines 245-275), integrate existing Claude AI system with enhanced context awareness for both frontend and backend files. Implement code suggestion and completion features for all supported languages. Add full-stack code generation with frontend-backend coordination. Create AI assistant panel with conversation history and implement code explanation and documentation generation capabilities.\n<info added on 2025-08-22T23:19:42.133Z>\nFirst, read both docs/implementation-plans/editor-preview-page-implementation-plan-2025-01-22.md and docs/feature-plans/editor-preview-page-architecture.md for complete context. Focus on Phase 4: AI-Powered Full-Stack Development sections 4.1-4.2 (lines 380-417) of the implementation plan and Architecture section 3 AI-Powered Code Generation Workflow (lines 114-142). Then integrate existing Claude AI system with enhanced context awareness for both frontend and backend files. Implement code suggestion and completion features for all supported languages. Add full-stack code generation with frontend-backend coordination. Create AI assistant panel with conversation history and implement code explanation and documentation generation capabilities.\n</info added on 2025-08-22T23:19:42.133Z>",
+            "status": "pending",
+            "testStrategy": "Test AI assistant with various development scenarios for both frontend and backend. Verify code suggestion and completion features for all supported languages. Test full-stack code generation with frontend-backend coordination."
+          },
+          {
+            "id": 9,
+            "title": "Code Generation Templates and Patterns",
+            "description": "Implement code generation templates and patterns for common full-stack development scenarios",
+            "dependencies": [
+              "27.8"
+            ],
+            "details": "Following the implementation plan (lines 280-310), create code generation templates for common full-stack patterns such as CRUD operations, authentication flows, and data visualization. Implement template customization based on project requirements and user preferences. Add code snippet library with categorization and search functionality. Create guided code generation wizards for complex patterns with frontend-backend integration.\n<info added on 2025-08-22T23:19:55.800Z>\nFirst, read both docs/implementation-plans/editor-preview-page-implementation-plan-2025-01-22.md and docs/feature-plans/editor-preview-page-architecture.md for complete context. Focus on section 4.2 Code Generation Templates (lines 405-417) of the implementation plan. Then create code generation templates for common full-stack patterns such as CRUD operations, authentication flows, and data visualization. Implement template customization based on project requirements and user preferences. Add code snippet library with categorization and search functionality. Create guided code generation wizards for complex patterns with frontend-backend integration.\n</info added on 2025-08-22T23:19:55.800Z>",
+            "status": "pending",
+            "testStrategy": "Test code generation templates with various full-stack patterns. Verify template customization based on project requirements. Test code snippet library with categorization and search functionality."
+          },
+          {
+            "id": 10,
+            "title": "Security Implementation",
+            "description": "Implement security features for the editor/preview page including access control and secure data handling",
+            "dependencies": [
+              "27.1",
+              "27.4"
+            ],
+            "details": "Based on the implementation plan (lines 315-340), implement fine-grained access control for editor features based on user roles and permissions. Add secure handling of sensitive data such as API keys and environment variables. Implement secure communication between frontend and backend components. Create security scanning for code vulnerabilities and implement secure deployment pipeline with environment isolation.\n<info added on 2025-08-22T23:20:25.843Z>\nFirst, read both docs/implementation-plans/editor-preview-page-implementation-plan-2025-01-22.md and docs/feature-plans/editor-preview-page-architecture.md for complete context. Focus on Security & Performance Considerations section (lines 419-473) of the implementation plan and Architecture section 11 Security and Performance (lines 441-460). Then implement fine-grained access control for editor features based on user roles and permissions. Add secure handling of sensitive data such as API keys and environment variables. Implement secure communication between frontend and backend components. Create security scanning for code vulnerabilities and implement secure deployment pipeline with environment isolation.\n</info added on 2025-08-22T23:20:25.843Z>",
+            "status": "pending",
+            "testStrategy": "Test access control with various user roles and permissions. Verify secure handling of sensitive data. Test secure communication between frontend and backend components. Validate security scanning for code vulnerabilities."
+          },
+          {
+            "id": 11,
+            "title": "Performance Optimization",
+            "description": "Optimize editor/preview page performance for both frontend and backend operations",
+            "dependencies": [
+              "27.5",
+              "27.6",
+              "27.7"
+            ],
+            "details": "Following the implementation plan (lines 345-375), implement code splitting and lazy loading for editor components to reduce initial load time. Add caching for preview generation to reduce rebuild time. Optimize file operations with batched updates and implement efficient state management with Zustand. Add background processing for resource-intensive operations and create performance monitoring and reporting system.\n<info added on 2025-08-22T23:20:39.569Z>\nFirst, read both docs/implementation-plans/editor-preview-page-implementation-plan-2025-01-22.md and docs/feature-plans/editor-preview-page-architecture.md for complete context. Focus on Performance Optimization sections (lines 448-473) of the implementation plan and Architecture Performance section (lines 452-460). Then implement code splitting and lazy loading for editor components to reduce initial load time. Add caching for preview generation to reduce rebuild time. Optimize file operations with batched updates and implement efficient state management with Zustand. Add background processing for resource-intensive operations and create performance monitoring and reporting system.\n</info added on 2025-08-22T23:20:39.569Z>",
+            "status": "pending",
+            "testStrategy": "Test editor performance with large projects. Verify code splitting and lazy loading functionality. Test caching for preview generation with various change scenarios. Validate performance monitoring and reporting system."
+          },
+          {
+            "id": 12,
+            "title": "Testing and Validation",
+            "description": "Implement comprehensive testing and validation for the editor/preview page",
+            "dependencies": [
+              "27.1",
+              "27.2",
+              "27.3",
+              "27.4",
+              "27.5",
+              "27.6",
+              "27.7",
+              "27.8",
+              "27.9",
+              "27.10",
+              "27.11"
+            ],
+            "details": "Based on the implementation plan (lines 380-410), implement unit tests for all core components using Jest and React Testing Library. Add integration tests for editor-preview interaction and backend integration. Create end-to-end tests for complete user workflows using Cypress. Implement automated accessibility testing with axe-core and add performance benchmarking for critical operations. Create test fixtures for various project types and configurations.\n<info added on 2025-08-22T23:20:53.335Z>\nFirst, read both docs/implementation-plans/editor-preview-page-implementation-plan-2025-01-22.md and docs/feature-plans/editor-preview-page-architecture.md for complete context. Focus on Testing Strategy section (lines 474-523) of the implementation plan and Success Metrics section (lines 461-478) of the architecture document. Then implement unit tests for all core components using Jest and React Testing Library. Add integration tests for editor-preview interaction and backend integration. Create end-to-end tests for complete user workflows using Cypress. Implement automated accessibility testing with axe-core and add performance benchmarking for critical operations. Create test fixtures for various project types and configurations.\n</info added on 2025-08-22T23:20:53.335Z>",
+            "status": "pending",
+            "testStrategy": "Execute unit tests for all core components. Run integration tests for editor-preview interaction and backend integration. Perform end-to-end tests for complete user workflows. Validate accessibility compliance and performance benchmarks."
+          }
+        ]
       }
     ],
     "metadata": {
       "created": "2025-07-22T22:49:25.170Z",
-      "updated": "2025-08-22T22:28:56.463Z",
+      "updated": "2025-08-22T23:14:42.208Z",
       "description": "Tasks for master context"
     }
   }

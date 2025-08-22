@@ -88,11 +88,11 @@ USING (auth.uid() = user_id);
 #### 1. ProjectDesign.tsx (`frontend/src/pages/ProjectDesign.tsx`)
 **Current State**: 
 - Line 926-934: Disabled "Build" button ready for activation
-- Footer card structure perfect for adding Supabase connection
+- Top section has "Open Editor" button ready for replacement
 
 **Integration Point**: 
-- Add "Connect Supabase" button alongside "Build" button
-- Modify footer to show connection status
+- Replace the "Open Editor" button at the top of the Project Design page with "Connect Supabase" button
+- Footer to show connection status and additional actions
 
 #### 2. Supabase Client (`frontend/src/lib/supabase.ts`)
 **Current State**: 
@@ -251,11 +251,36 @@ export function SupabaseConnectButton({ projectId, onConnectionSuccess, classNam
 
 #### 2.3 ProjectDesign Integration
 **Files to Modify**:
-- `frontend/src/pages/ProjectDesign.tsx` (lines 926-936)
+- `frontend/src/pages/ProjectDesign.tsx` (top section and footer)
 
 **Changes**:
+
+1. **Replace "Open Editor" button at the top of the page**:
 ```tsx
-// Replace existing footer (lines 926-936)
+// Replace existing "Open Editor" button in the top section
+<Button
+  variant="outline"
+  size="sm"
+  onClick={handleSupabaseConnection}
+  disabled={isSupabaseConnected}
+>
+  {isSupabaseConnected ? (
+    <>
+      <Check className="w-4 h-4 mr-2" />
+      Supabase Connected
+    </>
+  ) : (
+    <>
+      <Database className="w-4 h-4 mr-2" />
+      Connect Supabase
+    </>
+  )}
+</Button>
+```
+
+2. **Update footer for status and additional actions**:
+```tsx
+// Update footer (lines 926-936)
 <CardFooter className="p-4">
   <div className="flex gap-2 w-full">
     <Button
@@ -270,16 +295,6 @@ export function SupabaseConnectButton({ projectId, onConnectionSuccess, classNam
         <div className="ml-auto w-2 h-2 rounded-full bg-green-500" />
       )}
     </Button>
-    
-    {/* New Supabase Connection Button */}
-    <SupabaseConnectButton 
-      projectId={projectId} 
-      className="flex-1"
-      onConnectionSuccess={(project) => {
-        // Enable build button
-        // Show success notification
-      }}
-    />
     
     <Button
       variant="outline"
