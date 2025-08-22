@@ -23,8 +23,6 @@ import {
 import { SnackProjects } from './pages/SnackProjects'
 import { SnackEditor } from './pages/SnackEditor'
 import { AuthCallback } from './pages/AuthCallback'
-import { CompareEditors } from './pages/CompareEditors'
-import TestPRDEditorV2 from './pages/TestPRDEditorV2'
 import { PRDEditorDemo } from './pages/PRDEditorDemo'
 import { Modal } from './components/ui/modal'
 import { SignupForm } from './components/ui/signup-form'
@@ -297,11 +295,6 @@ function App() {
           {/* Auth callback route */}
           <Route path="/auth/callback" element={<AuthCallback />} />
           
-          {/* Test comparison route */}
-          <Route path="/compare-editors" element={<CompareEditors />} />
-          
-          {/* Test PRD Editor V2 */}
-          <Route path="/test-prd-v2" element={<TestPRDEditorV2 />} />
           
           {/* New PRD Editor Demo */}
           <Route path="/prd-editor" element={<PRDEditorDemo />} />

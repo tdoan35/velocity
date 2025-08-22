@@ -1,89 +1,74 @@
-# PRD Editors - Separated Structure
+# PRD Editors - Baseline Implementation
 
-This directory contains all PRD editor implementations, now properly separated for easier management and maintenance.
+This directory contains the production-ready PRD editor implementation that is used in the main Velocity application.
 
 ## Directory Structure
 
 ```
 prd-editors/
-├── shared/                           # Shared utilities across all editors
-│   ├── components/                   # Shared components (PRDStatusBadge)
-│   ├── hooks/                        # Shared hooks (useAutoSave, usePRDSections)
-│   └── utils/                        # Shared utilities (debugTools, transactionManager)
-│
-├── notion-original/                  # Original NotionPRDEditor
-│   ├── NotionPRDEditor.tsx          # Single-document TipTap editor
-│   └── index.ts                     # Export file
-│
-├── notion-enhanced/                  # Enhanced NotionPRDEditor  
-│   ├── NotionPRDEditor.enhanced.tsx # Enhanced version with section management
-│   ├── extensions/                   # TipTap extensions (PRDSectionNode)
-│   └── index.ts                     # Export file
-│
-├── block-based/                      # Block-based editor with @dnd-kit
-│   ├── BlockBasedPRDEditor.tsx      # Original block-based editor
-│   ├── BlockBasedPRDEditor.enhanced.tsx # Enhanced block-based editor
-│   ├── components/                   # Block controls and wrappers
-│   ├── dnd/                         # @dnd-kit components
-│   ├── blocks/                      # Block type editors
-│   └── index.ts                     # Export file
-│
-├── editor-v2/                       # V2 editor with hello-pangea/dnd
-│   ├── PRDEditorV2.tsx              # Main V2 editor
-│   ├── SectionEditor*.tsx           # Section editors
-│   ├── components/                   # V2 specific components
-│   ├── stores/                      # V2 specific stores
-│   └── index.ts                     # Export file
-│
-└── baseline/                        # New baseline editor (from new-prd/)
-    ├── BlockNotionPRDEditor.tsx     # Baseline editor implementation
+└── baseline/                        # Production PRD editor
+    ├── BlockNotionPRDEditor.tsx     # Main editor component
     ├── blocks/                      # Block components
-    └── index.ts                     # Export file
+    │   ├── NotionRichTextEditor.tsx # Rich text editing blocks
+    │   ├── SectionBlockControls.tsx # Section control components
+    │   ├── SectionBlockEditor.tsx   # Section editing blocks
+    │   └── SimpleBlockControls.tsx  # Simple control components
+    ├── components/                  # Shared components
+    │   └── PRDStatusBadge.tsx      # Status badge component
+    ├── dnd/                        # Drag and drop functionality
+    │   ├── DndProvider.tsx         # DnD context provider
+    │   ├── DragOverlay.tsx         # Drag overlay component
+    │   ├── DropIndicator.tsx       # Drop indicator component
+    │   ├── SortableSection.tsx     # Sortable section wrapper
+    │   └── index.ts                # DnD exports
+    └── index.ts                    # Main exports
 ```
 
 ## Usage
 
-Each editor can now be imported cleanly:
+Import the baseline PRD editor in your components:
 
 ```typescript
-// Notion Original
-import { NotionPRDEditor } from '@/components/prd-editors/notion-original'
-
-// Block-based Enhanced
-import { EnhancedBlockBasedPRDEditor } from '@/components/prd-editors/block-based'
-
-// Editor V2
-import { PRDEditorV2, usePRDEditorStore } from '@/components/prd-editors/editor-v2'
-
-// Baseline
+// Main production editor
 import { BlockNotionPRDEditor } from '@/components/prd-editors/baseline'
+
+// Used in ProjectDesign.tsx
+<BlockNotionPRDEditor projectId={projectId} />
 ```
 
-## Routes Updated
+## Features
 
-- `/compare-editors` - Uses all editors for comparison
-- `/prd-editor` - Uses the baseline editor
-- `/test-prd-v2` - Uses the V2 editor
+- **Rich Text Editing**: Notion-like block-based editing experience
+- **Drag & Drop**: Reorder sections with @dnd-kit integration
+- **Section Management**: Add, edit, and organize PRD sections
+- **Auto-save**: Automatic saving of changes
+- **Status Tracking**: Visual status indicators for PRD progress
+- **Responsive Design**: Works across desktop and mobile devices
 
-## Benefits
+## Routes
 
-1. **Isolated Dependencies**: Each editor only contains what it needs
-2. **Easy Deprecation**: Remove entire directories when editors are no longer needed
-3. **Clear Ownership**: Each editor has its own space for development  
-4. **Reduced Complexity**: No more interdependencies between different editor approaches
-5. **Easier Testing**: Test each editor implementation independently
+- Main application: Used in `/project/:id` (ProjectDesign component)
+- Demo page: Available at `/prd-editor` (PRDEditorDemo component)
 
-## Migration Status
+## Migration Notes
 
-✅ All editor files moved to new structure
-✅ Import paths updated in consuming components  
-✅ Index files created for clean imports
-✅ Shared utilities moved to common location
-⚠️  Some minor TypeScript errors remain (mainly unused variables)
+✅ **Cleanup Completed (August 2024)**
+- Removed deprecated editor implementations (block-based, editor-v2, notion-enhanced, notion-original)
+- Removed shared directory dependencies
+- Self-contained implementation with no external editor dependencies
+- Removed comparison and test demo pages
+- Updated routing to reflect current structure
 
-## Next Steps
+## Architecture
 
-1. Test each editor route individually
-2. Fix remaining TypeScript issues
-3. Deprecate unused editors once final decision is made
-4. Update documentation for chosen editor approach
+The baseline editor is built with:
+- **React + TypeScript**: Type-safe component architecture
+- **TipTap Editor**: Rich text editing capabilities
+- **@dnd-kit**: Modern drag and drop functionality
+- **Framer Motion**: Smooth animations and transitions
+- **Supabase**: Backend integration for data persistence
+- **Tailwind CSS**: Utility-first styling approach
+
+## Maintenance
+
+This is the **single source of truth** for PRD editing functionality in Velocity. All new features and improvements should be made to this baseline implementation.

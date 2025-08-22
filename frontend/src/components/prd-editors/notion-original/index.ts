@@ -1,1 +1,0 @@
-export { NotionPRDEditor } from './NotionPRDEditor'
