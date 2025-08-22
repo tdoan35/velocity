@@ -92,9 +92,10 @@ export function SharePreviewDialog({
       })
     } catch (error) {
       console.error('Failed to create share link:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create share link'
       toast({
         title: 'Error',
-        description: error.message || 'Failed to create share link',
+        description: errorMessage,
         variant: 'destructive'
       })
     } finally {

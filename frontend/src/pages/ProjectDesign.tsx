@@ -37,17 +37,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-// AlertDialog component not yet implemented
-// import {
-//   AlertDialog,
-//   AlertDialogAction,
-//   AlertDialogCancel,
-//   AlertDialogContent,
-//   AlertDialogDescription,
-//   AlertDialogFooter,
-//   AlertDialogHeader,
-//   AlertDialogTitle,
-// } from '@/components/ui/alert-dialog'
 import {
   Popover,
   PopoverContent,
@@ -918,21 +907,32 @@ export function ProjectDesign() {
                     )}
                   </AnimatePresence>
                 </CardContent>
-                {/* Card Footer with View PRD Button */}
+                {/* Card Footer with View PRD and Build Buttons */}
                 {!showHistory && activeAgent === 'project_manager' && (
                   <CardFooter className="p-4 border-t border-gray-300 dark:border-gray-700/50">
-                    <Button
-                      variant={showPRD ? "default" : "outline"}
-                      size="sm"
-                      className="w-full"
-                      onClick={() => setShowPRD(!showPRD)}
-                    >
-                      <FileText className="w-4 h-4 mr-2" />
-                      {showPRD ? 'Show Chat' : 'View PRD'}
-                      {hasPRD && !showPRD && (
-                        <div className="ml-auto w-2 h-2 rounded-full bg-green-500" />
-                      )}
-                    </Button>
+                    <div className="flex gap-2 w-full">
+                      <Button
+                        variant={showPRD ? "default" : "outline"}
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => setShowPRD(!showPRD)}
+                      >
+                        <FileText className="w-4 h-4 mr-2" />
+                        {showPRD ? 'Show Chat' : 'View PRD'}
+                        {hasPRD && !showPRD && (
+                          <div className="ml-auto w-2 h-2 rounded-full bg-green-500" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        disabled={true}
+                      >
+                        <Code2 className="w-4 h-4 mr-2" />
+                        Build
+                      </Button>
+                    </div>
                   </CardFooter>
                 )}
               </Card>

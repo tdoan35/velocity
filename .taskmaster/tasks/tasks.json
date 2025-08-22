@@ -2253,7 +2253,7 @@
         "description": "Complete refactoring of the drag-and-drop functionality in BlockBasedPRDEditor to replace the problematic native HTML5 implementation with @dnd-kit library, addressing all identified issues including multiple competing handlers, re-rendering during drag, event duplication, and state corruption.",
         "details": "## Context\nThis task implements the comprehensive solution outlined in:\n- Investigation Report: docs/drag-drop-investigation-report.md\n- Implementation Plan: docs/implementation-plans/dnd-kit-refactoring-plan.md\n\n## Critical Issues Being Addressed\n1. Multiple competing drag handlers causing event conflicts\n2. Component re-rendering during drag operations breaking the drag chain\n3. useDragCleanup hook creating 20+ duplicate events per drag\n4. Non-atomic operations leading to corrupted content structure\n5. TipTap editor interference with custom drag implementation\n\n## Solution Approach\nReplace the entire native HTML5 drag-and-drop implementation with @dnd-kit library, which provides:\n- Single source of truth for drag state\n- Framework-managed cleanup operations\n- Stable references preventing re-renders\n- Atomic state updates\n- Built-in accessibility and touch support\n\n## Success Criteria\n- Zero drag-related errors in console\n- Playwright drag tests pass 100%\n- Drag operations complete in < 100ms\n- No component re-renders during drag\n- Content structure remains intact after drag operations",
         "testStrategy": "1. Unit tests for all new DnD components\n2. E2E tests for section and content reordering\n3. Performance testing to verify < 100ms operations\n4. Manual testing on both desktop and touch devices\n5. Accessibility testing with keyboard navigation",
-        "status": "pending",
+        "status": "done",
         "dependencies": [],
         "priority": "high",
         "subtasks": [
@@ -2342,7 +2342,7 @@
               "25.7"
             ],
             "details": "Create unit tests for DndProvider, SortableSection, and SortableContentLine components. Add integration tests for section reordering and content line moving functionality. Update existing Playwright tests to work with @dnd-kit drag operations. Add performance testing to ensure drag operations complete in < 100ms. Implement accessibility testing for keyboard navigation and screen reader support. Create regression tests to prevent future drag-related issues.\n<info added on 2025-08-14T20:27:13.372Z>\nAdd specific performance validation with target metrics: drag operations must complete in < 100ms compared to current baseline of 71-112ms from investigation report. Include tests to verify fixes for \"Element Staleness\" issues where drag handles become detached from DOM elements and \"Event Chain Interruption\" problems that cause premature drag termination in Playwright tests. Implement E2E test scenarios from Phase 5.2 including multi-section drag sequences, cross-container moves, and rapid successive drag operations. Add regression tests that specifically reproduce and validate resolution of Playwright failure patterns: timeout during drag initiation, lost element references mid-drag, and incomplete drop events. Performance tests should benchmark drag latency, measure UI responsiveness during operations, and validate that accessibility features (keyboard navigation, screen reader announcements) maintain sub-100ms response times throughout drag sequences.\n</info added on 2025-08-14T20:27:13.372Z>\n<info added on 2025-08-14T20:35:19.155Z>\nFIRST: Read docs/drag-drop-investigation-report.md Performance Metrics section and Why Playwright Fails section for testing requirements, and docs/implementation-plans/dnd-kit-refactoring-plan.md Phase 5 for E2E test examples and success metrics.\n</info added on 2025-08-14T20:35:19.155Z>",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "All unit tests pass with 100% coverage for new components, integration tests validate end-to-end drag functionality, Playwright tests pass consistently, and performance benchmarks show sub-100ms drag operations with zero console errors."
           }
         ]
@@ -2350,7 +2350,7 @@
     ],
     "metadata": {
       "created": "2025-07-22T22:49:25.170Z",
-      "updated": "2025-08-14T21:29:31.708Z",
+      "updated": "2025-08-22T22:28:56.463Z",
       "description": "Tasks for master context"
     }
   }

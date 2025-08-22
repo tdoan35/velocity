@@ -13,6 +13,7 @@ import { PRDDndProvider, SortableSection, type SortableSectionRef } from './dnd'
 import { PRDStatusBadge } from './components/PRDStatusBadge'
 import { cn } from '@/lib/utils'
 import { generateSectionId, isTemplateOrEmptyContent, markSectionAsNewlyCreated } from '@/utils/sectionUtils'
+import { exportPRDAsMarkdown, downloadMarkdown, generateMarkdownFilename } from '@/utils/markdownExporter'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -664,6 +665,36 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
     }
   }, [prd, sections, toast])
 
+  // Handle markdown export
+  const handleExportMarkdown = useCallback(() => {
+    if (!prd) {
+      toast({
+        title: 'Export failed',
+        description: 'No PRD data available to export.',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    try {
+      const markdownContent = exportPRDAsMarkdown(prd)
+      const filename = generateMarkdownFilename(prd)
+      downloadMarkdown(markdownContent, filename)
+      
+      toast({
+        title: 'Export successful',
+        description: `PRD exported as ${filename}`,
+      })
+    } catch (error) {
+      console.error('Failed to export markdown:', error)
+      toast({
+        title: 'Export failed',
+        description: 'Failed to export PRD as markdown. Please try again.',
+        variant: 'destructive'
+      })
+    }
+  }, [prd, toast])
+
   // Handle section reordering with backend persistence
   const handleSectionReorder = useCallback(async (reorderedSections: FlexiblePRDSection[]) => {
     if (!prd?.id) {
@@ -789,22 +820,6 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8"
-                onClick={() => {
-                  toast({
-                    title: 'Save',
-                    description: 'Manual save functionality coming soon',
-                    duration: 2000
-                  })
-                }}
-                disabled={isSaving}
-                title="Save document"
-              >
-                <Save className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
                 onClick={() => setShowResetDialog(true)}
                 disabled={isLoading || isSaving}
                 title="Reset PRD to default template"
@@ -815,13 +830,7 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8"
-                onClick={() => {
-                  toast({
-                    title: 'Export',
-                    description: 'Export functionality coming soon',
-                    duration: 2000
-                  })
-                }}
+                onClick={handleExportMarkdown}
                 title="Export as Markdown"
               >
                 <Download className="h-4 w-4" />

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
@@ -6,7 +6,6 @@ import { Badge } from '../ui/badge';
 import { 
   Monitor, 
   Smartphone, 
-  QrCode, 
   Download, 
   Share2, 
   RefreshCw,
@@ -40,7 +39,6 @@ export function SnackPreviewPanel({
 }: SnackPreviewPanelProps) {
   const [activeTab, setActiveTab] = useState('web');
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const { toast } = useToast();
 
   const {
@@ -50,9 +48,6 @@ export function SnackPreviewPanel({
     webPlayerUrl,
     qrCodeUrl,
     createSession,
-    updateCode,
-    updateFiles,
-    updateDependencies,
     saveSnapshot,
     getDownloadUrl,
     destroySession
@@ -80,7 +75,6 @@ export function SnackPreviewPanel({
     try {
       const url = await getDownloadUrl();
       if (url) {
-        setDownloadUrl(url);
         window.open(url, '_blank');
         toast({
           title: 'Download started',
@@ -288,7 +282,7 @@ export function SnackPreviewPanel({
                       Channel
                     </h5>
                     <code className="text-xs bg-muted px-2 py-1 rounded">
-                      {session.snack.getChannel()}
+                      {(session.snack as any).getChannel?.() || session.id}
                     </code>
                   </div>
 
@@ -297,7 +291,7 @@ export function SnackPreviewPanel({
                       SDK Version
                     </h5>
                     <Badge variant="outline">
-                      {session.snack.getSdkVersion()}
+                      {(session.snack as any).getSdkVersion?.() || '52.0.0'}
                     </Badge>
                   </div>
 
@@ -306,10 +300,10 @@ export function SnackPreviewPanel({
                       Dependencies
                     </h5>
                     <div className="flex flex-wrap gap-2 mt-2">
-                      {Object.entries(session.snack.getDependencies()).map(([name, version]) => (
+                      {Object.entries((session.snack as any).getDependencies?.() || {}).map(([name, version]) => (
                         <Badge key={name} variant="secondary" className="gap-1">
                           <Package className="w-3 h-3" />
-                          {name}@{version}
+                          {name}@{String(version)}
                         </Badge>
                       ))}
                     </div>
@@ -344,11 +338,10 @@ export function SnackPreviewPanel({
       {/* Share dialog */}
       {isShareDialogOpen && session && (
         <SharePreviewDialog
-          isOpen={isShareDialogOpen}
-          onClose={() => setIsShareDialogOpen(false)}
-          sessionId={sessionId}
-          projectName={session.snack.getName()}
-          snackUrl={`https://snack.expo.dev/@snack/${session.snack.getChannel()}`}
+          open={isShareDialogOpen}
+          onOpenChange={setIsShareDialogOpen}
+          projectId={projectId || sessionId}
+          projectName={(session.snack as any).getName?.() || 'Preview'}
         />
       )}
     </div>
