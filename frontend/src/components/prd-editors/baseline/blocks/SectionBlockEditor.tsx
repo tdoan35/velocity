@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
 import { NotionRichTextEditor } from './NotionRichTextEditor'
 import { usePRDTemplates } from '@/hooks/usePRDTemplates'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -14,12 +15,31 @@ import {
   Circle,
   Clock,
   Type,
-  Code2
+  Code2,
+  Trash2,
+  MoreHorizontal
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { FlexiblePRDSection } from '@/services/prdService'
 import type { VirtualContentBlock } from '@/lib/virtual-blocks/types'
 import { isTemplateOrEmptyContent, getAutoSaveDelay } from '@/utils/sectionUtils'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 // Section emoji mapping (matching BlockBasedPRDEditor)
 const getSectionEmoji = (section: FlexiblePRDSection): string => {
@@ -71,6 +91,8 @@ const getAgentBadgeStyle = (agent: string): string => {
 interface SectionBlockEditorProps {
   section: FlexiblePRDSection
   onSave: (sectionId: string, content: { html: string; text: string }) => Promise<void>
+  onDelete?: (sectionId: string) => Promise<void>
+  onRename?: (sectionId: string, newTitle: string) => Promise<void>
   isExpanded?: boolean
   enableClickToEdit?: boolean
   enableVirtualBlocks?: boolean
@@ -80,6 +102,8 @@ interface SectionBlockEditorProps {
 export function SectionBlockEditor({ 
   section, 
   onSave,
+  onDelete,
+  onRename,
   isExpanded: initialExpanded = true,
   enableClickToEdit = true,
   enableVirtualBlocks = true,
@@ -99,7 +123,11 @@ export function SectionBlockEditor({
     text: ''
   })
   const [isAnimating, setIsAnimating] = useState(false)
+  const [isRenaming, setIsRenaming] = useState(false)
+  const [renameValue, setRenameValue] = useState('')
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const renameInputRef = useRef<HTMLInputElement>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Initialize content for display and editing
@@ -244,6 +272,61 @@ export function SectionBlockEditor({
     }
   }
 
+  // Handle rename functionality
+  const handleStartRename = () => {
+    setIsRenaming(true)
+    setRenameValue(section.title)
+    // Focus input in next tick
+    setTimeout(() => {
+      renameInputRef.current?.focus()
+      renameInputRef.current?.select()
+    }, 0)
+  }
+
+  const handleCancelRename = () => {
+    setIsRenaming(false)
+    setRenameValue('')
+  }
+
+  const handleConfirmRename = async () => {
+    if (!onRename) return
+    
+    const trimmedValue = renameValue.trim()
+    if (trimmedValue && trimmedValue !== section.title) {
+      try {
+        await onRename(section.id, trimmedValue)
+        setIsRenaming(false)
+        setRenameValue('')
+      } catch (error) {
+        console.error('Failed to rename section:', error)
+      }
+    } else {
+      handleCancelRename()
+    }
+  }
+
+  const handleRenameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleConfirmRename()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      handleCancelRename()
+    }
+  }
+
+  // Handle delete functionality
+  const handleConfirmDelete = async () => {
+    if (!onDelete) return
+    
+    try {
+      await onDelete(section.id)
+      setShowDeleteDialog(false)
+    } catch (error) {
+      console.error('Failed to delete section:', error)
+    }
+  }
+
   // Stable callback for handling virtual blocks updates
   const handleBlocksUpdate = useCallback((blocks: VirtualContentBlock[]) => {
     onBlocksUpdate?.(section.id, blocks)
@@ -268,16 +351,6 @@ export function SectionBlockEditor({
     }
   }
 
-  const getStatusColor = () => {
-    switch (section.status) {
-      case 'completed':
-        return 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800'
-      case 'in_progress':
-        return 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800'
-      default:
-        return 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600'
-    }
-  }
 
   const renderContent = () => {
     if (!currentContent.html || isTemplatePlaceholder(currentContent)) {
@@ -318,9 +391,28 @@ export function SectionBlockEditor({
               </motion.div>
             </button>
             
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-              {getSectionEmoji(section)} {section.title}
-            </h2>
+            {isRenaming ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xl">{getSectionEmoji(section)}</span>
+                <Input
+                  ref={renameInputRef}
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onKeyDown={handleRenameKeyDown}
+                  onBlur={handleConfirmRename}
+                  className="text-xl font-semibold bg-transparent border-none px-0 h-auto focus-visible:ring-1 focus-visible:ring-primary"
+                  placeholder="Section title"
+                />
+              </div>
+            ) : (
+              <h2 
+                className="text-xl font-semibold text-gray-900 dark:text-gray-100 cursor-pointer hover:text-primary transition-colors"
+                onClick={section.isCustom ? handleStartRename : undefined}
+                title={section.isCustom ? "Click to rename" : undefined}
+              >
+                {getSectionEmoji(section)} {section.title}
+              </h2>
+            )}
             
             {section.required && (
               <span className="text-red-500" title="Required">
@@ -348,6 +440,35 @@ export function SectionBlockEditor({
               >
                 <Edit2 className="w-3.5 h-3.5" />
               </Button>
+            )}
+
+            {/* Dropdown menu for custom sections */}
+            {section.isCustom && onDelete && onRename && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0"
+                  >
+                    <MoreHorizontal className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={handleStartRename}>
+                    <Edit2 className="w-4 h-4 mr-2" />
+                    Rename Section
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem 
+                    onClick={() => setShowDeleteDialog(true)}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete Section
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         </div>
@@ -500,6 +621,27 @@ export function SectionBlockEditor({
         )}
       </AnimatePresence>
     </Card>
+    
+    {/* Delete Confirmation Dialog */}
+    <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete Section</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to delete "{section.title}"? This action cannot be undone and all content in this section will be permanently lost.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction 
+            onClick={handleConfirmDelete}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            Delete Section
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
     </motion.div>
   )
 }

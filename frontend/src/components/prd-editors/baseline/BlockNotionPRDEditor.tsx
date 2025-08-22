@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Loader2, AlertCircle, FileText, RefreshCw, Download, Save, PanelRight } from 'lucide-react'
+import { Loader2, AlertCircle, FileText, RefreshCw, Download, Save, PanelRight, CheckCircle2, ChevronRight } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { prdService, type PRD, type FlexiblePRDSection } from '@/services/prdService'
 import { useToast } from '@/hooks/use-toast'
 import { SectionBlockEditor } from './blocks/SectionBlockEditor'
@@ -33,6 +34,33 @@ const debugLog = (message: string, data?: any) => {
   console.log(`[DEBUG-${timestamp}] ${message}`, data || '')
 }
 
+// Section icons mapping
+const sectionIcons: Record<string, string> = {
+  overview: '📋',
+  core_features: '✨',
+  additional_features: '➕',
+  ui_design_patterns: '🎨',
+  ux_flows: '🔄',
+  technical_architecture: '🏗️',
+  tech_integrations: '🔌',
+  custom: '📝'
+}
+
+// Get section type from FlexiblePRDSection
+const getSectionType = (section: FlexiblePRDSection): string => {
+  // Map section ID to type - using ID as a proxy for type
+  const typeMap: Record<string, string> = {
+    'overview': 'overview',
+    'core_features': 'core_features',
+    'additional_features': 'additional_features',
+    'ui_design_patterns': 'ui_design_patterns',
+    'ux_flows': 'ux_flows',
+    'technical_architecture': 'technical_architecture',
+    'tech_integrations': 'tech_integrations'
+  }
+  return typeMap[section.id] || 'custom'
+}
+
 export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
   const [prd, setPRD] = useState<PRD | null>(null)
   const [sections, setSections] = useState<FlexiblePRDSection[]>([])
@@ -42,6 +70,7 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
   const [error, setError] = useState<string | null>(null)
   const [showTOC, setShowTOC] = useState(false)
   const [prdStatus, setPrdStatus] = useState<'draft' | 'in_progress' | 'review' | 'finalized' | 'archived'>('draft')
+  const [completionPercentage, setCompletionPercentage] = useState(0)
   const [showResetDialog, setShowResetDialog] = useState(false)
   const { toast } = useToast()
   
@@ -79,6 +108,14 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
     
     return sections
   }, [])
+
+  // Calculate completion percentage whenever sections change
+  useEffect(() => {
+    const completedSections = sections.filter(s => s.status === 'completed').length
+    const totalSections = sections.length
+    const percentage = totalSections > 0 ? Math.round((completedSections / totalSections) * 100) : 0
+    setCompletionPercentage(percentage)
+  }, [sections])
 
   // Update ref whenever sections change
   useEffect(() => {
@@ -466,7 +503,7 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
       
       // Update UI immediately for better UX
       setSections(prev => {
-        const updated = [...prev, optimisticSection].sort((a, b) => a.order - b.order)
+        const updated = [...prev, optimisticSection].sort((a: FlexiblePRDSection, b: FlexiblePRDSection) => a.order - b.order)
         debugLog('ADD_SECTION_OPTIMISTIC_UPDATE', {
           previousCount: prev.length,
           newCount: updated.length,
@@ -532,7 +569,7 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
         // Use all sections from backend if available for better state consistency
         if (data.allSections && Array.isArray(data.allSections)) {
           console.log(`[CREATE] Using all sections from backend response for state sync`) // Debug log
-          setSections(data.allSections.sort((a, b) => a.order - b.order))
+          setSections(data.allSections.sort((a: FlexiblePRDSection, b: FlexiblePRDSection) => a.order - b.order))
         } else {
           // Fallback: Update optimistic section in place
           setSections(prev => {
@@ -540,7 +577,7 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
               section.id === sectionData.id 
                 ? backendSection
                 : section
-            ).sort((a, b) => a.order - b.order) // Ensure proper ordering
+            ).sort((a: FlexiblePRDSection, b: FlexiblePRDSection) => a.order - b.order) // Ensure proper ordering
             
             debugLog('ADD_SECTION_BACKEND_CONFIRMATION', {
               sectionId: backendSection.id,
@@ -613,6 +650,144 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
       toast({
         title: 'Add failed',
         description: 'Failed to add new section. Please try again.',
+        variant: 'destructive'
+      })
+    } finally {
+      setIsSaving(false)
+    }
+  }, [prd, sections, toast])
+
+  // Handle section deletion
+  const handleSectionDelete = useCallback(async (sectionId: string) => {
+    if (!prd?.id) return
+
+    const sectionToDelete = sections.find(s => s.id === sectionId)
+    if (!sectionToDelete || !sectionToDelete.isCustom) {
+      toast({
+        title: 'Cannot delete section',
+        description: 'Only custom sections can be deleted.',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    setIsSaving(true)
+    
+    try {
+      // Get session for auth
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        throw new Error('No active session')
+      }
+      
+      // Delete section via backend
+      const { error } = await supabase.functions.invoke('prd-management', {
+        body: {
+          action: 'removeSection',
+          prdId: prd.id,
+          sectionId: sectionId
+        },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
+      })
+
+      if (error) throw error
+
+      // Remove section from local state
+      setSections(prev => prev.filter(section => section.id !== sectionId))
+
+      toast({
+        title: 'Section deleted',
+        description: 'The section has been removed successfully.',
+      })
+
+    } catch (error) {
+      console.error('Failed to delete section:', error)
+      toast({
+        title: 'Delete failed',
+        description: 'Failed to delete section. Please try again.',
+        variant: 'destructive'
+      })
+    } finally {
+      setIsSaving(false)
+    }
+  }, [prd, sections, toast])
+
+  // Handle section title rename
+  const handleSectionRename = useCallback(async (sectionId: string, newTitle: string) => {
+    if (!prd?.id) return
+
+    const sectionToRename = sections.find(s => s.id === sectionId)
+    if (!sectionToRename || !sectionToRename.isCustom) {
+      toast({
+        title: 'Cannot rename section',
+        description: 'Only custom sections can be renamed.',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    if (!newTitle.trim()) {
+      toast({
+        title: 'Invalid title',
+        description: 'Section title cannot be empty.',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    setIsSaving(true)
+    
+    try {
+      // Update local state optimistically
+      setSections(prev => prev.map(section => 
+        section.id === sectionId 
+          ? { ...section, title: newTitle.trim() }
+          : section
+      ))
+
+      // Get session for auth
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        throw new Error('No active session')
+      }
+      
+      // Update section title via backend
+      const { error } = await supabase.functions.invoke('prd-management', {
+        body: {
+          action: 'updateSectionTitle',
+          prdId: prd.id,
+          sectionId: sectionId,
+          title: newTitle.trim()
+        },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
+      })
+
+      if (error) throw error
+
+      toast({
+        title: 'Section renamed',
+        description: 'The section title has been updated successfully.',
+      })
+
+    } catch (error) {
+      console.error('Failed to rename section:', error)
+      
+      // Revert local state on error
+      setSections(prev => prev.map(section => 
+        section.id === sectionId 
+          ? { ...section, title: sectionToRename.title }
+          : section
+      ))
+      
+      toast({
+        title: 'Rename failed',
+        description: 'Failed to rename section. Please try again.',
         variant: 'destructive'
       })
     } finally {
@@ -812,7 +987,7 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
         <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200 dark:bg-gray-700">
           <div 
             className="h-full bg-emerald-500 transition-all duration-300 ease-out"
-            style={{ width: `${prd.completion_percentage || 0}%` }}
+            style={{ width: `${completionPercentage}%` }}
           />
         </div>
       </div>
@@ -826,12 +1001,12 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
       {sections.length > 0 ? (
         <div className="space-y-2 relative" ref={sectionsContainerRef}>
           <PRDDndProvider 
-            sections={sections.sort((a, b) => a.order - b.order)}
+            sections={sections.sort((a: FlexiblePRDSection, b: FlexiblePRDSection) => a.order - b.order)}
             onSectionReorder={handleSectionReorder}
           >
             <div className="space-y-2">
               {sections
-                .sort((a, b) => a.order - b.order)
+                .sort((a: FlexiblePRDSection, b: FlexiblePRDSection) => a.order - b.order)
                 .map((section) => (
                   <SortableSection 
                     key={section.id} 
@@ -842,6 +1017,8 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
                     <SectionBlockEditor
                       section={section}
                       onSave={handleSectionUpdate}
+                      onDelete={handleSectionDelete}
+                      onRename={handleSectionRename}
                       enableClickToEdit={true}
                       enableVirtualBlocks={true}
                       onBlocksUpdate={handleBlocksUpdate}
@@ -874,6 +1051,84 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
       
           </div> {/* End inner content wrapper */}
         </div> {/* End scrollable content wrapper */}
+        
+        {/* Table of Contents Sidebar - Overlay */}
+        <AnimatePresence mode="wait">
+          {showTOC && (
+            <motion.div 
+              className="absolute top-0 right-0 bottom-0 w-64 border-l border-gray-200 dark:border-gray-700/50 bg-gray-50/95 dark:bg-gray-800/95 backdrop-blur-sm overflow-y-auto z-40 shadow-xl"
+              initial={{ x: "100%", opacity: 0 }}
+              animate={{ 
+                x: 0,
+                opacity: 1,
+                transition: {
+                  x: { type: "spring", stiffness: 300, damping: 30 },
+                  opacity: { duration: 0.2 }
+                }
+              }}
+              exit={{ 
+                x: "100%", 
+                opacity: 0,
+                transition: {
+                  x: { type: "spring", stiffness: 300, damping: 30 },
+                  opacity: { duration: 0.15 }
+                }
+              }}
+            >
+              <motion.div 
+                className="p-4"
+                initial={{ x: 20, opacity: 0 }}
+                animate={{ 
+                  x: 0, 
+                  opacity: 1,
+                  transition: { delay: 0.1, duration: 0.2 }
+                }}
+              >
+                <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-3 uppercase tracking-wider text-xs">
+                  Table of Contents
+                </h3>
+                <div className="space-y-1">
+                  {sections.map((section, index) => {
+                    const sectionType = getSectionType(section)
+                    const icon = sectionIcons[sectionType] || '📝'
+                    return (
+                      <motion.button
+                        key={section.id}
+                        initial={{ x: 20, opacity: 0 }}
+                        animate={{ 
+                          x: 0, 
+                          opacity: 1,
+                          transition: { 
+                            delay: 0.15 + (index * 0.03), 
+                            duration: 0.2 
+                          }
+                        }}
+                        className={cn(
+                          "w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors",
+                          "flex items-center gap-2",
+                          section.status === 'completed' && "text-green-600 dark:text-green-400"
+                        )}
+                        onClick={() => {
+                          // Scroll to section
+                          const sectionElement = document.querySelector(`[data-section-id="${section.id}"]`)
+                          if (sectionElement) {
+                            sectionElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                          }
+                        }}
+                      >
+                        <span>{icon}</span>
+                        <span className="flex-1 truncate">{section.title}</span>
+                        {section.status === 'completed' && (
+                          <CheckCircle2 className="h-3 w-3" />
+                        )}
+                      </motion.button>
+                    )
+                  })}
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div> {/* End relative container */}
       
       {/* Reset Confirmation Dialog */}

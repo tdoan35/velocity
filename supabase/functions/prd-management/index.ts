@@ -26,7 +26,7 @@ import {
 interface PRDRequest {
   action: 'create' | 'update' | 'get' | 'finalize' | 'generateSuggestions' | 'validateSection' | 
           'updateSection' | 'addSection' | 'removeSection' | 'reorderSections' | 'updateSectionOrders' | 'getAgentStatus' |
-          'initializeSections' | 'extractStructuredData' | 'resetToDefault'
+          'initializeSections' | 'extractStructuredData' | 'resetToDefault' | 'updateSectionTitle'
   conversationId?: string
   projectId?: string
   prdId?: string
@@ -160,6 +160,10 @@ Deno.serve(async (req) => {
         response = await resetPRDToDefault(supabase, authResult.userId, prdId!)
         break
 
+      case 'updateSectionTitle':
+        response = await updatePRDSectionTitle(supabase, authResult.userId, prdId!, sectionId!, title!)
+        break
+
       default:
         return new Response(JSON.stringify({ error: 'Invalid action' }), {
           status: 400,
@@ -168,7 +172,7 @@ Deno.serve(async (req) => {
     }
 
     // Broadcast PRD update via Supabase Realtime if PRD was modified
-    if (['update', 'updateSection', 'addSection', 'removeSection', 'reorderSections', 'updateSectionOrders', 'resetToDefault'].includes(action) && projectId) {
+    if (['update', 'updateSection', 'addSection', 'removeSection', 'reorderSections', 'updateSectionOrders', 'resetToDefault', 'updateSectionTitle'].includes(action) && projectId) {
       const channel = supabase.channel(`prd_changes:${projectId}`)
       await channel.send({
         type: 'broadcast',
@@ -1062,6 +1066,67 @@ async function resetPRDToDefault(
     sections: defaultSections,
     reset: true,
     message: 'PRD reset to default template sections successfully'
+  }
+}
+
+async function updatePRDSectionTitle(
+  supabase: any,
+  userId: string,
+  prdId: string,
+  sectionId: string,
+  newTitle: string
+) {
+  // Verify user owns the PRD
+  const { data: prd, error: prdError } = await supabase
+    .from('prds')
+    .select('*')
+    .eq('id', prdId)
+    .eq('user_id', userId)
+    .single()
+
+  if (prdError || !prd) {
+    throw new Error('PRD not found or access denied')
+  }
+
+  const sections: PRDSection[] = prd.sections || []
+  const sectionIndex = sections.findIndex(s => s.id === sectionId)
+  
+  if (sectionIndex === -1) {
+    throw new Error(`Section ${sectionId} not found`)
+  }
+
+  const section = sections[sectionIndex]
+  
+  // Only allow renaming custom sections
+  if (!section.isCustom) {
+    throw new Error('Only custom sections can be renamed')
+  }
+
+  // Update the section title
+  sections[sectionIndex] = {
+    ...section,
+    title: newTitle.trim()
+  }
+
+  // Save updated sections to database
+  const { data: updatedPRD, error: updateError } = await supabase
+    .from('prds')
+    .update({
+      sections: sections,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', prdId)
+    .select()
+    .single()
+
+  if (updateError) {
+    throw new Error(`Failed to update section title: ${updateError.message}`)
+  }
+
+  return {
+    prd: updatedPRD,
+    updatedSection: sections[sectionIndex],
+    message: `Section title updated to "${newTitle}" successfully`
   }
 }
 
