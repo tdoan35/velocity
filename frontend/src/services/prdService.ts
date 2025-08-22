@@ -30,6 +30,7 @@ export interface FlexiblePRDSection {
   }
   status: SectionStatus
   isCustom: boolean
+  isCreating?: boolean
   description?: string
   template?: {
     html: string

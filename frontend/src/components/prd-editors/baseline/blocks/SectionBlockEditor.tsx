@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -7,7 +7,6 @@ import { usePRDTemplates } from '@/hooks/usePRDTemplates'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   ChevronDown, 
-  ChevronRight, 
   Edit2, 
   Save, 
   X,
@@ -20,9 +19,10 @@ import {
 import { cn } from '@/lib/utils'
 import type { FlexiblePRDSection } from '@/services/prdService'
 import type { VirtualContentBlock } from '@/lib/virtual-blocks/types'
+import { isTemplateOrEmptyContent, getAutoSaveDelay } from '@/utils/sectionUtils'
 
 // Section emoji mapping (matching BlockBasedPRDEditor)
-const getSectionEmoji = (sectionId: string): string => {
+const getSectionEmoji = (section: FlexiblePRDSection): string => {
   const emojis: Record<string, string> = {
     overview: '📋',
     core_features: '⭐',
@@ -33,7 +33,13 @@ const getSectionEmoji = (sectionId: string): string => {
     tech_integrations: '🔌',
     custom: '📝'
   }
-  return emojis[sectionId] || '📄'
+  
+  // For custom sections, always use the custom emoji
+  if (section.isCustom) {
+    return '📝'
+  }
+  
+  return emojis[section.id] || '📄'
 }
 
 // Agent mapping for sections (matching BlockBasedPRDEditor)
@@ -146,10 +152,16 @@ export function SectionBlockEditor({
   }
 
   const handleSave = async (contentToSave?: { html: string; text: string }) => {
+    const content = contentToSave || editContent
+    
+    // Don't save template placeholder content using enhanced detection
+    if (isTemplatePlaceholder(content) || isTemplateOrEmptyContent(content)) {
+      console.log('Skipping save for template/empty placeholder content')
+      return
+    }
+    
     setIsSaving(true)
     try {
-      const content = contentToSave || editContent
-      
       await onSave(section.id, content)
       setIsEditing(false)
       setCurrentContent(content)
@@ -162,26 +174,69 @@ export function SectionBlockEditor({
 
   // Handle auto-save for click-to-edit mode
   const handleContentChange = (newContent: { html: string; text: string }) => {
+    console.log(`[${section.id}] Content change detected:`, { newContent, isTemplate: isTemplatePlaceholder(newContent), isCreating: section.isCreating }) // Debug log
+    
     setEditContent(newContent)
     setCurrentContent(newContent)
     
     if (enableClickToEdit) {
+      // Skip auto-save if section is still being created
+      if (section.isCreating) {
+        console.log(`[${section.id}] Skipping auto-save - section is being created`) // Debug log
+        return
+      }
+      
+      // Prevent auto-save cycles for template content
+      if (isTemplatePlaceholder(newContent)) {
+        console.log(`[${section.id}] Skipping auto-save for template content`) // Debug log
+        return
+      }
+      
+      // Enhanced template content detection using utility function
+      if (isTemplateOrEmptyContent(newContent)) {
+        console.log(`[${section.id}] Skipping auto-save for template/empty content`) // Debug log
+        return
+      }
+      
+      // Also check if content is the same as what we already have to prevent unnecessary saves
+      if (JSON.stringify(newContent) === JSON.stringify(currentContent)) {
+        console.log(`[${section.id}] Skipping auto-save - content unchanged`) // Debug log
+        return
+      }
+      
+      // Determine auto-save delay using utility function
+      const autoSaveDelay = getAutoSaveDelay(section.id, newContent)
+      
+      console.log(`[${section.id}] Scheduling auto-save in ${autoSaveDelay / 1000} seconds`) // Debug log
+      
       // Clear existing timeout
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current)
       }
       
-      // Set new timeout for auto-save (2 seconds after user stops typing)
+      // Set new timeout for auto-save with dynamic delay
       saveTimeoutRef.current = setTimeout(() => {
+        console.log(`[${section.id}] Executing auto-save`) // Debug log
         handleSave(newContent)
-      }, 2000) as unknown as NodeJS.Timeout
+      }, autoSaveDelay) as unknown as NodeJS.Timeout
     }
   }
 
   // Handle blur for click-to-edit mode
   const handleEditorBlur = () => {
     if (enableClickToEdit && isEditing) {
-      // Save immediately on blur
+      // Skip save if section is still being created
+      if (section.isCreating) {
+        return
+      }
+      
+      // Enhanced template content detection for blur events using utility function
+      if (isTemplatePlaceholder(currentContent) || isTemplateOrEmptyContent(currentContent)) {
+        console.log(`[${section.id}] Skipping blur save for template/empty content`) // Debug log
+        return
+      }
+      
+      // Save immediately on blur for substantial content
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current)
       }
@@ -189,7 +244,20 @@ export function SectionBlockEditor({
     }
   }
 
+  // Stable callback for handling virtual blocks updates
+  const handleBlocksUpdate = useCallback((blocks: VirtualContentBlock[]) => {
+    onBlocksUpdate?.(section.id, blocks)
+  }, [section.id, onBlocksUpdate])
+
   const getStatusIcon = () => {
+    if (section.isCreating) {
+      return (
+        <div title="Creating section...">
+          <Clock className="w-4 h-4 text-blue-500 animate-pulse" />
+        </div>
+      )
+    }
+    
     switch (section.status) {
       case 'completed':
         return <Check className="w-4 h-4 text-emerald-500" />
@@ -251,7 +319,7 @@ export function SectionBlockEditor({
             </button>
             
             <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-              {getSectionEmoji(section.id)} {section.title}
+              {getSectionEmoji(section)} {section.title}
             </h2>
             
             {section.required && (
@@ -326,7 +394,7 @@ export function SectionBlockEditor({
                       placeholder="Click to start writing..."
                       editable={true} // Always editable in click-to-edit mode
                       enableVirtualBlocks={enableVirtualBlocks}
-                      onBlocksUpdate={(blocks) => onBlocksUpdate?.(section.id, blocks)}
+                      onBlocksUpdate={handleBlocksUpdate}
                       sectionId={section.id}
                     />
                   </div>
@@ -366,7 +434,7 @@ export function SectionBlockEditor({
                     onChange={setEditContent}
                     placeholder="Start writing..."
                     enableVirtualBlocks={enableVirtualBlocks}
-                    onBlocksUpdate={(blocks) => onBlocksUpdate?.(section.id, blocks)}
+                    onBlocksUpdate={handleBlocksUpdate}
                     sectionId={section.id}
                   />
                 ) : (

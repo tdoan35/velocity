@@ -204,11 +204,11 @@ export function initializePRDSections(): PRDSection[] {
       text: 'Vision: What is your app\'s core vision? Problem: What problem does it solve? Target Users: Who are your target users?'
     },
     'core_features': {
-      html: `<h3>Feature List</h3><ul><li class="template-placeholder">Essential feature 1</li><li class="template-placeholder">Essential feature 2</li><li class="template-placeholder">Essential feature 3</li></ul>`,
+      html: `<h3>Feature List</h3><p class="template-placeholder">Essential feature 1</p><p class="template-placeholder">Essential feature 2</p><p class="template-placeholder">Essential feature 3</p>`,
       text: 'Feature List: Essential feature 1, Essential feature 2, Essential feature 3'
     },
     'additional_features': {
-      html: `<h3>Additional Feature List</h3><ul><li class="template-placeholder">Nice-to-have feature 1</li><li class="template-placeholder">Future enhancement 2</li></ul>`,
+      html: `<h3>Additional Feature List</h3><p class="template-placeholder">Nice-to-have feature 1</p><p class="template-placeholder">Future enhancement 2</p>`,
       text: 'Additional Feature List: Nice-to-have feature 1, Future enhancement 2'
     },
     'ui_design_patterns': {
@@ -308,29 +308,116 @@ export function updateSectionContent(
 }
 
 /**
- * Add a custom section
+ * Add a custom section (Enhanced for hybrid approach with position preservation)
  */
 export function addCustomSection(
+  sections: PRDSection[],
+  sectionData: {
+    title: string;
+    agent: AgentType;
+    required?: boolean;
+    content?: { html: string; text: string };
+    order?: number;
+    id?: string;
+    insertAfter?: string; // NEW: ID of section to insert after
+  }
+): PRDSection[] {
+  // Use provided content or sensible default (without template-placeholder class)
+  const defaultContent = {
+    html: '<p>Start writing your section content here...</p>',
+    text: 'Start writing your section content here...'
+  };
+  
+  const newSection: PRDSection = {
+    id: sectionData.id || `custom_${Date.now()}`,
+    title: sectionData.title, // Always preserve the provided title
+    order: 0, // Temporary order, will be set correctly below
+    agent: sectionData.agent,
+    required: sectionData.required ?? false,
+    content: sectionData.content ?? defaultContent,
+    status: 'pending',
+    isCustom: true
+  };
+  
+  // Debug logging to track title preservation and insertion
+  console.log('[BACKEND] addCustomSection called:', {
+    inputTitle: sectionData.title,
+    outputTitle: newSection.title,
+    sectionId: newSection.id,
+    isCustom: newSection.isCustom,
+    agent: newSection.agent,
+    insertAfter: sectionData.insertAfter
+  });
+  
+  // If insertAfter is specified, insert at the correct position
+  if (sectionData.insertAfter) {
+    const afterIndex = sections.findIndex(s => s.id === sectionData.insertAfter);
+    if (afterIndex !== -1) {
+      // Insert after the specified section
+      const updatedSections = [...sections];
+      updatedSections.splice(afterIndex + 1, 0, newSection);
+      
+      console.log('[BACKEND] Inserting section after index:', afterIndex, 'total sections:', updatedSections.length);
+      
+      // Renumber all sections to maintain clean order
+      return renumberSections(updatedSections);
+    } else {
+      console.warn('[BACKEND] insertAfter section not found:', sectionData.insertAfter);
+    }
+  }
+  
+  // Fallback: add at end with explicit order
+  if (sectionData.order !== undefined) {
+    newSection.order = sectionData.order;
+    const updatedSections = [...sections, newSection];
+    return renumberSections(updatedSections);
+  }
+  
+  // Final fallback: add at end
+  const maxOrder = Math.max(...sections.map(s => s.order), 0);
+  newSection.order = maxOrder + 10; // Use increment of 10
+  const updatedSections = [...sections, newSection];
+  
+  console.log('[BACKEND] Adding section at end with order:', newSection.order);
+  return updatedSections.sort((a, b) => a.order - b.order);
+}
+
+/**
+ * Legacy addCustomSection for backward compatibility
+ */
+export function addCustomSectionLegacy(
   sections: PRDSection[],
   title: string,
   agent: AgentType,
   required: boolean = false
 ): PRDSection[] {
-  const maxOrder = Math.max(...sections.map(s => s.order), 0);
-  const newSection: PRDSection = {
-    id: `custom_${Date.now()}`,
+  return addCustomSection(sections, {
     title,
-    order: maxOrder + 1,
     agent,
-    required,
-    content: {
-      html: '<p class="template-placeholder">Start writing...</p>',
-      text: 'Start writing...'
-    },
-    status: 'pending',
-    isCustom: true
-  };
-  return [...sections, newSection];
+    required
+  });
+}
+
+/**
+ * Clean renumbering function that preserves relative positions
+ */
+export function renumberSections(sections: PRDSection[]): PRDSection[] {
+  return sections.map((section, index) => ({
+    ...section,
+    order: (index + 1) * 10 // Use increments of 10 for future insertions
+  }));
+}
+
+/**
+ * Normalize section orders to prevent floating point precision issues
+ * @deprecated Use renumberSections instead for better position preservation
+ */
+export function normalizeSectionOrders(sections: PRDSection[]): PRDSection[] {
+  const sortedSections = [...sections].sort((a, b) => a.order - b.order);
+  return sortedSections.map((section, index) => ({
+    ...section,
+    order: (index + 1) * 10 // Use increments of 10 to allow for future insertions
+  }));
 }
 
 /**
@@ -392,32 +479,88 @@ export function extractTextFromHtml(html: string): string {
 }
 
 /**
- * Validate rich text content
+ * Check if content is template placeholder content
+ */
+export function isTemplatePlaceholder(content: { html: string; text: string }): boolean {
+  if (!content || !content.html || !content.text) return true;
+  
+  // Check for explicit template-placeholder class
+  if (content.html.includes('template-placeholder')) return true;
+  
+  // Check for common template phrases
+  const templatePhrases = [
+    'Start writing...',
+    'Start writing your section content here...',
+    'Click to start writing...',
+    'Enter content here...',
+    'Add your content...'
+  ];
+  
+  const normalizedText = content.text.trim().toLowerCase();
+  return templatePhrases.some(phrase => 
+    normalizedText === phrase.toLowerCase() || 
+    normalizedText.includes(phrase.toLowerCase())
+  );
+}
+
+/**
+ * Check if content represents real user content vs template
+ */
+export function hasRealContent(content: { html: string; text: string }): boolean {
+  if (!content || !content.html || !content.text) return false;
+  
+  // If it's a template placeholder, it's not real content
+  if (isTemplatePlaceholder(content)) return false;
+  
+  // Check minimum content requirements
+  const textContent = extractTextFromHtml(content.html).trim();
+  return textContent.length >= 10; // Minimum meaningful content length
+}
+
+/**
+ * Validate rich text content (Enhanced)
  */
 export function validateRichTextContent(content: { html: string; text: string }): {
   isValid: boolean;
   errors: string[];
   warnings: string[];
+  isTemplate: boolean;
+  hasContent: boolean;
 } {
   const errors: string[] = [];
   const warnings: string[] = [];
+  const isTemplate = isTemplatePlaceholder(content);
+  const hasContent = hasRealContent(content);
 
-  if (!content.html || content.html.length < 20) {
-    errors.push('Content is too short');
+  if (!content.html || content.html.length < 5) {
+    errors.push('HTML content is missing or too short');
   }
 
-  if (!content.text || content.text.length < 10) {
-    errors.push('Text content is missing');
+  if (!content.text || content.text.length < 3) {
+    errors.push('Text content is missing or too short');
+  }
+
+  // Only validate content length for non-template content
+  if (!isTemplate) {
+    if (content.html.length < 20) {
+      warnings.push('Content appears to be very short');
+    }
+
+    if (content.text.length < 10) {
+      warnings.push('Text content appears to be very short');
+    }
   }
 
   // Check for template placeholders still present
-  if (content.html.includes('template-placeholder')) {
-    warnings.push('Template placeholders should be replaced with actual content');
+  if (isTemplate) {
+    warnings.push('Content appears to be template placeholder - should be replaced with actual content');
   }
 
   return {
     isValid: errors.length === 0,
     errors,
-    warnings
+    warnings,
+    isTemplate,
+    hasContent
   };
 }

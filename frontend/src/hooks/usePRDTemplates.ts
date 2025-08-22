@@ -45,8 +45,25 @@ export function usePRDTemplates() {
   }, [])
 
   const isTemplatePlaceholder = useCallback((content: TemplateContent): boolean => {
-    return content.html.includes('template-placeholder') || 
-           content.text.includes('Start writing...')
+    if (!content || !content.html || !content.text) return true
+    
+    // Check for explicit template-placeholder class
+    if (content.html.includes('template-placeholder')) return true
+    
+    // Check for common template phrases (matching backend validation)
+    const templatePhrases = [
+      'Start writing...',
+      'Start writing your section content here...',
+      'Click to start writing...',
+      'Enter content here...',
+      'Add your content...'
+    ]
+    
+    const normalizedText = content.text.trim().toLowerCase()
+    return templatePhrases.some(phrase => 
+      normalizedText === phrase.toLowerCase() || 
+      normalizedText.includes(phrase.toLowerCase())
+    )
   }, [])
 
   const extractTextFromHtml = useCallback((html: string): string => {

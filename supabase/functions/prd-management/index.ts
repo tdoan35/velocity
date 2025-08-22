@@ -38,6 +38,15 @@ interface PRDRequest {
   required?: boolean
   newOrder?: number
   sections?: Array<{ id: string; order: number }>
+  sectionData?: {
+    title: string
+    agent: AgentType
+    required?: boolean
+    content?: { html: string; text: string }
+    order?: number
+    id?: string
+    insertAfter?: string
+  }
 }
 
 interface PRDSuggestion {
@@ -65,7 +74,7 @@ Deno.serve(async (req) => {
 
     // Parse request body
     const body: PRDRequest = await req.json()
-    const { action, conversationId, projectId, prdId, sectionId, data, context, agent, title, required, newOrder } = body
+    const { action, conversationId, projectId, prdId, sectionId, data, context, agent, title, required, newOrder, sectionData } = body
 
     // Log request
     await logger.info('PRD management request', {
@@ -98,7 +107,13 @@ Deno.serve(async (req) => {
         break
 
       case 'addSection':
-        response = await addPRDSection(supabase, authResult.userId, prdId!, title!, agent!, required)
+        // Support both new sectionData structure and legacy parameters
+        if (sectionData) {
+          response = await addPRDSectionEnhanced(supabase, authResult.userId, prdId!, sectionData)
+        } else {
+          // Legacy support
+          response = await addPRDSection(supabase, authResult.userId, prdId!, title!, agent!, required)
+        }
         break
 
       case 'removeSection':
@@ -319,13 +334,19 @@ async function updatePRDSectionFlexible(
   }
 }
 
-async function addPRDSection(
+async function addPRDSectionEnhanced(
   supabase: any,
   userId: string,
   prdId: string,
-  title: string,
-  agent: AgentType,
-  required?: boolean
+  sectionData: {
+    title: string
+    agent: AgentType
+    required?: boolean
+    content?: { html: string; text: string }
+    order?: number
+    id?: string
+    insertAfter?: string
+  }
 ) {
   // Verify user owns the PRD
   const { data: prd, error: prdError } = await supabase
@@ -340,7 +361,12 @@ async function addPRDSection(
   }
 
   const sections: PRDSection[] = prd.sections || []
-  const updatedSections = addCustomSection(sections, title, agent, required)
+  
+  // Pass through the insertAfter parameter to preserve insertion intent
+  const updatedSections = addCustomSection(sections, {
+    ...sectionData,
+    insertAfter: sectionData.insertAfter
+  })
 
   const { data: updatedPRD, error: updateError } = await supabase
     .from('prds')
@@ -356,10 +382,36 @@ async function addPRDSection(
     throw new Error(`Failed to add section: ${updateError.message}`)
   }
 
+  // Find the actual newly created section by ID instead of assuming it's at the end
+  // The section ID should be provided in sectionData.id from the frontend
+  const newSection = updatedSections.find(s => s.id === sectionData.id)
+  
+  if (!newSection) {
+    throw new Error(`Failed to find newly created section with ID: ${sectionData.id}`)
+  }
+  
   return { 
     prd: updatedPRD,
-    newSection: updatedSections[updatedSections.length - 1]
+    newSection: newSection,
+    allSections: updatedSections, // NEW: Return all sections for frontend state sync
+    enhanced: true
   }
+}
+
+async function addPRDSection(
+  supabase: any,
+  userId: string,
+  prdId: string,
+  title: string,
+  agent: AgentType,
+  required?: boolean
+) {
+  // Legacy function - redirect to enhanced version
+  return addPRDSectionEnhanced(supabase, userId, prdId, {
+    title,
+    agent,
+    required
+  })
 }
 
 async function removePRDSection(

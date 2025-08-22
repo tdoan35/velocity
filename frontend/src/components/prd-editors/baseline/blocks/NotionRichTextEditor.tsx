@@ -48,6 +48,7 @@ export function NotionRichTextEditor({
   sectionId = 'baseline-editor'
 }: NotionRichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null!)
+  const isUpdatingProgrammatically = useRef(false)
   
   // Virtual block state management
   const [virtualBlocks, setVirtualBlocks] = useState<VirtualContentBlock[]>([])
@@ -69,6 +70,11 @@ export function NotionRichTextEditor({
     content: content.html,
     editable,
     onUpdate: ({ editor }) => {
+      // Skip onChange if this is a programmatic update
+      if (isUpdatingProgrammatically.current) {
+        return
+      }
+      
       const html = editor.getHTML()
       const text = editor.getText()
       onChange({ html, text })
@@ -87,6 +93,8 @@ export function NotionRichTextEditor({
       attributes: {
         class: cn(
           'prose prose-sm max-w-none focus:outline-none min-h-[100px] px-3 py-2',
+          'prose-headings:text-foreground prose-p:text-foreground prose-li:text-foreground prose-strong:text-foreground',
+          'dark:prose-headings:text-foreground dark:prose-p:text-foreground dark:prose-li:text-foreground dark:prose-strong:text-foreground',
           'cursor-text',
           className
         )
@@ -109,11 +117,6 @@ export function NotionRichTextEditor({
   const handleBlockReorder = (fromIndex: number, toIndex: number, position: 'before' | 'after' = 'after') => {
     
     if (!editor || !virtualBlocks || virtualBlocks.length === 0) {
-      console.warn('🚫 [NotionRichTextEditor] Cannot reorder blocks: editor or virtual blocks not available:', {
-        hasEditor: !!editor,
-        hasVirtualBlocks: !!virtualBlocks,
-        virtualBlocksLength: virtualBlocks?.length || 0
-      })
       return
     }
     
@@ -121,14 +124,6 @@ export function NotionRichTextEditor({
     if (fromIndex < 0 || fromIndex >= virtualBlocks.length || 
         toIndex < 0 || toIndex >= virtualBlocks.length ||
         fromIndex === toIndex) {
-      console.warn('🚫 [NotionRichTextEditor] Invalid block indices for reordering:', { 
-        fromIndex, 
-        toIndex, 
-        totalBlocks: virtualBlocks.length,
-        fromIndexValid: fromIndex >= 0 && fromIndex < virtualBlocks.length,
-        toIndexValid: toIndex >= 0 && toIndex < virtualBlocks.length,
-        indicesEqual: fromIndex === toIndex
-      })
       return
     }
     
@@ -188,7 +183,19 @@ export function NotionRichTextEditor({
   // Update editor content when prop changes
   useEffect(() => {
     if (editor && content.html !== editor.getHTML()) {
+      // Set flag to indicate this is a programmatic update
+      isUpdatingProgrammatically.current = true
+      
       editor.commands.setContent(content.html)
+      
+      // Extended delay for template content to prevent race conditions
+      const isTemplateContent = content.html?.includes('Start writing') || content.html?.includes('template-placeholder')
+      const resetDelay = isTemplateContent ? 300 : 100
+      
+      // Reset flag after delay to allow the update to complete
+      setTimeout(() => {
+        isUpdatingProgrammatically.current = false
+      }, resetDelay)
       
       // Parse initial virtual blocks
       if (enableVirtualBlocks && content.html) {
@@ -197,7 +204,7 @@ export function NotionRichTextEditor({
         onBlocksUpdate?.(blocks)
       }
     }
-  }, [content.html, editor, enableVirtualBlocks, virtualBlockManager, onBlocksUpdate])
+  }, [content.html, editor, enableVirtualBlocks]) // Removed unstable dependencies
   
   // Initialize virtual blocks on first load
   useEffect(() => {
@@ -206,7 +213,7 @@ export function NotionRichTextEditor({
       setVirtualBlocks(blocks)
       onBlocksUpdate?.(blocks)
     }
-  }, [editor, enableVirtualBlocks, content.html, virtualBlocks.length, virtualBlockManager, onBlocksUpdate])
+  }, [editor, enableVirtualBlocks, content.html, virtualBlocks.length]) // Removed unstable dependencies
 
   // Add auto-conversion keyboard handling for baseline editor
   useEffect(() => {
@@ -280,7 +287,6 @@ export function NotionRichTextEditor({
         onBlockReorder={handleBlockReorder}
         onBlockInsert={() => {
           // Simple block insertion - just add a new paragraph
-          console.log('New block inserted')
         }}
       />
 
@@ -380,7 +386,7 @@ export function NotionRichTextEditor({
         .ProseMirror p.is-editor-empty:first-child::before {
           content: attr(data-placeholder);
           float: left;
-          color: #adb5bd;
+          color: hsl(var(--muted-foreground));
           pointer-events: none;
           height: 0;
         }
@@ -396,12 +402,29 @@ export function NotionRichTextEditor({
           border-radius: 3px;
           padding: 2px 4px;
           margin: 1px 0;
+          color: hsl(var(--foreground));
         }
         .ProseMirror p:hover, .ProseMirror h1:hover, .ProseMirror h2:hover, 
         .ProseMirror h3:hover, .ProseMirror h4:hover, .ProseMirror h5:hover, 
         .ProseMirror h6:hover, .ProseMirror ul:hover, .ProseMirror ol:hover, 
         .ProseMirror blockquote:hover, .ProseMirror pre:hover {
-          background-color: rgba(0, 0, 0, 0.02);
+          background-color: hsl(var(--accent) / 0.1);
+        }
+        /* Ensure all text content uses proper foreground colors */
+        .ProseMirror * {
+          color: hsl(var(--foreground));
+        }
+        .ProseMirror strong {
+          color: hsl(var(--foreground));
+          font-weight: 600;
+        }
+        .ProseMirror code {
+          color: hsl(var(--foreground));
+          background-color: hsl(var(--muted));
+        }
+        .ProseMirror blockquote {
+          border-left-color: hsl(var(--border));
+          color: hsl(var(--muted-foreground));
         }
       `}} />
     </div>
