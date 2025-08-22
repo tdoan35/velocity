@@ -5,9 +5,10 @@ import { Loader2, AlertCircle, FileText, RefreshCw, Download, Save, PanelRight }
 import { prdService, type PRD, type FlexiblePRDSection } from '@/services/prdService'
 import { useToast } from '@/hooks/use-toast'
 import { SectionBlockEditor } from './blocks/SectionBlockEditor'
+import { SectionBlockControls } from './blocks/SectionBlockControls'
 import { supabase } from '@/lib/supabase'
 import type { VirtualContentBlock } from '@/lib/virtual-blocks/types'
-import { PRDDndProvider, SortableSection } from './dnd'
+import { PRDDndProvider, SortableSection, type SortableSectionRef } from './dnd'
 import { PRDStatusBadge } from '../shared/components/PRDStatusBadge'
 import { cn } from '@/lib/utils'
 import {
@@ -39,6 +40,12 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
   
   // Keep a ref to current sections to avoid dependency issues
   const sectionsRef = useRef<FlexiblePRDSection[]>([])
+  
+  // Ref for the sections container for SectionBlockControls
+  const sectionsContainerRef = useRef<HTMLDivElement>(null)
+  
+  // Refs for each sortable section
+  const sectionRefs = useRef<Record<string, SortableSectionRef | null>>({})
   
   // Update ref whenever sections change
   useEffect(() => {
@@ -82,7 +89,15 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
       }
       
       setPRD(existingPRD)
-      setSections(existingPRD?.sections || [])
+      
+      // Preserve sections that are currently being created
+      const newSections = existingPRD?.sections || []
+      setSections(prev => {
+        const creatingSections = prev.filter(s => s.isCreating)
+        const dbSections = newSections.filter(s => !creatingSections.some(creating => creating.id === s.id))
+        return [...dbSections, ...creatingSections]
+      })
+      
       setPrdStatus(existingPRD?.status || 'draft')
     } catch (err) {
       console.error('Error in loadOrCreatePRD:', err)
@@ -151,15 +166,35 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
   const handleSectionUpdate = useCallback(async (sectionId: string, content: { html: string; text: string }) => {
     if (!prd?.id) return
 
+    // Skip save if section is being created (use ref to avoid dependency issues)
+    const section = sectionsRef.current.find(s => s.id === sectionId)
+    console.log(`[SAVE] handleSectionUpdate called for ${sectionId}:`, {
+      sectionFound: !!section,
+      isCreating: section?.isCreating,
+      content
+    }) // Enhanced debug log
+    
+    if (section?.isCreating) {
+      console.log(`[SAVE] Skipping save for section ${sectionId} - section is being created`) // Debug log
+      return
+    }
+
+    console.log(`[SAVE] Starting save for section ${sectionId}:`, content) // Debug log
+    console.log(`[SAVE] Current sections before save:`, sections.map(s => ({ id: s.id, title: s.title, isCreating: s.isCreating }))) // Debug log
+    
     setIsSaving(true)
     
     try {
       // Update local state optimistically
-      setSections(prev => prev.map(section => 
-        section.id === sectionId 
-          ? { ...section, content, status: 'in_progress' as const }
-          : section
-      ))
+      setSections(prev => {
+        const updated = prev.map(section => 
+          section.id === sectionId 
+            ? { ...section, content, status: 'in_progress' as const }
+            : section
+        )
+        console.log(`[SAVE] Optimistic update for ${sectionId}:`, updated.map(s => ({ id: s.id, title: s.title }))) // Debug log
+        return updated
+      })
 
       // Get session for auth
       const { data: { session } } = await supabase.auth.getSession()
@@ -188,14 +223,20 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
                             !content.html.includes('template-placeholder') && 
                             content.text.length > 20
       
-      setSections(prev => prev.map(section => 
-        section.id === sectionId 
-          ? { 
-              ...section, 
-              status: hasRealContent ? 'completed' as const : 'in_progress' as const 
-            }
-          : section
-      ))
+      console.log(`[SAVE] Backend save successful for ${sectionId}, hasRealContent: ${hasRealContent}`) // Debug log
+      
+      setSections(prev => {
+        const updated = prev.map(section => 
+          section.id === sectionId 
+            ? { 
+                ...section, 
+                status: hasRealContent ? 'completed' as const : 'in_progress' as const 
+              }
+            : section
+        )
+        console.log(`[SAVE] Final state update for ${sectionId}:`, updated.map(s => ({ id: s.id, title: s.title }))) // Debug log
+        return updated
+      })
 
       // Update PRD completion percentage if returned
       if (data?.completionPercentage !== undefined) {
@@ -208,14 +249,32 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
       })
 
     } catch (error) {
-      console.error(`Failed to save section ${sectionId}:`, error)
+      console.error(`[SAVE] Failed to save section ${sectionId}:`, error)
+      console.log(`[SAVE] Error occurred, sections before reload:`, sections.map(s => ({ id: s.id, title: s.title }))) // Debug log
+      
+      // Check if this is a template content save attempt (which should be ignored)
+      const isTemplateSave = content.html?.includes('Start writing') || 
+                            content.text?.includes('Start writing') ||
+                            content.html?.includes('template-placeholder')
+      
+      // Also check if the failed section is being created
+      const failedSection = sectionsRef.current.find(s => s.id === sectionId)
+      const isSectionBeingCreated = failedSection?.isCreating
+      
+      if (isTemplateSave || isSectionBeingCreated) {
+        console.log(`[SAVE] Template content save failed or section being created - this is expected, not reloading`) // Debug log
+        // Don't show error toast or reload for template content or sections being created
+        return
+      }
+      
       toast({
         title: 'Save failed',
         description: 'Failed to save section. Please try again.',
         variant: 'destructive'
       })
       
-      // Reload to get the correct state
+      // Only reload for non-template save errors and non-creating sections
+      console.log(`[SAVE] Real content save failed - reloading PRD`) // Debug log
       await loadOrCreatePRD()
     } finally {
       setIsSaving(false)
@@ -228,6 +287,157 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
       [sectionId]: blocks
     }))
   }, [])
+
+  // Handle adding new sections
+  const handleAddSection = useCallback(async (afterSectionId?: string) => {
+    if (!prd?.id) return
+
+    setIsSaving(true)
+    
+    // Generate section data outside try block for error handling
+    let newSectionId: string | null = null
+    
+    try {
+      // Get session for auth
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        throw new Error('No active session')
+      }
+      
+      // Calculate order based on position
+      let newOrder: number
+      if (afterSectionId) {
+        // Find the section to insert after
+        const afterSection = sections.find(s => s.id === afterSectionId)
+        if (afterSection) {
+          // Find the next section after the target section
+          const nextSection = sections.find(s => s.order > afterSection.order)
+          if (nextSection) {
+            // Insert between the current section and the next one
+            newOrder = (afterSection.order + nextSection.order) / 2
+          } else {
+            // Insert at the end (after the last section)
+            newOrder = afterSection.order + 1
+          }
+        } else {
+          // Fallback: add at the end
+          newOrder = Math.max(...sections.map(s => s.order)) + 1
+        }
+      } else {
+        // No specific position: add at the end
+        newOrder = Math.max(...sections.map(s => s.order)) + 1
+      }
+      const sectionData = {
+        title: 'New Section',
+        agent: 'project_manager' as const, // Use proper AgentType
+        required: false,
+        content: {
+          html: '<p>Start writing your section content here...</p>',
+          text: 'Start writing your section content here...'
+        },
+        order: newOrder,
+        id: `custom_${Date.now()}`
+      }
+      
+      // Store the section ID for error handling
+      newSectionId = sectionData.id
+
+      // Optimistic update: Add section to UI immediately
+      const optimisticSection: FlexiblePRDSection = {
+        id: sectionData.id,
+        title: sectionData.title,
+        order: sectionData.order,
+        agent: sectionData.agent,
+        required: sectionData.required,
+        content: sectionData.content,
+        status: 'pending',
+        isCustom: true,
+        isCreating: true
+      }
+      
+      console.log('Adding optimistic section:', optimisticSection) // Debug log
+      
+      // Update UI immediately for better UX
+      setSections(prev => {
+        const updated = [...prev, optimisticSection].sort((a, b) => a.order - b.order)
+        console.log('Optimistic sections update:', updated) // Debug log
+        return updated
+      })
+
+      // Add section via enhanced edge function
+      const { data, error } = await supabase.functions.invoke('prd-management', {
+        body: {
+          action: 'addSection',
+          prdId: prd.id,
+          sectionData: sectionData
+        },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
+      })
+
+      if (error) {
+        // Remove optimistic section on error
+        setSections(prev => prev.filter(s => s.id !== sectionData.id))
+        throw error
+      }
+
+      console.log('Add section response:', data) // Debug log
+
+      // Update with backend data if available, otherwise keep optimistic update
+      if (data?.newSection) {
+        const backendSection: FlexiblePRDSection = {
+          ...data.newSection,
+          agent: data.newSection.agent || 'project_manager',
+          isCustom: true,
+          isCreating: false
+        }
+        
+        console.log('Replacing optimistic with backend section:', backendSection) // Debug log
+        
+        // Replace optimistic section with backend response
+        setSections(prev => {
+          const withoutOptimistic = prev.filter(s => s.id !== sectionData.id)
+          const updated = [...withoutOptimistic, backendSection].sort((a, b) => a.order - b.order)
+          console.log('Final sections after backend response:', updated) // Debug log
+          return updated
+        })
+      } else {
+        // If no backend section returned, clear the isCreating flag on optimistic section
+        setSections(prev => prev.map(section => 
+          section.id === sectionData.id 
+            ? { ...section, isCreating: false }
+            : section
+        ))
+      }
+
+      toast({
+        title: 'Section added',
+        description: 'New section has been added successfully.',
+      })
+
+    } catch (error) {
+      console.error('Failed to add section:', error)
+      
+      // Clear isCreating flag on error to prevent auto-save issues
+      if (newSectionId) {
+        setSections(prev => prev.map(section => 
+          section.id === newSectionId 
+            ? { ...section, isCreating: false }
+            : section
+        ))
+      }
+      
+      toast({
+        title: 'Add failed',
+        description: 'Failed to add new section. Please try again.',
+        variant: 'destructive'
+      })
+    } finally {
+      setIsSaving(false)
+    }
+  }, [prd, sections, toast])
 
   // Handle section reordering with backend persistence
   const handleSectionReorder = useCallback(async (reorderedSections: FlexiblePRDSection[]) => {
@@ -433,7 +643,7 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
 
       {/* Sections */}
       {sections.length > 0 ? (
-        <div className="space-y-2">
+        <div className="space-y-2 relative" ref={sectionsContainerRef}>
           <PRDDndProvider 
             sections={sections.sort((a, b) => a.order - b.order)}
             onSectionReorder={handleSectionReorder}
@@ -446,6 +656,7 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
                     key={section.id} 
                     id={section.id}
                     className="mb-4"
+                    ref={(ref) => { sectionRefs.current[section.id] = ref }}
                   >
                     <SectionBlockEditor
                       section={section}
@@ -458,6 +669,15 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
                 ))}
             </div>
           </PRDDndProvider>
+
+          {/* Section Block Controls */}
+          <SectionBlockControls
+            containerRef={sectionsContainerRef}
+            sections={sections}
+            sectionRefs={sectionRefs}
+            onSectionAdd={handleAddSection}
+            enableDragHandle={true}
+          />
         </div>
       ) : (
         <Card>
