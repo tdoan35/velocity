@@ -174,7 +174,7 @@ export function SimpleBlockControls({
         const controlsHeight = 28
         
         // Position controls in the left padding area, center-aligned
-        const negativeOffset = -75
+        const negativeOffset = -45
         
         setControlsPosition({ 
           top: top + (blockHeight / 2) - (controlsHeight / 2),
@@ -277,7 +277,7 @@ export function SimpleBlockControls({
         {showControls && (
           <motion.div
             ref={controlsRef}
-            className="simple-block-controls absolute flex items-center gap-1 z-30"
+            className="simple-block-controls absolute flex items-center gap-0.5 z-30"
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -10 }}
@@ -324,7 +324,7 @@ export function SimpleBlockControls({
             {/* Add New Line Button */}
             <motion.button
               className={cn(
-                "p-1.5 rounded-md",
+                "p-1 rounded-md",
                 "bg-white dark:bg-gray-800",
                 "border border-gray-200 dark:border-gray-700",
                 "hover:bg-gray-50 dark:hover:bg-gray-700",
@@ -337,14 +337,14 @@ export function SimpleBlockControls({
               onMouseDown={(e) => e.preventDefault()}
               title="Add new line below"
             >
-              <Plus className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
+              <Plus className="h-3 w-3 text-gray-500 dark:text-gray-400" />
             </motion.button>
 
             {/* Drag Handle */}
             <div
               className={cn(
                 "drag-handle",
-                "p-1.5 rounded-md cursor-move",
+                "p-1 rounded-md cursor-move",
                 "bg-white dark:bg-gray-800",
                 "border border-gray-200 dark:border-gray-700",
                 "hover:bg-gray-50 dark:hover:bg-gray-700",
@@ -387,7 +387,7 @@ export function SimpleBlockControls({
                 }
               }}
             >
-              <GripVertical className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
+              <GripVertical className="h-3 w-3 text-gray-500 dark:text-gray-400" />
             </div>
           </motion.div>
         )}

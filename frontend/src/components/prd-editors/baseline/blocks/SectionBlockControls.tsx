@@ -54,9 +54,10 @@ export function SectionBlockControls({
         const headerRect = sectionHeader.getBoundingClientRect()
         const containerRect = container.getBoundingClientRect()
         
-        // Create expanded zone that includes the controls area (75px to the left of header)
+        // Create expanded zone that includes the controls area (25px to the left of header)
+        // Only cover the header area itself, not the content below
         const expandedZone = {
-          left: headerRect.left - 75,
+          left: headerRect.left - 25,
           right: headerRect.right,
           top: headerRect.top,
           bottom: headerRect.bottom
@@ -89,7 +90,7 @@ export function SectionBlockControls({
         const controlsHeight = 28
         
         // Position controls in the left padding area, center-aligned with header
-        const negativeOffset = -75
+        const negativeOffset = -25
         
         setControlsPosition({ 
           top: top + (headerHeight / 2) - (controlsHeight / 2),
@@ -102,7 +103,7 @@ export function SectionBlockControls({
         hideTimeoutRef.current = setTimeout(() => {
           setHoveredSection(null)
           setShowControls(false)
-        }, 500) // Increased delay from 200ms to 500ms
+        }, 100) // Quick hide when moving away from header
       }
     }
 
@@ -117,7 +118,7 @@ export function SectionBlockControls({
           currentSectionHeader = null
           setHoveredSection(null)
           setShowControls(false)
-        }, 500) // Increased delay to match mousemove handler
+        }, 100) // Quick hide when leaving container
       }
     }
 
@@ -172,7 +173,7 @@ export function SectionBlockControls({
         {showControls && (
           <motion.div
             ref={controlsRef}
-            className="section-block-controls absolute flex items-center gap-1 z-30"
+            className="section-block-controls absolute flex items-center gap-0.5 z-30"
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -10 }}
@@ -198,7 +199,7 @@ export function SectionBlockControls({
                 hideTimeoutRef.current = setTimeout(() => {
                   setHoveredSection(null)
                   setShowControls(false)
-                }, 500) // Increased delay for consistency
+                }, 0) // Immediate hide for invalid targets
                 return
               }
               
@@ -210,7 +211,7 @@ export function SectionBlockControls({
                 const mouseY = e.clientY
                 
                 const expandedZone = {
-                  left: headerRect.left - 75,
+                  left: headerRect.left - 25,
                   right: headerRect.right,
                   top: headerRect.top,
                   bottom: headerRect.bottom
@@ -232,14 +233,14 @@ export function SectionBlockControls({
                 hideTimeoutRef.current = setTimeout(() => {
                   setHoveredSection(null)
                   setShowControls(false)
-                }, 500) // Increased delay for consistency
+                }, 100) // Quick hide for better UX
               }
             }}
           >
             {/* Add New Section Button */}
             <motion.button
               className={cn(
-                "p-1.5 rounded-md",
+                "p-1 rounded-md",
                 "bg-white dark:bg-gray-800",
                 "border border-gray-200 dark:border-gray-700",
                 "hover:bg-gray-50 dark:hover:bg-gray-700",
@@ -252,7 +253,7 @@ export function SectionBlockControls({
               onMouseDown={(e) => e.preventDefault()}
               title="Add new section below"
             >
-              <Plus className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
+              <Plus className="h-3 w-3 text-gray-500 dark:text-gray-400" />
             </motion.button>
 
             {/* Drag Handle */}
@@ -260,7 +261,7 @@ export function SectionBlockControls({
               <motion.div
                 className={cn(
                   "section-drag-handle",
-                  "p-1.5 rounded-md cursor-move",
+                  "p-1 rounded-md cursor-move",
                   "bg-white dark:bg-gray-800",
                   "border border-gray-200 dark:border-gray-700",
                   "hover:bg-gray-50 dark:hover:bg-gray-700",
@@ -272,7 +273,7 @@ export function SectionBlockControls({
                 title="Drag to reorder section"
                 {...getDragHandleProps()}
               >
-                <GripVertical className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
+                <GripVertical className="h-3 w-3 text-gray-500 dark:text-gray-400" />
               </motion.div>
             )}
           </motion.div>

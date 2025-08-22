@@ -6,7 +6,7 @@ import { projectService } from '@/services/projectService'
 import { conversationService } from '@/services/conversationService'
 import { prdService } from '@/services/prdService'
 import { EnhancedChatInterface } from '@/components/chat/enhanced-chat-interface'
-import { NotionPRDEditorEnhanced } from '@/components/prd-editors/notion-enhanced'
+import { BlockNotionPRDEditor } from '@/components/prd-editors/baseline/BlockNotionPRDEditor'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
@@ -485,9 +485,8 @@ export function ProjectDesign() {
                       ease: [0.4, 0, 0.2, 1] 
                     }}
                   >
-                    <NotionPRDEditorEnhanced
+                    <BlockNotionPRDEditor
                       projectId={projectId || ''}
-                      className="flex-1"
                     />
                   </motion.div>
                 ) : (
