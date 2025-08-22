@@ -26,7 +26,7 @@ import {
 interface PRDRequest {
   action: 'create' | 'update' | 'get' | 'finalize' | 'generateSuggestions' | 'validateSection' | 
           'updateSection' | 'addSection' | 'removeSection' | 'reorderSections' | 'updateSectionOrders' | 'getAgentStatus' |
-          'initializeSections' | 'extractStructuredData'
+          'initializeSections' | 'extractStructuredData' | 'resetToDefault'
   conversationId?: string
   projectId?: string
   prdId?: string
@@ -141,6 +141,10 @@ Deno.serve(async (req) => {
         response = await extractStructuredDataFromSection(supabase, authResult.userId, prdId!, sectionId!)
         break
 
+      case 'resetToDefault':
+        response = await resetPRDToDefault(supabase, authResult.userId, prdId!)
+        break
+
       default:
         return new Response(JSON.stringify({ error: 'Invalid action' }), {
           status: 400,
@@ -149,7 +153,7 @@ Deno.serve(async (req) => {
     }
 
     // Broadcast PRD update via Supabase Realtime if PRD was modified
-    if (['update', 'updateSection', 'addSection', 'removeSection', 'reorderSections', 'updateSectionOrders'].includes(action) && projectId) {
+    if (['update', 'updateSection', 'addSection', 'removeSection', 'reorderSections', 'updateSectionOrders', 'resetToDefault'].includes(action) && projectId) {
       const channel = supabase.channel(`prd_changes:${projectId}`)
       await channel.send({
         type: 'broadcast',
@@ -961,6 +965,51 @@ async function extractStructuredDataFromSection(
     validation,
     richTextContent: section.content,
     message: 'Structured data extracted successfully from rich text content'
+  }
+}
+
+async function resetPRDToDefault(
+  supabase: any,
+  userId: string,
+  prdId: string
+) {
+  // Verify user owns the PRD
+  const { data: prd, error: prdError } = await supabase
+    .from('prds')
+    .select('*')
+    .eq('id', prdId)
+    .eq('user_id', userId)
+    .single()
+
+  if (prdError || !prd) {
+    throw new Error('PRD not found or access denied')
+  }
+
+  // Initialize default sections
+  const defaultSections = initializePRDSections()
+  
+  const { data: updatedPRD, error: updateError } = await supabase
+    .from('prds')
+    .update({
+      sections: defaultSections,
+      completion_percentage: 0,
+      status: 'draft',
+      last_section_completed: null,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', prdId)
+    .select()
+    .single()
+
+  if (updateError) {
+    throw new Error(`Failed to reset PRD: ${updateError.message}`)
+  }
+
+  return { 
+    prd: updatedPRD,
+    sections: defaultSections,
+    reset: true,
+    message: 'PRD reset to default template sections successfully'
   }
 }
 

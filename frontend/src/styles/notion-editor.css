@@ -208,13 +208,27 @@
 }
 
 .notion-content ul,
-.notion-content ol {
-  margin: 0.5em 0;
-  padding-left: 1.5em;
+.notion-content ol,
+.prose ul,
+.prose ol {
+  margin: 0.5em 0 !important;
+  padding-left: 2.5em !important;
 }
 
-.notion-content li {
-  margin: 0.25em 0;
+.notion-content li,
+.prose li {
+  margin: 0.25em 0 !important;
+}
+
+/* Specific targeting for baseline editor prose content */
+.prose.prose-sm ul,
+.prose.prose-sm ol {
+  padding-left: 2.5em !important;
+  margin: 0.5em 0 !important;
+}
+
+.prose.prose-sm li {
+  margin: 0.25em 0 !important;
 }
 
 /* Task lists */

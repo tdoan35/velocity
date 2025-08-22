@@ -92,10 +92,10 @@ export function PRDEditorDemo() {
   }
   
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">PRD Editor Demo</h1>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
+      <div className="max-w-7xl mx-auto">
+        <div className="mb-4">
+          <h1 className="text-2xl font-bold mb-2">PRD Editor Demo</h1>
           <p className="text-muted-foreground">
             Testing the new baseline PRD editor component
           </p>
@@ -104,7 +104,16 @@ export function PRDEditorDemo() {
           </p>
         </div>
         
-        <BlockNotionPRDEditor projectId={projectId} />
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden" style={{ height: '80vh' }}>
+          <div className="h-full flex flex-col">
+            <h2 className="p-4 bg-yellow-50 dark:bg-yellow-900/20 text-lg font-semibold flex-shrink-0">
+              Baseline BlockNotionPRDEditor (Enhanced Header UI)
+            </h2>
+            <div className="flex-1 min-h-0">
+              <BlockNotionPRDEditor projectId={projectId} />
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )

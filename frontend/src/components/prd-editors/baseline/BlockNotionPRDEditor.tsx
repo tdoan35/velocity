@@ -1,13 +1,25 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Loader2, AlertCircle, FileText, RefreshCw } from 'lucide-react'
+import { Loader2, AlertCircle, FileText, RefreshCw, Download, Save, PanelRight } from 'lucide-react'
 import { prdService, type PRD, type FlexiblePRDSection } from '@/services/prdService'
 import { useToast } from '@/hooks/use-toast'
 import { SectionBlockEditor } from './blocks/SectionBlockEditor'
 import { supabase } from '@/lib/supabase'
 import type { VirtualContentBlock } from '@/lib/virtual-blocks/types'
 import { PRDDndProvider, SortableSection } from './dnd'
+import { PRDStatusBadge } from '../shared/components/PRDStatusBadge'
+import { cn } from '@/lib/utils'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 interface BlockNotionPRDEditorProps {
   projectId: string
@@ -20,7 +32,18 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showTOC, setShowTOC] = useState(false)
+  const [prdStatus, setPrdStatus] = useState<'draft' | 'in_progress' | 'review' | 'finalized' | 'archived'>('draft')
+  const [showResetDialog, setShowResetDialog] = useState(false)
   const { toast } = useToast()
+  
+  // Keep a ref to current sections to avoid dependency issues
+  const sectionsRef = useRef<FlexiblePRDSection[]>([])
+  
+  // Update ref whenever sections change
+  useEffect(() => {
+    sectionsRef.current = sections
+  }, [sections])
 
   useEffect(() => {
     loadOrCreatePRD()
@@ -60,6 +83,7 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
       
       setPRD(existingPRD)
       setSections(existingPRD?.sections || [])
+      setPrdStatus(existingPRD?.status || 'draft')
     } catch (err) {
       console.error('Error in loadOrCreatePRD:', err)
       const errorMessage = err instanceof Error ? err.message : 'Failed to load or create PRD'
@@ -76,6 +100,52 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
 
   const handleRetry = () => {
     loadOrCreatePRD()
+  }
+
+  const handleResetToDefault = async () => {
+    if (!prd?.id) return
+
+    setIsSaving(true)
+    
+    try {
+      // Get session for auth
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        throw new Error('No active session')
+      }
+      
+      // Reset PRD to default sections
+      const { error } = await supabase.functions.invoke('prd-management', {
+        body: {
+          action: 'resetToDefault',
+          prdId: prd.id
+        },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
+      })
+
+      if (error) throw error
+
+      // Reload the PRD to get the fresh default sections  
+      await loadOrCreatePRD()
+
+      toast({
+        title: 'PRD Reset',
+        description: 'PRD has been reset to default template sections.',
+      })
+
+    } catch (error) {
+      console.error('Failed to reset PRD:', error)
+      toast({
+        title: 'Reset failed',
+        description: 'Failed to reset PRD. Please try again.',
+        variant: 'destructive'
+      })
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleSectionUpdate = useCallback(async (sectionId: string, content: { html: string; text: string }) => {
@@ -166,14 +236,17 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
       return
     }
 
+    // Use ref to get current sections without dependency issues
+    const currentSections = sectionsRef.current
+
     console.log('Starting section reorder:', {
       prdId: prd.id,
-      originalOrder: sections.map(s => ({ id: s.id, order: s.order, title: s.title })),
+      originalOrder: currentSections.map(s => ({ id: s.id, order: s.order, title: s.title })),
       newOrder: reorderedSections.map((s, i) => ({ id: s.id, order: i + 1, title: s.title }))
     })
 
     // Store original sections for rollback
-    const originalSections = [...sections]
+    const originalSections = [...currentSections]
 
     // Update sections with new order
     const sectionsWithUpdatedOrder = reorderedSections.map((section, index) => ({
@@ -237,7 +310,7 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
         variant: 'destructive'
       })
     }
-  }, [prd, sections, toast])
+  }, [prd, toast])
 
   // Loading state
   if (isLoading) {
@@ -272,72 +345,95 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
 
   // Main PRD display
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-4">
-      {/* Header Card */}
-      <Card>
-        <CardHeader className="border-b">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-xl font-semibold">
-              {prd.title || 'Product Requirements Document'}
-            </CardTitle>
-            <div className="flex items-center gap-3">
+    <div className="flex flex-col h-full">
+      {/* Header - matching Enhanced NotionPRDEditor style */}
+      <div className="relative border-b border-gray-200 dark:border-gray-700/50 bg-transparent flex-shrink-0 rounded-t-lg">
+        <div className="p-4 pl-5">
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold">Product Requirements Document</h2>
+            </div>
+            <div className="flex items-center gap-2">
               {isSaving && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  Saving...
+                <div className="px-2 py-1 rounded-md bg-blue-500/10 flex items-center gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin text-blue-600 dark:text-blue-500" />
+                  <span className="text-xs font-medium text-blue-600 dark:text-blue-500">
+                    Saving...
+                  </span>
                 </div>
               )}
+              <PRDStatusBadge status={prdStatus} />
               <Button
-                onClick={loadOrCreatePRD}
-                variant="outline"
-                size="sm"
-                disabled={isLoading || isSaving}
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => {
+                  toast({
+                    title: 'Save',
+                    description: 'Manual save functionality coming soon',
+                    duration: 2000
+                  })
+                }}
+                disabled={isSaving}
+                title="Save document"
               >
-                <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
-                Refresh
+                <Save className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setShowResetDialog(true)}
+                disabled={isLoading || isSaving}
+                title="Reset PRD to default template"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => {
+                  toast({
+                    title: 'Export',
+                    description: 'Export functionality coming soon',
+                    duration: 2000
+                  })
+                }}
+                title="Export as Markdown"
+              >
+                <Download className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setShowTOC(!showTOC)}
+                title={showTOC ? "Hide Table of Contents" : "Show Table of Contents"}
+              >
+                <PanelRight className={cn("h-4 w-4", showTOC && "text-primary")} />
               </Button>
             </div>
           </div>
-          
-          {/* Progress Bar */}
-          <div className="mt-4">
-            <div className="flex items-center justify-between text-sm mb-2">
-              <span className="text-muted-foreground">Progress</span>
-              <span className="font-medium">{prd.completion_percentage || 0}% complete</span>
-            </div>
-            <div className="h-2 bg-muted rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-primary transition-all duration-300"
-                style={{ width: `${prd.completion_percentage || 0}%` }}
-              />
-            </div>
-          </div>
-        </CardHeader>
+        </div>
         
-        <CardContent className="pt-4">
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="text-muted-foreground">Status:</span>
-              <span className="ml-2 font-medium">{prd.status}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Created:</span>
-              <span className="ml-2">{prd.created_at ? new Date(prd.created_at).toLocaleDateString() : 'N/A'}</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+        {/* Progress Bar as bottom border */}
+        <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200 dark:bg-gray-700">
+          <div 
+            className="h-full bg-emerald-500 transition-all duration-300 ease-out"
+            style={{ width: `${prd.completion_percentage || 0}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Main Content Wrapper */}
+      <div className="flex-1 relative overflow-hidden">
+        <div className="absolute inset-0 overflow-y-auto bg-muted/50">
+          <div className="max-w-4xl mx-auto px-8 py-6">
 
       {/* Sections */}
       {sections.length > 0 ? (
         <div className="space-y-2">
-          <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
-            <FileText className="w-4 h-4" />
-            Sections
-            <span className="text-sm text-muted-foreground ml-2">
-              (Drag sections to reorder)
-            </span>
-          </h2>
           <PRDDndProvider 
             sections={sections.sort((a, b) => a.order - b.order)}
             onSectionReorder={handleSectionReorder}
@@ -349,7 +445,7 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
                   <SortableSection 
                     key={section.id} 
                     id={section.id}
-                    className="mb-2"
+                    className="mb-4"
                   >
                     <SectionBlockEditor
                       section={section}
@@ -374,6 +470,37 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
           </CardContent>
         </Card>
       )}
+      
+          </div> {/* End inner content wrapper */}
+        </div> {/* End scrollable content wrapper */}
+      </div> {/* End relative container */}
+      
+      {/* Reset Confirmation Dialog */}
+      <AlertDialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset PRD to Default Template?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action will permanently replace all current sections with the default template. 
+              Any content you've written will be lost and cannot be recovered.
+              <br /><br />
+              Are you sure you want to continue?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => {
+                setShowResetDialog(false)
+                handleResetToDefault()
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Reset PRD
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

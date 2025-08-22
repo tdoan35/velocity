@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { NotionRichTextEditor } from './NotionRichTextEditor'
 import { usePRDTemplates } from '@/hooks/usePRDTemplates'
+import { motion, AnimatePresence } from 'framer-motion'
 import { 
   ChevronDown, 
   ChevronRight, 
@@ -19,6 +20,47 @@ import {
 import { cn } from '@/lib/utils'
 import type { FlexiblePRDSection } from '@/services/prdService'
 import type { VirtualContentBlock } from '@/lib/virtual-blocks/types'
+
+// Section emoji mapping (matching BlockBasedPRDEditor)
+const getSectionEmoji = (sectionId: string): string => {
+  const emojis: Record<string, string> = {
+    overview: '📋',
+    core_features: '⭐',
+    additional_features: '✨',
+    ui_design_patterns: '🎨',
+    ux_flows: '🗺️',
+    technical_architecture: '🏗️',
+    tech_integrations: '🔌',
+    custom: '📝'
+  }
+  return emojis[sectionId] || '📄'
+}
+
+// Agent mapping for sections (matching BlockBasedPRDEditor)
+const getSectionAgent = (sectionId: string): string => {
+  const agentMap: Record<string, string> = {
+    overview: 'Project Manager',
+    core_features: 'Project Manager',
+    additional_features: 'Project Manager',
+    ui_design_patterns: 'Design Assistant',
+    ux_flows: 'Design Assistant',
+    technical_architecture: 'Engineering Assistant',
+    tech_integrations: 'Config Helper'
+  }
+  return agentMap[sectionId] || 'You'
+}
+
+// Agent badge styling (matching SectionBlock component)
+const getAgentBadgeStyle = (agent: string): string => {
+  const styles: Record<string, string> = {
+    'Project Manager': 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800',
+    'Design Assistant': 'bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 border-blue-200 dark:border-blue-800',
+    'Engineering Assistant': 'bg-purple-500/10 text-purple-600 dark:bg-purple-500/20 dark:text-purple-400 border-purple-200 dark:border-purple-800',
+    'Config Helper': 'bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 border-orange-200 dark:border-orange-800',
+    'You': 'bg-gray-500/10 text-gray-600 dark:bg-gray-500/20 dark:text-gray-400 border-gray-200 dark:border-gray-700'
+  }
+  return styles[agent] || styles['You']
+}
 
 interface SectionBlockEditorProps {
   section: FlexiblePRDSection
@@ -50,6 +92,7 @@ export function SectionBlockEditor({
     html: '',
     text: ''
   })
+  const [isAnimating, setIsAnimating] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -149,9 +192,9 @@ export function SectionBlockEditor({
   const getStatusIcon = () => {
     switch (section.status) {
       case 'completed':
-        return <Check className="w-4 h-4 text-green-600" />
+        return <Check className="w-4 h-4 text-emerald-500" />
       case 'in_progress':
-        return <Clock className="w-4 h-4 text-yellow-600" />
+        return <Clock className="w-4 h-4 text-amber-500" />
       default:
         return <Circle className="w-4 h-4 text-gray-400" />
     }
@@ -160,11 +203,11 @@ export function SectionBlockEditor({
   const getStatusColor = () => {
     switch (section.status) {
       case 'completed':
-        return 'bg-green-100 text-green-700 border-green-200'
+        return 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800'
       case 'in_progress':
-        return 'bg-yellow-100 text-yellow-700 border-yellow-200'
+        return 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800'
       default:
-        return 'bg-gray-100 text-gray-700 border-gray-200'
+        return 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600'
     }
   }
 
@@ -183,42 +226,50 @@ export function SectionBlockEditor({
   }
 
   return (
-    <Card className="mb-4">
-      <CardHeader>
+    <motion.div
+      layout
+      transition={{ duration: 0.2, ease: "easeInOut" }}
+    >
+      <Card className="mb-4 overflow-visible bg-transparent border-0 shadow-none" data-section-id={section.id}>
+      <CardHeader className="pb-3 bg-transparent">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <button
-              onClick={() => setIsExpanded(!isExpanded)}
+              onClick={() => {
+                setIsAnimating(true)
+                setIsExpanded(!isExpanded)
+              }}
               className="p-1 hover:bg-muted rounded transition-colors"
               aria-label={isExpanded ? "Collapse" : "Expand"}
             >
-              {isExpanded ? (
-                <ChevronDown className="w-4 h-4" />
-              ) : (
-                <ChevronRight className="w-4 h-4" />
-              )}
+              <motion.div
+                animate={{ rotate: isExpanded ? 0 : -90 }}
+                transition={{ duration: 0.2, ease: "easeInOut" }}
+              >
+                <ChevronDown className="w-4 h-4 text-gray-500" />
+              </motion.div>
             </button>
             
-            {getStatusIcon()}
-            
-            <h3 className="font-medium text-base">
-              {section.title}
-            </h3>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+              {getSectionEmoji(section.id)} {section.title}
+            </h2>
             
             {section.required && (
-              <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded">
-                Required
+              <span className="text-red-500" title="Required">
+                *
               </span>
             )}
           </div>
 
           <div className="flex items-center gap-2">
             <span className={cn(
-              "text-xs px-2 py-1 rounded border",
-              getStatusColor()
+              "px-2 py-1 text-xs font-medium rounded-md border",
+              getAgentBadgeStyle(getSectionAgent(section.id))
             )}>
-              {section.status}
+              {getSectionAgent(section.id)}
             </span>
+
+            {getStatusIcon()}
             
             {!enableClickToEdit && !isEditing && (
               <Button
@@ -234,38 +285,55 @@ export function SectionBlockEditor({
         </div>
       </CardHeader>
 
-      {isExpanded && (
-        <CardContent className="pt-0">
-          {enableClickToEdit ? (
-            // Click-to-edit mode with Notion-like UX
-            <div className="relative">
-              {isSaving && (
-                <div className="absolute top-2 right-2 flex items-center gap-2 text-xs text-muted-foreground bg-background/80 backdrop-blur-sm px-2 py-1 rounded">
-                  <span className="w-3 h-3 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
-                  Saving...
+      <AnimatePresence 
+        initial={false}
+        onExitComplete={() => setIsAnimating(false)}
+      >
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ 
+              duration: 0.3, 
+              ease: "easeInOut",
+              opacity: { duration: 0.2 }
+            }}
+            className={`motion-content ${isAnimating ? 'overflow-hidden' : 'overflow-visible'}`}
+            onAnimationStart={() => setIsAnimating(true)}
+            onAnimationComplete={() => setIsAnimating(false)}
+          >
+              <CardContent className="pt-0 bg-transparent">
+              {enableClickToEdit ? (
+                // Click-to-edit mode with Notion-like UX
+                <div className="relative">
+                  {isSaving && (
+                    <div className="absolute top-2 right-2 flex items-center gap-2 text-xs text-muted-foreground bg-background/80 backdrop-blur-sm px-2 py-1 rounded">
+                      <span className="w-3 h-3 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
+                      Saving...
+                    </div>
+                  )}
+                  <div 
+                    onClick={() => !isEditing && setIsEditing(true)}
+                    className={cn(
+                      "min-h-[100px] rounded-md transition-colors"
+                    )}
+                  >
+                    <NotionRichTextEditor
+                      content={currentContent}
+                      onChange={handleContentChange}
+                      onBlur={handleEditorBlur}
+                      placeholder="Click to start writing..."
+                      editable={true} // Always editable in click-to-edit mode
+                      enableVirtualBlocks={enableVirtualBlocks}
+                      onBlocksUpdate={(blocks) => onBlocksUpdate?.(section.id, blocks)}
+                      sectionId={section.id}
+                    />
+                  </div>
                 </div>
-              )}
-              <div 
-                onClick={() => !isEditing && setIsEditing(true)}
-                className={cn(
-                  "min-h-[100px] rounded-md transition-colors"
-                )}
-              >
-                <NotionRichTextEditor
-                  content={currentContent}
-                  onChange={handleContentChange}
-                  onBlur={handleEditorBlur}
-                  placeholder="Click to start writing..."
-                  editable={true} // Always editable in click-to-edit mode
-                  enableVirtualBlocks={enableVirtualBlocks}
-                  onBlocksUpdate={(blocks) => onBlocksUpdate?.(section.id, blocks)}
-                  sectionId={section.id}
-                />
-              </div>
-            </div>
-          ) : (
-            // Traditional edit mode with explicit edit button
-            isEditing ? (
+              ) : (
+                // Traditional edit mode with explicit edit button
+                isEditing ? (
               <div className="space-y-3">
                 {/* Editor Mode Toggle */}
                 <div className="flex gap-1 p-1 bg-muted rounded-md w-fit">
@@ -359,8 +427,11 @@ export function SectionBlockEditor({
               </div>
             )
           )}
-        </CardContent>
-      )}
+              </CardContent>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </Card>
+    </motion.div>
   )
 }

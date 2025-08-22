@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react'
 import { NotionPRDEditor } from '@/components/prd-editors/notion-original'
 import { EnhancedBlockBasedPRDEditor } from '@/components/prd-editors/block-based'
 import { NotionPRDEditorEnhanced } from '@/components/prd-editors/notion-enhanced'
+import { BlockNotionPRDEditor } from '@/components/prd-editors/baseline'
 import { PRDEditorV2, usePRDEditorStore } from '@/components/prd-editors/editor-v2'
 import { Button } from '@/components/ui/button'
-import { TestContentDrag } from '@/components/test/TestContentDrag'
 
 export function CompareEditors() {
-  const [editorType, setEditorType] = useState<'original' | 'block' | 'enhanced' | 'v2'>('v2')
+  const [editorType, setEditorType] = useState<'original' | 'block' | 'enhanced' | 'baseline' | 'v2'>('v2')
   const projectId = 'cf11334e-4483-4802-b6d8-224e59988d35' // Using the Fitness Tracker project
   const { loadSections } = usePRDEditorStore()
   
@@ -44,6 +44,12 @@ export function CompareEditors() {
               Enhanced NotionPRDEditor
             </Button>
             <Button 
+              onClick={() => setEditorType('baseline')}
+              variant={editorType === 'baseline' ? "default" : "outline"}
+            >
+              Baseline BlockNotionPRDEditor
+            </Button>
+            <Button 
               onClick={() => setEditorType('v2')}
               variant={editorType === 'v2' ? "default" : "outline"}
             >
@@ -51,9 +57,6 @@ export function CompareEditors() {
             </Button>
           </div>
         </div>
-        
-        {/* Test Component for Drag & Drop */}
-        <TestContentDrag />
         
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden" style={{ height: '80vh' }}>
           {editorType === 'original' ? (
@@ -69,6 +72,13 @@ export function CompareEditors() {
                 BlockBasedPRDEditor (Section Cards)
               </h2>
               <EnhancedBlockBasedPRDEditor projectId={projectId} />
+            </div>
+          ) : editorType === 'baseline' ? (
+            <div className="h-full">
+              <h2 className="p-4 bg-yellow-50 dark:bg-yellow-900/20 text-lg font-semibold">
+                Baseline BlockNotionPRDEditor (Enhanced Header UI)
+              </h2>
+              <BlockNotionPRDEditor projectId={projectId} />
             </div>
           ) : editorType === 'v2' ? (
             <div className="h-full">
