@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/use-toast'
 import { SectionBlockEditor } from './blocks/SectionBlockEditor'
 import { supabase } from '@/lib/supabase'
 import type { VirtualContentBlock } from '@/lib/virtual-blocks/types'
+import { PRDDndProvider, SortableSection } from './dnd'
 
 interface BlockNotionPRDEditorProps {
   projectId: string
@@ -158,6 +159,86 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
     }))
   }, [])
 
+  // Handle section reordering with backend persistence
+  const handleSectionReorder = useCallback(async (reorderedSections: FlexiblePRDSection[]) => {
+    if (!prd?.id) {
+      console.warn('No PRD ID available for reordering')
+      return
+    }
+
+    console.log('Starting section reorder:', {
+      prdId: prd.id,
+      originalOrder: sections.map(s => ({ id: s.id, order: s.order, title: s.title })),
+      newOrder: reorderedSections.map((s, i) => ({ id: s.id, order: i + 1, title: s.title }))
+    })
+
+    // Store original sections for rollback
+    const originalSections = [...sections]
+
+    // Update sections with new order
+    const sectionsWithUpdatedOrder = reorderedSections.map((section, index) => ({
+      ...section,
+      order: index + 1
+    }))
+    
+    // Optimistically update UI
+    setSections(sectionsWithUpdatedOrder)
+
+    try {
+      // Get session for auth
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        throw new Error('No active session')
+      }
+      
+      // Prepare section order data
+      const sectionOrderData = sectionsWithUpdatedOrder.map(s => ({
+        id: s.id,
+        order: s.order
+      }))
+
+      console.log('Calling updateSectionOrders with:', {
+        action: 'updateSectionOrders',
+        prdId: prd.id,
+        sections: sectionOrderData
+      })
+      
+      // Save all section orders to backend
+      const { data, error } = await supabase.functions.invoke('prd-management', {
+        body: {
+          action: 'updateSectionOrders',
+          prdId: prd.id,
+          sections: sectionOrderData
+        },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
+      })
+
+      console.log('updateSectionOrders response:', { data, error })
+
+      if (error) throw error
+
+      console.log('Section reorder successful')
+      toast({
+        title: 'Sections reordered',
+        description: 'Section order has been saved successfully.',
+      })
+    } catch (error) {
+      console.error('Failed to reorder sections:', error)
+      console.log('Rolling back to original order:', originalSections.map(s => ({ id: s.id, order: s.order, title: s.title })))
+      
+      // Rollback on error using stored original sections
+      setSections(originalSections)
+      toast({
+        title: 'Error',
+        description: 'Failed to reorder sections. Changes have been reverted.',
+        variant: 'destructive'
+      })
+    }
+  }, [prd, sections, toast])
+
   // Loading state
   if (isLoading) {
     return (
@@ -253,19 +334,34 @@ export function BlockNotionPRDEditor({ projectId }: BlockNotionPRDEditorProps) {
           <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
             <FileText className="w-4 h-4" />
             Sections
+            <span className="text-sm text-muted-foreground ml-2">
+              (Drag sections to reorder)
+            </span>
           </h2>
-          {sections
-            .sort((a, b) => a.order - b.order)
-            .map((section) => (
-              <SectionBlockEditor
-                key={section.id}
-                section={section}
-                onSave={handleSectionUpdate}
-                enableClickToEdit={true}
-                enableVirtualBlocks={true}
-                onBlocksUpdate={handleBlocksUpdate}
-              />
-            ))}
+          <PRDDndProvider 
+            sections={sections.sort((a, b) => a.order - b.order)}
+            onSectionReorder={handleSectionReorder}
+          >
+            <div className="space-y-2">
+              {sections
+                .sort((a, b) => a.order - b.order)
+                .map((section) => (
+                  <SortableSection 
+                    key={section.id} 
+                    id={section.id}
+                    className="mb-2"
+                  >
+                    <SectionBlockEditor
+                      section={section}
+                      onSave={handleSectionUpdate}
+                      enableClickToEdit={true}
+                      enableVirtualBlocks={true}
+                      onBlocksUpdate={handleBlocksUpdate}
+                    />
+                  </SortableSection>
+                ))}
+            </div>
+          </PRDDndProvider>
         </div>
       ) : (
         <Card>

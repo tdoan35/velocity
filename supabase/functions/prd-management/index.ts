@@ -25,7 +25,7 @@ import {
 
 interface PRDRequest {
   action: 'create' | 'update' | 'get' | 'finalize' | 'generateSuggestions' | 'validateSection' | 
-          'updateSection' | 'addSection' | 'removeSection' | 'reorderSections' | 'getAgentStatus' |
+          'updateSection' | 'addSection' | 'removeSection' | 'reorderSections' | 'updateSectionOrders' | 'getAgentStatus' |
           'initializeSections' | 'extractStructuredData'
   conversationId?: string
   projectId?: string
@@ -37,6 +37,7 @@ interface PRDRequest {
   title?: string
   required?: boolean
   newOrder?: number
+  sections?: Array<{ id: string; order: number }>
 }
 
 interface PRDSuggestion {
@@ -108,6 +109,10 @@ Deno.serve(async (req) => {
         response = await reorderPRDSections(supabase, authResult.userId, prdId!, sectionId!, newOrder!)
         break
 
+      case 'updateSectionOrders':
+        response = await updatePRDSectionOrders(supabase, authResult.userId, prdId!, body.sections!)
+        break
+
       case 'get':
         response = await getPRD(supabase, authResult.userId, prdId || conversationId, projectId)
         break
@@ -144,7 +149,7 @@ Deno.serve(async (req) => {
     }
 
     // Broadcast PRD update via Supabase Realtime if PRD was modified
-    if (['update', 'updateSection', 'addSection', 'removeSection', 'reorderSections'].includes(action) && projectId) {
+    if (['update', 'updateSection', 'addSection', 'removeSection', 'reorderSections', 'updateSectionOrders'].includes(action) && projectId) {
       const channel = supabase.channel(`prd_changes:${projectId}`)
       await channel.send({
         type: 'broadcast',
@@ -441,6 +446,54 @@ async function reorderPRDSections(
 
   if (updateError) {
     throw new Error(`Failed to reorder sections: ${updateError.message}`)
+  }
+
+  return { 
+    prd: updatedPRD,
+    reordered: true
+  }
+}
+
+async function updatePRDSectionOrders(
+  supabase: any,
+  userId: string,
+  prdId: string,
+  sectionOrders: Array<{ id: string; order: number }>
+) {
+  // Verify user owns the PRD
+  const { data: prd, error: prdError } = await supabase
+    .from('prds')
+    .select('*')
+    .eq('id', prdId)
+    .eq('user_id', userId)
+    .single()
+
+  if (prdError || !prd) {
+    throw new Error('PRD not found or access denied')
+  }
+
+  const sections: PRDSection[] = prd.sections || []
+  
+  // Update section orders
+  const updatedSections = sections.map(section => {
+    const newOrderInfo = sectionOrders.find(so => so.id === section.id)
+    return newOrderInfo 
+      ? { ...section, order: newOrderInfo.order }
+      : section
+  }).sort((a, b) => a.order - b.order)
+
+  const { data: updatedPRD, error: updateError } = await supabase
+    .from('prds')
+    .update({
+      sections: updatedSections,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', prdId)
+    .select()
+    .single()
+
+  if (updateError) {
+    throw new Error(`Failed to update section orders: ${updateError.message}`)
   }
 
   return { 
