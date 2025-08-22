@@ -184,7 +184,7 @@ export function SectionBlockEditor({
 
   return (
     <Card className="mb-4">
-      <CardHeader className="pb-3">
+      <CardHeader>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <button

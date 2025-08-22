@@ -68,14 +68,15 @@ export const SortableSection: React.FC<SortableSectionProps> = React.memo(({
         position={dropPosition}
       />
       
-      {/* Drag handle - positioned for card layout */}
+      {/* Drag handle - center aligned with card header */}
       <div
         className={cn(
-          'absolute left-2 top-4 p-1 cursor-move opacity-0 group-hover:opacity-100 transition-opacity',
+          'absolute left-2 p-1 cursor-move opacity-0 group-hover:opacity-100 transition-opacity',
           'hover:bg-gray-100 dark:hover:bg-gray-700 rounded z-10',
           dragHandleClassName,
           disabled && 'opacity-30 cursor-not-allowed'
         )}
+        style={{ top: '1.5rem' }} // Center align with CardHeader content (~9rem header height / 2 = ~2.25rem)
         {...attributes}
         {...listeners}
       >
