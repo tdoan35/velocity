@@ -14,7 +14,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { cn } from '@/lib/utils'
 import { ProjectProvider, useProjectContext } from '@/contexts/ProjectContext'
 import { SupabaseConnectionManager } from '@/components/supabase/SupabaseConnectionManager'
-import { ConnectionStatusIndicator } from '@/components/supabase/ConnectionStatusIndicator'
+import { SupabaseConnectButton } from '@/components/supabase/SupabaseConnectButton'
 import { 
   ArrowLeft, 
   Loader2,
@@ -983,33 +983,20 @@ function ProjectDesignContent() {
                 </AnimatePresence>
               </CardContent>
               
-              {/* Card Footer with Connection Status, View PRD and Build Buttons */}
+              {/* Card Footer with Action Buttons */}
               {!showHistory && activeAgent === 'project_manager' && (
                 <CardFooter className="p-4 border-t border-gray-300 dark:border-gray-700/50 flex flex-col gap-3">
-                  {/* Connection Status */}
-                  <div className="w-full">
-                    <ConnectionStatusIndicator
-                      connectionStatus={supabaseConnection.connectionStatus}
-                      isHealthy={supabaseConnection.isHealthy}
-                      projectUrl={supabaseConnection.projectUrl}
-                      lastValidated={supabaseConnection.lastValidated}
-                      error={supabaseConnection.error}
-                      variant="compact"
-                      className="justify-between"
-                    />
-                  </div>
-                  
                   {/* Action Buttons */}
                   <div className="flex gap-2 w-full">
-                    <Button
-                      variant="outline"
-                      size="sm"
+                    <SupabaseConnectButton
+                      connectionStatus={supabaseConnection.connectionStatus}
+                      isHealthy={supabaseConnection.isHealthy}
+                      onClick={() => setShowSupabaseManager(!showSupabaseManager)}
                       className="flex-1"
-                      onClick={() => setShowSupabaseManager(true)}
-                    >
-                      <Database className="w-4 h-4 mr-2" />
-                      {supabaseConnection.isConnected ? 'Manage' : 'Connect'}
-                    </Button>
+                      size="sm"
+                      variant="outline"
+                      isShowingSupabaseManager={showSupabaseManager}
+                    />
                     <Button
                       variant={showPRD ? "default" : "outline"}
                       size="sm"
@@ -1034,15 +1021,6 @@ function ProjectDesignContent() {
                     </Button>
                   </div>
                   
-                  {/* Build Status Message */}
-                  {!supabaseConnection.isConnected && (
-                    <Alert className="w-full py-2">
-                      <AlertCircle className="h-3 w-3" />
-                      <AlertDescription className="text-xs">
-                        Connect Supabase to enable Build
-                      </AlertDescription>
-                    </Alert>
-                  )}
                 </CardFooter>
               )}
             </Card>

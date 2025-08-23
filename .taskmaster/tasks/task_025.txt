@@ -1,0 +1,254 @@
+# Task ID: 25
+# Title: Implement @dnd-kit Drag-and-Drop Solution for BlockBasedPRDEditor
+# Status: done
+# Dependencies: None
+# Priority: high
+# Description: Complete refactoring of the drag-and-drop functionality in BlockBasedPRDEditor to replace the problematic native HTML5 implementation with @dnd-kit library, addressing all identified issues including multiple competing handlers, re-rendering during drag, event duplication, and state corruption.
+# Details:
+## Context
+This task implements the comprehensive solution outlined in:
+- Investigation Report: docs/drag-drop-investigation-report.md
+- Implementation Plan: docs/implementation-plans/dnd-kit-refactoring-plan.md
+
+## Critical Issues Being Addressed
+1. Multiple competing drag handlers causing event conflicts
+2. Component re-rendering during drag operations breaking the drag chain
+3. useDragCleanup hook creating 20+ duplicate events per drag
+4. Non-atomic operations leading to corrupted content structure
+5. TipTap editor interference with custom drag implementation
+
+## Solution Approach
+Replace the entire native HTML5 drag-and-drop implementation with @dnd-kit library, which provides:
+- Single source of truth for drag state
+- Framework-managed cleanup operations
+- Stable references preventing re-renders
+- Atomic state updates
+- Built-in accessibility and touch support
+
+## Success Criteria
+- Zero drag-related errors in console
+- Playwright drag tests pass 100%
+- Drag operations complete in < 100ms
+- No component re-renders during drag
+- Content structure remains intact after drag operations
+
+# Test Strategy:
+1. Unit tests for all new DnD components
+2. E2E tests for section and content reordering
+3. Performance testing to verify < 100ms operations
+4. Manual testing on both desktop and touch devices
+5. Accessibility testing with keyboard navigation
+
+# Subtasks:
+## 1. Install and Configure @dnd-kit Dependencies [done]
+### Dependencies: None
+### Description: Install the @dnd-kit library and configure TypeScript support for the new drag-and-drop implementation. Verify the library is properly integrated with the existing React/TypeScript setup.
+### Details:
+Install @dnd-kit/core, @dnd-kit/sortable, and @dnd-kit/utilities packages. Update package.json and verify compatibility with existing dependencies. Configure TypeScript types and ensure no conflicts with existing drag libraries (@hello-pangea/dnd is already installed). Create basic configuration and test integration works with current build system.
+<info added on 2025-08-14T20:25:38.346Z>
+Based on the implementation plan Phase 1.1, the @dnd-kit package installation should be done with consideration that @hello-pangea/dnd is already installed in the project and should remain separate to avoid conflicts. The specific packages required are @dnd-kit/core, @dnd-kit/sortable, @dnd-kit/utilities, and @dnd-kit/modifiers. Complete package requirements and installation details can be found in the implementation plan at docs/implementation-plans/dnd-kit-refactoring-plan.md which contains the comprehensive package list and configuration specifications.
+</info added on 2025-08-14T20:25:38.346Z>
+<info added on 2025-08-14T20:33:12.068Z>
+FIRST: Read docs/implementation-plans/dnd-kit-refactoring-plan.md Phase 1.1 for package requirements and docs/drag-drop-investigation-report.md for context on why @dnd-kit is needed.
+</info added on 2025-08-14T20:33:12.068Z>
+
+## 2. Create Core DnD Infrastructure Components [done]
+### Dependencies: 25.1
+### Description: Implement the foundational @dnd-kit components including DndProvider, SortableSection wrapper, and SortableContentLine wrapper with proper TypeScript interfaces and stable references.
+### Details:
+Create frontend/src/components/prd/dnd/DndProvider.tsx with DndContext, sensors configuration, and collision detection. Implement frontend/src/components/prd/dnd/SortableSection.tsx wrapper component using useSortable hook. Create frontend/src/components/prd/dnd/SortableContentLine.tsx for content-level dragging. Use stable references with useCallback and useMemo to prevent re-renders. Configure proper drag data structures and event handling interfaces.
+<info added on 2025-08-14T20:26:02.100Z>
+PRDDndProvider Component (frontend/src/components/prd/dnd/DndProvider.tsx):
+```tsx
+import React from 'react';
+import { DndContext, DragOverlay, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
+
+interface PRDDndProviderProps {
+  children: React.ReactNode;
+  onDragEnd: (event: DragEndEvent) => void;
+}
+
+export const PRDDndProvider: React.FC<PRDDndProviderProps> = ({ children, onDragEnd }) => {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      {children}
+      <DragOverlay>{/* Drag overlay content */}</DragOverlay>
+    </DndContext>
+  );
+};
+```
+
+SortableSection Component (frontend/src/components/prd/dnd/SortableSection.tsx):
+```tsx
+import React, { useMemo } from 'react';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+interface SortableSectionProps {
+  id: string;
+  children: React.ReactNode;
+  className?: string;
+}
+
+export const SortableSection = React.memo<SortableSectionProps>(({ id, children, className }) => {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
+  
+  const style = useMemo(() => ({
+    transform: CSS.Transform.toString(transform),
+    transition,
+  }), [transform, transition]);
+
+  return (
+    <div ref={setNodeRef} style={style} className={className} {...attributes} {...listeners}>
+      {children}
+    </div>
+  );
+});
+```
+
+SortableContentLine Component (frontend/src/components/prd/dnd/SortableContentLine.tsx):
+```tsx
+import React, { useCallback, useMemo } from 'react';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+interface SortableContentLineProps {
+  id: string;
+  children: React.ReactNode;
+  onSelect?: (id: string) => void;
+}
+
+export const SortableContentLine = React.memo<SortableContentLineProps>(({ id, children, onSelect }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  
+  const handleClick = useCallback(() => {
+    onSelect?.(id);
+  }, [id, onSelect]);
+
+  const style = useMemo(() => ({
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }), [transform, transition, isDragging]);
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners} onClick={handleClick}>
+      {children}
+    </div>
+  );
+});
+```
+
+DnD Store (frontend/src/stores/dndStore.ts):
+```ts
+interface DragData {
+  id: string;
+  type: 'section' | 'content';
+  parentId?: string;
+}
+
+interface DndState {
+  activeId: string | null;
+  draggedItem: DragData | null;
+  setActiveId: (id: string | null) => void;
+  setDraggedItem: (item: DragData | null) => void;
+}
+```
+
+Investigation Report References:
+- Section 1 findings: Multiple competing drag handlers from react-beautiful-dnd and browser events caused conflicts resolved by @dnd-kit's unified sensor system
+- Section 2 findings: Component re-renders during drag operations prevented by stable references using useCallback and useMemo hooks as implemented above
+</info added on 2025-08-14T20:26:02.100Z>
+<info added on 2025-08-14T20:33:21.423Z>
+FIRST: Read docs/implementation-plans/dnd-kit-refactoring-plan.md Phase 1.1-1.2 for component architecture and code examples, and docs/drag-drop-investigation-report.md sections 1-2 for issues with competing handlers and re-renders.
+</info added on 2025-08-14T20:33:21.423Z>
+
+## 3. Refactor BlockBasedPRDEditor to Use @dnd-kit [done]
+### Dependencies: 25.2
+### Description: Replace the native HTML5 drag implementation in BlockBasedPRDEditor.enhanced.tsx with the new @dnd-kit system, removing all custom drag handlers and cleanup hooks.
+### Details:
+Remove existing native drag handlers (handleDragStart, handleDragOver, handleDrop, handleDragEnd) from lines 377-556. Remove useDragCleanup import and call on line 151. Replace section drag logic with @dnd-kit SortableContext. Update handleSectionReorder function to work with @dnd-kit events. Remove auto-scroll implementation and global drag listeners. Wrap component content with PRDDndProvider and configure section-level sortable context.
+<info added on 2025-08-14T20:26:14.958Z>
+Per the implementation plan Phase 2.1 and investigation report findings, current issues are located in BlockBasedPRDEditor.enhanced.tsx: lines 151 (useDragCleanup call), lines 377-556 (native drag handlers), and lines 381-424 (global drag handlers). Removing these components will directly address the "multiple competing handlers" issue identified in section 1 of the investigation report.
+</info added on 2025-08-14T20:26:14.958Z>
+<info added on 2025-08-14T20:33:32.856Z>
+FIRST: Read docs/implementation-plans/dnd-kit-refactoring-plan.md Phase 2.1 for BlockBasedPRDEditor refactoring steps and docs/drag-drop-investigation-report.md sections detailing the specific line numbers where issues occur (lines 151, 377-556, 381-424).
+</info added on 2025-08-14T20:33:32.856Z>
+
+## 4. Refactor NotionSectionEditor for @dnd-kit Integration [done]
+### Dependencies: 25.2
+### Description: Update NotionSectionEditor.tsx to integrate with @dnd-kit, removing TipTap drag handler disabling and implementing content-level sortable functionality.
+### Details:
+Remove useDragCleanup import and call on line 846. Update TipTap editor configuration to re-enable native drag handlers (remove lines 944-950 that return false). Implement content-level dragging using SortableContentLine wrapper around individual content blocks. Update content drag handlers (lines 1046-1073) to work with @dnd-kit events instead of native events. Ensure content sync logic doesn't interfere with drag operations by adding drag-in-progress checks.
+<info added on 2025-08-14T20:34:38.748Z>
+FIRST: Read docs/implementation-plans/dnd-kit-refactoring-plan.md Phase 2.2 and Phase 3.1 for NotionSectionEditor refactoring and docs/drag-drop-investigation-report.md Technical Deep Dive section regarding TipTap conflicts (lines 944-950, 846, 1046-1073).
+</info added on 2025-08-14T20:34:38.748Z>
+
+## 5. Replace EnhancedBlockControls Native Drag Logic [done]
+### Dependencies: 25.2
+### Description: Completely refactor EnhancedBlockControls.tsx to use @dnd-kit instead of native HTML5 drag events, making content moves atomic and eliminating re-render issues.
+### Details:
+Replace native dragstart handler (lines 369-459) with @dnd-kit useSortable integration. Remove native event listener effect hook (lines 497-527) that re-attaches listeners. Refactor handleMove function (lines 313-332) to be atomic using TipTap transactions instead of separate delete/insert operations. Remove TipTap editor disabling during drag (line 416) as @dnd-kit handles this properly. Update drag handle to use @dnd-kit's drag overlay system.
+<info added on 2025-08-14T20:26:30.505Z>
+Looking at the current subtask details and the investigation report context, here is the specific information about the atomic move operation issue:
+
+The current handleMove function at lines 313-332 performs non-atomic delete/insert operations that cause the empty paragraph insertion bug documented in the investigation report. The problem occurs when the delete operation removes content but the insert operation fails or is delayed, leaving the editor in an inconsistent state. The investigation report identified this as Issue #3 (State Synchronization Issues) where separate operations can be interrupted by re-renders or competing state updates. The ContentDndProvider implementation from the implementation plan demonstrates proper atomic operations using TipTap's transaction system to bundle both delete and insert operations into a single atomic transaction, ensuring the editor state remains consistent throughout the move operation.
+</info added on 2025-08-14T20:26:30.505Z>
+<info added on 2025-08-14T20:34:49.337Z>
+FIRST: Read docs/drag-drop-investigation-report.md section 3 (State Synchronization Issues) focusing on the non-atomic operations bug, and docs/implementation-plans/dnd-kit-refactoring-plan.md Phase 2.3 for ContentDndProvider atomic transaction examples.
+</info added on 2025-08-14T20:34:49.337Z>
+<info added on 2025-08-14T20:57:13.075Z>
+Started examining EnhancedBlockControls component for native drag handler identification and replacement planning. Found native dragstart handler at lines 369-459 that needs to be replaced with @dnd-kit useSortable hook. Identified native event listener effect hook at lines 497-527 that re-attaches drag listeners and must be removed. Located the problematic handleMove function at lines 313-332 that performs non-atomic delete/insert operations causing the empty paragraph insertion bug. Confirmed TipTap editor disabling at line 416 that needs removal since @dnd-kit handles drag state properly. Ready to proceed with systematic replacement of native HTML5 drag implementation with @dnd-kit integration pattern.
+</info added on 2025-08-14T20:57:13.075Z>
+
+## 6. Implement @dnd-kit Drag Overlays and Visual Feedback [done]
+### Dependencies: 25.3, 25.4
+### Description: Create proper drag overlays and visual feedback using @dnd-kit's DragOverlay component, replacing the existing drop indicators and auto-scroll zones. [Updated: 8/14/2025]
+### Details:
+Implement DragOverlay component in DndProvider for both section and content drags. Create visual feedback components for drag state (dragging styles, drop indicators). Replace existing drop zone system with @dnd-kit's built-in collision detection. Remove custom auto-scroll implementation and use @dnd-kit modifiers for scroll behavior. Update CSS classes to work with @dnd-kit drag states (isDragging, isOver, etc.).
+<info added on 2025-08-14T20:34:58.856Z>
+FIRST: Read docs/implementation-plans/dnd-kit-refactoring-plan.md Phase 3 for visual feedback implementation details and docs/drag-drop-investigation-report.md sections on auto-scroll and drop zone issues.
+</info added on 2025-08-14T20:34:58.856Z>
+<info added on 2025-08-14T21:00:12.382Z>
+Started implementation phase - creating @dnd-kit DragOverlay component for proper drag visualization and replacing existing visual feedback system with @dnd-kit native states
+</info added on 2025-08-14T21:00:12.382Z>
+
+## 7. Remove Legacy Drag System and Cleanup Utilities [done]
+### Dependencies: 25.5, 25.6
+### Description: Remove all legacy drag-related files, utilities, and stores that are no longer needed after @dnd-kit implementation, ensuring clean codebase.
+### Details:
+Delete frontend/src/hooks/useDragCleanup.ts as it's no longer needed with @dnd-kit cleanup. Remove frontend/src/stores/dragStateStore.ts and replace with @dnd-kit's built-in state management. Delete frontend/src/utils/dragDetection.ts, dragLogger.ts, and dragValidator.ts utilities. Remove frontend/src/components/DragErrorBoundary.tsx if no longer needed. Clean up all remaining imports of deleted modules across the codebase. Remove drag-related CSS classes that are no longer used.
+<info added on 2025-08-14T20:26:53.721Z>
+Per the investigation report's section 4, useDragCleanup interference causes 20+ hook fires per drag operation, creating performance bottlenecks and duplicate event handling. The exact files to be deleted based on Phase 4 of the implementation plan are:
+
+- frontend/src/hooks/useDragCleanup.ts
+- frontend/src/stores/dragStateStore.ts  
+- frontend/src/utils/dragDetection.ts
+- frontend/src/utils/dragLogger.ts
+- frontend/src/utils/dragValidator.ts
+- frontend/src/components/DragErrorBoundary.tsx (conditionally)
+
+This cleanup addresses the root cause of duplicate events identified in the investigation by removing the legacy drag system that conflicts with @dnd-kit's native event handling and state management.
+</info added on 2025-08-14T20:26:53.721Z>
+<info added on 2025-08-14T20:35:08.601Z>
+FIRST: Read docs/drag-drop-investigation-report.md section 4 (Cleanup Hook Interference) detailing the 20+ duplicate events issue, and docs/implementation-plans/dnd-kit-refactoring-plan.md Phase 4 for the complete list of files to remove.
+</info added on 2025-08-14T20:35:08.601Z>
+
+## 8. Add Comprehensive Testing and Performance Validation [done]
+### Dependencies: 25.7
+### Description: Implement unit tests for all new @dnd-kit components and validate that performance requirements are met with E2E testing.
+### Details:
+Create unit tests for DndProvider, SortableSection, and SortableContentLine components. Add integration tests for section reordering and content line moving functionality. Update existing Playwright tests to work with @dnd-kit drag operations. Add performance testing to ensure drag operations complete in < 100ms. Implement accessibility testing for keyboard navigation and screen reader support. Create regression tests to prevent future drag-related issues.
+<info added on 2025-08-14T20:27:13.372Z>
+Add specific performance validation with target metrics: drag operations must complete in < 100ms compared to current baseline of 71-112ms from investigation report. Include tests to verify fixes for "Element Staleness" issues where drag handles become detached from DOM elements and "Event Chain Interruption" problems that cause premature drag termination in Playwright tests. Implement E2E test scenarios from Phase 5.2 including multi-section drag sequences, cross-container moves, and rapid successive drag operations. Add regression tests that specifically reproduce and validate resolution of Playwright failure patterns: timeout during drag initiation, lost element references mid-drag, and incomplete drop events. Performance tests should benchmark drag latency, measure UI responsiveness during operations, and validate that accessibility features (keyboard navigation, screen reader announcements) maintain sub-100ms response times throughout drag sequences.
+</info added on 2025-08-14T20:27:13.372Z>
+<info added on 2025-08-14T20:35:19.155Z>
+FIRST: Read docs/drag-drop-investigation-report.md Performance Metrics section and Why Playwright Fails section for testing requirements, and docs/implementation-plans/dnd-kit-refactoring-plan.md Phase 5 for E2E test examples and success metrics.
+</info added on 2025-08-14T20:35:19.155Z>
+

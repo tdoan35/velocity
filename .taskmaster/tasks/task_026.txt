@@ -1,0 +1,768 @@
+# Task ID: 26
+# Title: Implement Supabase OAuth Integration for User's Own Supabase Projects
+# Status: done
+# Dependencies: 20, 23
+# Priority: high
+# Description: Add Supabase direct connection integration to the ProjectDesign page, allowing users to connect their own existing Supabase projects by providing their project URL and anon key directly. Users maintain full ownership and control over their Supabase infrastructure, billing, and data sovereignty through a simple credential-based connection flow.
+# Details:
+## Implementation Details
+
+**Core Philosophy**: Users bring their own Supabase projects via direct credential connection, maintaining full control over their backend infrastructure, data sovereignty, and billing. Velocity acts as a frontend development environment that connects to user-owned Supabase backends using provided credentials.
+
+1. **UI Component Implementation**
+   - Replace the "Open Editor" button with a "Connect Your Supabase" button in the ProjectDesign page header
+   - Create a connection form for users to input their Supabase project URL and anon key
+   - Implement connection validation and testing UI with real-time feedback
+   - Design and implement a success confirmation UI for completed connections
+   - Add connection status indicator showing current state (disconnected/connecting/connected)
+   ```tsx
+   const SupabaseConnectForm = ({ projectId, isConnected }) => {
+     const [credentials, setCredentials] = useState({ url: '', anonKey: '' });
+     const [isConnecting, setIsConnecting] = useState(false);
+     
+     const handleConnect = async () => {
+       setIsConnecting(true);
+       await testAndStoreSupabaseConnection(projectId, credentials);
+     };
+     
+     return (
+       <form onSubmit={handleConnect}>
+         <input 
+           placeholder="Supabase Project URL"
+           value={credentials.url}
+           onChange={(e) => setCredentials(prev => ({ ...prev, url: e.target.value }))}
+         />
+         <input 
+           placeholder="Anon Key"
+           type="password"
+           value={credentials.anonKey}
+           onChange={(e) => setCredentials(prev => ({ ...prev, anonKey: e.target.value }))}
+         />
+         <Button type="submit" disabled={isConnecting || isConnected}>
+           {isConnecting ? "Testing Connection..." : isConnected ? "Supabase Connected" : "Connect Supabase"}
+         </Button>
+       </form>
+     );
+   };
+   ```
+
+2. **Direct Connection Implementation**
+   - Implement connection testing using provided Supabase credentials
+   - Create validation endpoint to verify project URL and anon key are valid
+   - Set up secure credential encryption before storage
+   - Handle connection error cases and provide user feedback
+   - Implement connection health checks for ongoing validation
+   ```tsx
+   // API route: /api/supabase/connection/test
+   export default async function handler(req, res) {
+     const { projectUrl, anonKey } = req.body;
+     
+     try {
+       // Test connection by creating a temporary Supabase client
+       const testClient = createClient(projectUrl, anonKey);
+       const { data, error } = await testClient.from('_realtime_schema').select('*').limit(1);
+       
+       if (error && error.code !== 'PGRST116') {
+         throw new Error('Invalid credentials or connection failed');
+       }
+       
+       res.status(200).json({ success: true, message: 'Connection successful' });
+     } catch (error) {
+       res.status(400).json({ success: false, message: error.message });
+     }
+   }
+   ```
+
+3. **Credential Validation and Storage**
+   - Validate Supabase project URL format and accessibility
+   - Test anon key validity through API calls
+   - Encrypt credentials using AES encryption before database storage
+   - Store encrypted credentials with project association
+   - Implement credential retrieval and decryption for usage
+   ```tsx
+   async function validateAndStoreSupabaseCredentials(velocityProjectId, credentials) {
+     // Validate URL format
+     if (!isValidSupabaseUrl(credentials.url)) {
+       throw new Error('Invalid Supabase project URL format');
+     }
+     
+     // Test connection
+     const isValid = await testSupabaseConnection(credentials.url, credentials.anonKey);
+     if (!isValid) {
+       throw new Error('Unable to connect to Supabase project. Please check your credentials.');
+     }
+     
+     // Encrypt and store
+     const encryptedCredentials = await encryptCredentials(credentials);
+     await storeSupabaseConnection(velocityProjectId, encryptedCredentials);
+     
+     return { success: true };
+   }
+   ```
+
+4. **Database Integration for Connection Storage**
+   - Update existing database schema to store encrypted Supabase credentials
+   - Store project URL, encrypted anon key, and connection metadata
+   - Associate user's Supabase projects with Velocity projects in the database
+   - Implement user-scoped access controls for project connections
+   ```sql
+   -- Update existing table structure for direct connections
+   ALTER TABLE user_supabase_connections 
+   ADD COLUMN project_url VARCHAR(255) NOT NULL,
+   ADD COLUMN encrypted_anon_key TEXT NOT NULL,
+   ADD COLUMN encryption_iv VARCHAR(255) NOT NULL,
+   ADD COLUMN last_validated TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+   ADD COLUMN connection_status VARCHAR(50) DEFAULT 'active';
+   
+   -- Remove OAuth-specific columns if they exist
+   ALTER TABLE user_supabase_connections 
+   DROP COLUMN IF EXISTS oauth_token,
+   DROP COLUMN IF EXISTS refresh_token;
+   ```
+
+5. **UI State Management for Direct Connections**
+   - Update ProjectDesign page to show credential input form when not connected
+   - Enable "Build" button only when Supabase credentials are validated and stored
+   - Implement connection status persistence across page reloads
+   - Add user's Supabase project details to project context
+   - Display connection health status and validation timestamps
+   ```tsx
+   // In ProjectContext.tsx
+   interface ProjectContextType {
+     // existing fields
+     supabaseConnection: {
+       isConnected: boolean;
+       projectUrl?: string;
+       isHealthy?: boolean;
+       lastValidated?: string;
+       connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error';
+     } | null;
+     connectSupabase: (credentials: { url: string; anonKey: string }) => Promise<void>;
+     disconnectSupabase: () => Promise<void>;
+     testConnection: () => Promise<boolean>;
+   }
+   ```
+
+6. **Performance Optimization**
+   - Implement connection caching to minimize validation calls
+   - Optimize connection testing to complete in under 10 seconds
+   - Use optimistic UI updates for immediate feedback
+   - Implement proper error handling and retry mechanisms
+   ```tsx
+   // Connection status caching for user credentials
+   const useSupabaseConnectionStatus = (velocityProjectId) => {
+     const [status, setStatus] = useState({ isConnected: false, isLoading: true });
+     const statusCacheKey = `supabase-connection-${velocityProjectId}`;
+     
+     useEffect(() => {
+       // Try to get from cache first
+       const cachedStatus = sessionStorage.getItem(statusCacheKey);
+       if (cachedStatus) {
+         setStatus(JSON.parse(cachedStatus));
+       }
+       
+       // Then fetch fresh data
+       fetchConnectionStatus(velocityProjectId).then(freshStatus => {
+         setStatus(freshStatus);
+         sessionStorage.setItem(statusCacheKey, JSON.stringify(freshStatus));
+       });
+     }, [velocityProjectId]);
+     
+     return status;
+   };
+   ```
+
+7. **Security Considerations for Credential Storage**
+   - Implement strong AES-256 encryption for storing anon keys
+   - Use environment-specific encryption keys never stored in code
+   - Store connection metadata only, encrypt sensitive credentials
+   - Implement rate limiting on connection test endpoints
+   - Add proper logging for security auditing while respecting user privacy
+   - Ensure credentials can be updated or deleted by users at any time
+   ```tsx
+   // Secure credential encryption and storage
+   const encryptCredentials = async (credentials) => {
+     const encryptionKey = process.env.CREDENTIAL_ENCRYPTION_KEY;
+     const iv = crypto.randomBytes(16);
+     const cipher = crypto.createCipher('aes-256-cbc', encryptionKey);
+     
+     const encryptedAnonKey = cipher.update(credentials.anonKey, 'utf8', 'hex') + cipher.final('hex');
+     
+     return {
+       projectUrl: credentials.url, // URLs are not sensitive
+       encryptedAnonKey,
+       encryptionIv: iv.toString('hex')
+     };
+   };
+   ```
+
+8. **Error Handling and User Experience**
+   - Implement comprehensive error handling throughout the connection flow
+   - Add detailed logging for troubleshooting (respecting user privacy)
+   - Create user-friendly error messages for connection issues
+   - Set up monitoring for connection success rate
+   - Provide clear guidance on finding Supabase project credentials
+   ```tsx
+   try {
+     const result = await connectSupabaseProject(velocityProjectId, credentials);
+     logger.info(`Supabase connection successful for Velocity project ${velocityProjectId}`);
+     return result;
+   } catch (error) {
+     logger.error(`Supabase connection failed for Velocity project ${velocityProjectId}:`, error.message);
+     
+     if (error.message.includes('Invalid credentials')) {
+       throw new UserFacingError('Invalid Supabase credentials. Please check your project URL and anon key.');
+     } else if (error.message.includes('Network')) {
+       throw new UserFacingError('Network error connecting to Supabase. Please check your internet connection and try again.');
+     } else {
+       throw new UserFacingError('Failed to connect to Supabase project. Please verify your credentials and try again.');
+     }
+   }
+   ```
+
+**Data Sovereignty & User Control**:
+- Users maintain full ownership of their Supabase projects and data
+- Users control their own Supabase billing and resource limits
+- Velocity only connects to user's projects using provided credentials
+- Users can disconnect and update credentials at any time
+- All backend data remains in user's Supabase infrastructure
+- No partner registration or complex OAuth flows required
+
+# Test Strategy:
+## Test Strategy
+
+**Testing Philosophy**: All tests focus on secure credential-based connections to user-owned Supabase projects while ensuring data sovereignty and user control.
+
+1. **Unit Testing Connection Components**
+   - Test SupabaseConnectForm component rendering and credential input handling
+   - Verify connection validation function properly tests provided credentials
+   - Test credential encryption and decryption processes
+   - Validate error handling for invalid URLs and anon keys
+   ```tsx
+   test('SupabaseConnectForm validates credentials before submission', async () => {
+     render(<SupabaseConnectForm projectId="test-id" isConnected={false} />);
+     
+     const urlInput = screen.getByPlaceholderText('Supabase Project URL');
+     const keyInput = screen.getByPlaceholderText('Anon Key');
+     const submitButton = screen.getByText('Connect Supabase');
+     
+     // Test invalid URL format
+     fireEvent.change(urlInput, { target: { value: 'invalid-url' } });
+     fireEvent.change(keyInput, { target: { value: 'test-key' } });
+     fireEvent.click(submitButton);
+     
+     await waitFor(() => {
+       expect(screen.getByText('Invalid Supabase project URL format')).toBeInTheDocument();
+     });
+   });
+   ```
+
+2. **Integration Testing Connection Flow**
+   - Test complete connection flow with valid Supabase credentials
+   - Verify connection validation with mock Supabase API responses
+   - Test credential encryption and secure storage
+   - Validate database updates after successful connection
+   ```tsx
+   test('Connection flow successfully stores encrypted credentials', async () => {
+     // Mock successful Supabase connection test
+     mockSupabaseClient.from().select().mockResolvedValue({ data: [], error: null });
+     
+     const credentials = {
+       url: 'https://test.supabase.co',
+       anonKey: 'test-anon-key'
+     };
+     
+     await connectSupabaseProject('velocity-project-id', credentials);
+     
+     // Verify encrypted credentials were stored
+     const connection = await getSupabaseConnection('velocity-project-id');
+     expect(connection).toHaveProperty('project_url', credentials.url);
+     expect(connection).toHaveProperty('encrypted_anon_key');
+     expect(connection.encrypted_anon_key).not.toBe(credentials.anonKey); // Should be encrypted
+   });
+   ```
+
+3. **Database Schema Testing for Credential Storage**
+   - Verify connection details are properly stored with encryption
+   - Test user-scoped access controls for project connections
+   - Validate foreign key constraints and cascading deletes
+   - Test connection retrieval and decryption for usage
+   - Ensure credentials are properly encrypted and never stored in plain text
+   ```sql
+   -- Test query to verify connection storage includes encryption
+   SELECT column_name, data_type, is_nullable 
+   FROM information_schema.columns 
+   WHERE table_name = 'user_supabase_connections'
+   AND column_name IN ('encrypted_anon_key', 'encryption_iv', 'project_url');
+   
+   -- Verify no plain text sensitive data is stored
+   SELECT column_name FROM information_schema.columns 
+   WHERE table_name = 'user_supabase_connections' 
+   AND column_name LIKE '%anon_key%' AND column_name != 'encrypted_anon_key';
+   ```
+
+4. **UI State Testing for Connection Management**
+   - Test that Build button is enabled only when Supabase connection is validated
+   - Verify connection status and project details are correctly displayed
+   - Test connection status persistence across page reloads
+   - Validate credential update and disconnect functionality
+   ```tsx
+   test('Build button is enabled only when Supabase is connected', async () => {
+     render(<ProjectDesign projectId="test-id" />);
+     
+     // Initially disabled
+     const buildButton = screen.getByText('Build');
+     expect(buildButton).toBeDisabled();
+     
+     // Fill connection form
+     const urlInput = screen.getByPlaceholderText('Supabase Project URL');
+     const keyInput = screen.getByPlaceholderText('Anon Key');
+     fireEvent.change(urlInput, { target: { value: 'https://test.supabase.co' } });
+     fireEvent.change(keyInput, { target: { value: 'valid-anon-key' } });
+     
+     const connectButton = screen.getByText('Connect Supabase');
+     fireEvent.click(connectButton);
+     
+     // Mock successful connection
+     await act(async () => {
+       mockSuccessfulConnection();
+     });
+     
+     // Now enabled with connection confirmed
+     expect(buildButton).not.toBeDisabled();
+     expect(screen.getByText('Connected to: https://test.supabase.co')).toBeInTheDocument();
+   });
+   ```
+
+5. **Performance Testing**
+   - Measure connection validation time to ensure < 10 seconds target
+   - Test connection caching effectiveness
+   - Verify encryption/decryption performance
+   - Measure UI responsiveness during connection testing
+   ```tsx
+   test('Connection validation completes within 10 seconds', async () => {
+     const startTime = Date.now();
+     
+     const credentials = { url: 'https://test.supabase.co', anonKey: 'test-key' };
+     await validateSupabaseConnection(credentials);
+     
+     const duration = Date.now() - startTime;
+     expect(duration).toBeLessThan(10000);
+   });
+   ```
+
+6. **Security Testing for Credential Protection**
+   - Test that credentials are properly encrypted before storage
+   - Verify decryption only occurs when needed for API calls
+   - Test that plain text credentials never appear in logs or responses
+   - Validate user can update and delete stored credentials
+   - Test rate limiting on connection validation endpoints
+   ```tsx
+   test('Credentials are encrypted before database storage', async () => {
+     const originalCredentials = { url: 'https://test.supabase.co', anonKey: 'secret-key' };
+     
+     await storeSupabaseConnection('test-project-id', originalCredentials);
+     
+     // Verify stored data is encrypted
+     const storedConnection = await db.query(
+       'SELECT * FROM user_supabase_connections WHERE velocity_project_id = $1',
+       ['test-project-id']
+     );
+     
+     expect(storedConnection.encrypted_anon_key).not.toBe(originalCredentials.anonKey);
+     expect(storedConnection.encrypted_anon_key).toMatch(/^[a-f0-9]+$/); // Hex encrypted data
+     expect(storedConnection.encryption_iv).toBeTruthy();
+   });
+   
+   test('User can disconnect and delete stored credentials', async () => {
+     await connectSupabaseProject('velocity-project-id', { url: 'https://test.supabase.co', anonKey: 'test-key' });
+     
+     const result = await disconnectSupabaseProject('velocity-project-id');
+     
+     expect(result.success).toBe(true);
+     expect(await getSupabaseConnection('velocity-project-id')).toBe(null);
+   });
+   ```
+
+7. **End-to-End Testing for User Journey**
+   - Test complete user journey from credential entry to successful connection
+   - Verify connection validation with real Supabase projects (in test environment)
+   - Test error recovery flows for invalid credentials
+   - Validate credential update and reconnection scenarios
+   ```tsx
+   test('User can connect their Supabase project with credentials', async () => {
+     cy.login();
+     cy.visit('/projects/test-project');
+     
+     // Enter credentials
+     cy.get('[placeholder="Supabase Project URL"]').type('https://test.supabase.co');
+     cy.get('[placeholder="Anon Key"]').type('valid-anon-key');
+     cy.contains('Connect Supabase').click();
+     
+     // Mock successful validation
+     cy.intercept('POST', '/api/supabase/connection/test', { fixture: 'connection-success.json' });
+     
+     // Verify success state
+     cy.contains('Connected to: https://test.supabase.co').should('be.visible');
+     cy.contains('Build').should('be.enabled');
+   });
+   ```
+
+8. **Data Sovereignty and User Control Testing**
+   - Test that user maintains full control over their Supabase project
+   - Verify Velocity cannot access user's project without valid credentials
+   - Test user's ability to update credentials and maintain data ownership
+   - Validate that disconnecting removes stored credentials completely
+   ```tsx
+   test('User maintains full control over their credentials', async () => {
+     // Connect with initial credentials
+     await connectSupabaseProject('test-project-id', { url: 'https://test.supabase.co', anonKey: 'key1' });
+     
+     // User updates credentials
+     await updateSupabaseCredentials('test-project-id', { url: 'https://test.supabase.co', anonKey: 'key2' });
+     
+     // Verify old credentials no longer work
+     const connection = await getSupabaseConnection('test-project-id');
+     const decryptedKey = await decryptCredential(connection.encrypted_anon_key, connection.encryption_iv);
+     expect(decryptedKey).toBe('key2');
+     expect(decryptedKey).not.toBe('key1');
+   });
+   ```
+
+# Subtasks:
+## 2. Implement connection service layer for direct Supabase credentials [done]
+### Dependencies: 26.1
+### Description: Create service functions for handling Supabase credential validation, encryption, and storage
+### Details:
+Implement connection service layer at src/services/supabaseConnection.ts for direct credential management. Create functions for validateSupabaseConnection(), encryptCredentials(), decryptCredentials(), storeSupabaseConnection(), and testConnectionHealth(). Implement secure AES-256 encryption for anon keys and proper error handling for invalid credentials or network issues.
+
+## 3. Create Supabase connection state management [done]
+### Dependencies: 26.2
+### Description: Implement state management for Supabase connection status and integration with project context
+### Details:
+Create a custom hook at src/hooks/useSupabaseConnection.ts to manage Supabase connection state. Implement functions to check connection status, initiate connection with credentials, validate stored connections, and handle disconnection. Update the ProjectContext to include Supabase connection state with emphasis on user ownership and credential security. Add connection caching to minimize validation calls.
+
+## 4. Develop UI components for Supabase credential connection [done]
+### Dependencies: 26.3
+### Description: Create UI components for credential input, connection validation, and status display
+### Details:
+Implement the SupabaseConnectForm component at src/components/supabase/SupabaseConnectForm.tsx with secure credential input fields. Create the ConnectionStatusIndicator component showing connection health and project details. Implement ConnectionTestButton for validating credentials before storage. Add credential update and disconnect functionality with proper user control and security messaging.
+
+## 5. Integrate Supabase connection into ProjectDesign page [done]
+### Dependencies: 26.3, 26.4
+### Description: Update the ProjectDesign page to support direct Supabase credential connection
+### Details:
+Modify src/pages/projects/[id]/design.tsx to replace the 'Open Editor' button with the Supabase connection form. Add connection status display showing project URL and connection health. Update the page to reflect connection status and enable/disable the 'Build' button based on valid Supabase connection. Implement clear messaging about credential security and user data control.
+
+## 6. Implement connection validation API routes [done]
+### Dependencies: 26.2
+### Description: Create API routes for credential testing and connection management
+### Details:
+Create API routes at src/pages/api/supabase/connection/test.ts and src/pages/api/supabase/connection/store.ts for credential validation and storage. Implement secure credential testing, encryption before database storage, and connection health monitoring. Handle various connection failure scenarios and provide appropriate error responses. Add rate limiting to prevent abuse.
+
+## 7. Implement security measures for credential protection [done]
+### Dependencies: 26.2, 26.6
+### Description: Add security features for encrypting and protecting user Supabase credentials
+### Details:
+Implement strong AES-256 encryption at src/utils/supabase/credentialSecurity.ts for protecting anon keys. Add rate limiting middleware for connection endpoints. Implement security-focused logging at src/utils/logging/supabaseConnectionLogger.ts that never exposes credentials. Ensure users can update or delete stored credentials at any time. Use environment-specific encryption keys.
+
+## 8. Implement testing and validation for credential connections [done]
+### Dependencies: 26.1, 26.2, 26.3, 26.4, 26.5, 26.6, 26.7
+### Description: Create comprehensive tests for Supabase credential connection flow with emphasis on security
+### Details:
+Create end-to-end tests at tests/e2e/supabaseConnection.spec.ts validating complete credential connection flow. Implement unit tests for credential validation, encryption, and connection components. Set up monitoring for connection success rates. Create user-friendly error messages for credential and connection issues. Test user control features including credential updates and disconnection.
+
+## 1. Set up environment variables and database schema [done]
+### Dependencies: None
+### Description: Configure environment variables for Supabase API integration and create database schema for storing connection details
+### Details:
+Following section 1.1-1.3 of the implementation plan, set up required environment variables in .env.local and .env.production files (SUPABASE_CLIENT_ID, SUPABASE_CLIENT_SECRET, OAUTH_REDIRECT_URI). Create database migration at db/migrations/20250122_add_supabase_connections.sql to add the supabase_connections table with fields for project_id, supabase_project_id, api_url, anon_key, and service_role_key (encrypted). Update prisma schema at prisma/schema.prisma (lines 120-130) to include the new model.
+<info added on 2025-08-22T23:05:30.787Z>
+First, read docs/implementation-plans/supabase-oauth-integration-plan-2025-01-22.md to understand the full context and architecture. Then, following Phase 1: Core OAuth Infrastructure (Week 1) section 1.1-1.2 (lines 145-173) of the implementation plan,
+</info added on 2025-08-22T23:05:30.787Z>
+
+## 9. Implement OAuth2 Management API Enhancement Foundation [pending]
+### Dependencies: 26.8
+### Description: Add OAuth2 Management API integration as an optional connection method alongside existing direct connection
+### Details:
+## OAuth2 Foundation Setup
+
+Based on Supabase OAuth2 documentation, implement the foundation for OAuth2 Management API integration as an enhancement to the existing direct connection system.
+
+**Phase 1: OAuth2 Foundation Setup**
+
+1. **OAuth App Registration**
+   - Register Velocity as OAuth app in Supabase Dashboard
+   - Configure redirect URIs: `https://your-domain.com/auth/supabase/callback`
+   - Set required scopes: `organizations:read`, `projects:read`, `projects:write`, `secrets:read`
+
+2. **Environment Configuration**
+   ```typescript
+   // Additional environment variables for OAuth2
+   VITE_SUPABASE_OAUTH_CLIENT_ID=your-oauth-client-id
+   VITE_SUPABASE_OAUTH_CLIENT_SECRET=your-oauth-client-secret  
+   VITE_SUPABASE_OAUTH_REDIRECT_URI=https://your-domain.com/auth/supabase/callback
+   VITE_SUPABASE_MANAGEMENT_API_URL=https://api.supabase.com/v1
+   ```
+
+3. **Database Schema Extensions**
+   ```sql
+   -- Extend existing supabase_connections table for OAuth
+   ALTER TABLE public.supabase_connections 
+   ADD COLUMN IF NOT EXISTS connection_method TEXT DEFAULT 'direct' 
+     CHECK (connection_method IN ('direct', 'oauth')),
+   ADD COLUMN IF NOT EXISTS oauth_organization_id TEXT,
+   ADD COLUMN IF NOT EXISTS oauth_organization_slug TEXT,
+   ADD COLUMN IF NOT EXISTS oauth_access_token TEXT, -- Encrypted
+   ADD COLUMN IF NOT EXISTS oauth_refresh_token TEXT, -- Encrypted  
+   ADD COLUMN IF NOT EXISTS oauth_expires_at TIMESTAMP WITH TIME ZONE,
+   ADD COLUMN IF NOT EXISTS oauth_scopes TEXT[];
+   
+   -- OAuth state management (CSRF protection)
+   CREATE TABLE IF NOT EXISTS public.oauth_states (
+     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+     state_token TEXT NOT NULL UNIQUE,
+     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+     project_id UUID REFERENCES public.projects(id) ON DELETE CASCADE,
+     redirect_uri TEXT NOT NULL,
+     code_verifier TEXT, -- For PKCE
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     expires_at TIMESTAMP WITH TIME ZONE DEFAULT (NOW() + INTERVAL '10 minutes'),
+     used BOOLEAN DEFAULT FALSE
+   );
+   ```
+
+4. **OAuth2 Service Layer Interface**
+   ```typescript
+   // frontend/src/services/supabaseOAuthService.ts
+   interface SupabaseOAuth2Service {
+     // OAuth Flow
+     initiateOAuth(projectId: string, organizationSlug?: string): Promise<string>
+     handleCallback(code: string, state: string): Promise<OAuthTokens>
+     refreshToken(refreshToken: string): Promise<OAuthTokens>
+     
+     // Management API calls
+     getOrganizations(): Promise<SupabaseOrganization[]>
+     getProjects(organizationId?: string): Promise<SupabaseProject[]>
+     createProject(params: CreateSupabaseProjectRequest): Promise<SupabaseProject>
+     getProjectApiKeys(projectRef: string): Promise<ProjectApiKeys>
+   }
+   ```
+
+This foundation enables both connection methods to coexist, giving users choice between direct credentials or OAuth2 integration.
+
+## 10. Implement OAuth2 Service Layer with Management API Integration [pending]
+### Dependencies: 26.9
+### Description: Build the core OAuth2 service layer for Supabase Management API integration
+### Details:
+Phase 2: OAuth2 Service Implementation
+
+**Core OAuth2 Service (frontend/src/services/supabaseOAuth2.ts)**:
+- Implement OAuth2 flow initiation with PKCE security
+- Build token exchange mechanism for authorization codes
+- Create secure token storage with AES-256 encryption
+- Implement automatic token refresh functionality
+- Add proper error handling for OAuth2 flows
+
+**Management API Integration**:
+- Create service for Supabase Management API calls
+- Implement organization and project listing endpoints
+- Add project creation capabilities via Management API
+- Build secure API client with token-based authentication
+- Handle rate limiting and API error responses
+
+**Key Functions to Implement**:
+```typescript
+// OAuth2 flow functions
+initiateOAuth2Flow(projectId: string, organizationSlug?: string): Promise<{authUrl: string, state: string}>
+handleOAuth2Callback(code: string, state: string): Promise<OAuthTokens>
+refreshAccessToken(refreshToken: string): Promise<OAuthTokens>
+
+// Management API functions
+fetchUserOrganizations(): Promise<SupabaseOrganization[]>
+fetchOrganizationProjects(orgId: string): Promise<SupabaseProject[]>
+createSupabaseProject(request: CreateSupabaseProjectRequest): Promise<SupabaseProject>
+```
+
+**Security Requirements**:
+- PKCE implementation with code_challenge/code_verifier
+- Secure token storage using existing encryption utilities
+- CSRF protection via state parameter validation
+- Token expiration handling and automatic renewal
+
+**Integration Points**:
+- Extend existing supabaseConnection.ts service
+- Utilize existing encryption functions
+- Connect to oauth_states and supabase_connections tables
+
+## 11. Build OAuth2 UI Components and Connection Method Selector [pending]
+### Dependencies: 26.10
+### Description: Create user interface components for OAuth2 connection flow and project selection
+### Details:
+Phase 3: UI Enhancement for OAuth2 Integration
+
+**Connection Method Selector Component**:
+- Create ConnectionMethodSelector component with toggle between Direct and OAuth2
+- Style with consistent design matching existing UI patterns
+- Add clear explanations for each connection method
+- Include visual indicators for method benefits and requirements
+
+**OAuth2 Project Selector Components**:
+```typescript
+// Components to create:
+- OAuthProjectSelector.tsx: Main project selection interface
+- OrganizationSelector.tsx: Dropdown/list for user's organizations
+- ProjectList.tsx: Grid/list view of available projects
+- ProjectCreator.tsx: Form for creating new Supabase projects
+- OAuthConnectionStatus.tsx: Status indicator for OAuth2 connections
+```
+
+**Enhanced Connection Modal**:
+- Extend existing connection modal to support dual methods
+- Add OAuth2 flow initiation with proper loading states
+- Implement project selection workflow after OAuth2 success
+- Include error handling and user feedback for OAuth2 flows
+- Add connection testing for OAuth2-connected projects
+
+**Key Features to Implement**:
+- Radio button selection between Direct and OAuth2 methods
+- OAuth2 authorization flow with popup/redirect handling
+- Organization and project listing with search/filtering
+- Project creation form with region and plan selection
+- Connection status indicators and health checks
+- Seamless fallback to direct method if OAuth2 fails
+
+**User Experience Enhancements**:
+- Progress indicators during OAuth2 flow
+- Clear success/error messaging
+- Ability to switch between connection methods
+- Project metadata display (region, plan, status)
+- Quick connect options for recently used projects
+
+**Integration Requirements**:
+- Connect to OAuth2 service layer from subtask 26.10
+- Maintain compatibility with existing direct connection flow
+- Update ProjectDesign.tsx to handle both connection types
+- Ensure proper state management for connection methods
+
+## 12. Implement Advanced OAuth2 Features and Token Management [pending]
+### Dependencies: 26.11
+### Description: Add advanced OAuth2 capabilities including project creation and automatic token refresh
+### Details:
+Phase 4: Advanced OAuth2 Features
+
+**Automatic Token Refresh System**:
+- Implement background token refresh service
+- Create token expiration monitoring with 5-minute buffer
+- Build retry logic for failed refresh attempts
+- Add fallback mechanisms for expired tokens
+- Implement proactive token renewal before expiration
+
+**Project Creation via Management API**:
+```typescript
+// Advanced project creation features:
+- CreateProjectWizard.tsx: Multi-step project creation form
+- ProjectTemplateSelector.tsx: Pre-configured project templates
+- RegionSelector.tsx: Automatic region selection with latency optimization
+- PlanSelector.tsx: Supabase plan selection with pricing information
+- ProjectCreationProgress.tsx: Real-time creation status tracking
+```
+
+**Enhanced Connection Management**:
+- Build connection health monitoring with automatic healing
+- Implement connection status dashboard for multiple projects
+- Add bulk project operations (connect/disconnect multiple projects)
+- Create connection analytics and usage tracking
+- Build connection troubleshooting diagnostics
+
+**Advanced Security Features**:
+- Implement token rotation policies
+- Add OAuth2 scope management and validation
+- Build audit logging for all OAuth2 operations
+- Create security alerts for suspicious OAuth2 activity
+- Implement session management for OAuth2 connections
+
+**Performance Optimizations**:
+- Add connection pooling for Management API calls
+- Implement request caching for project/organization data
+- Build lazy loading for project lists and metadata
+- Add progressive loading for large organization structures
+- Create connection preloading for frequently used projects
+
+**Integration with Existing Systems**:
+- Connect OAuth2 projects with app generation workflows
+- Integrate OAuth2 projects with deployment pipelines
+- Add OAuth2 project support in testing and preview systems
+- Implement OAuth2 project backup and migration tools
+- Build OAuth2 connection sharing for team collaboration
+
+**Monitoring and Analytics**:
+- Implement OAuth2 usage metrics and reporting
+- Add connection success/failure rate tracking
+- Build OAuth2 performance monitoring dashboard
+- Create alerting for OAuth2 service degradation
+- Implement user behavior analytics for connection preferences
+
+## 13. Integrate OAuth2 Enhancement with ProjectDesign and Complete Testing [pending]
+### Dependencies: 26.12
+### Description: Final integration of OAuth2 features with existing UI and comprehensive testing suite
+### Details:
+Phase 5: Integration and Testing
+
+**ProjectDesign.tsx Integration**:
+- Update ProjectDesign component to support both connection methods
+- Add connection method persistence in project settings
+- Implement seamless switching between connection types
+- Update build pipeline to work with OAuth2-connected projects
+- Add OAuth2 project validation before app generation
+
+**Backend API Endpoints**:
+```typescript
+// API routes to implement:
+POST /api/supabase/oauth/initiate - Start OAuth2 flow
+POST /api/supabase/oauth/callback - Handle OAuth2 callback
+POST /api/supabase/oauth/refresh - Refresh OAuth2 tokens
+GET /api/supabase/oauth/organizations - List user organizations
+GET /api/supabase/oauth/projects - List organization projects
+POST /api/supabase/oauth/projects - Create new Supabase project
+DELETE /api/supabase/oauth/disconnect - Remove OAuth2 connection
+```
+
+**Comprehensive Testing Suite**:
+- Unit tests for OAuth2 service layer functions
+- Integration tests for Management API interactions
+- UI component testing for OAuth2 flows
+- End-to-end testing for complete OAuth2 workflows
+- Security testing for token management and encryption
+- Performance testing for large organization/project lists
+- Error handling testing for various failure scenarios
+
+**Documentation and User Guides**:
+- Create OAuth2 setup documentation for administrators
+- Build user guide for OAuth2 connection method
+- Add troubleshooting guide for common OAuth2 issues
+- Create developer documentation for OAuth2 API integration
+- Build FAQ section for OAuth2 vs Direct connection comparison
+
+**Migration and Backward Compatibility**:
+- Ensure existing direct connections continue to work
+- Add migration path for users wanting to switch methods
+- Implement graceful fallback when OAuth2 is unavailable
+- Maintain API compatibility for existing integrations
+- Add feature flags for gradual OAuth2 rollout
+
+**Final Integration Points**:
+- Update app generation pipeline to handle OAuth2 projects
+- Integrate OAuth2 projects with deployment workflows
+- Add OAuth2 support to project sharing and collaboration
+- Connect OAuth2 projects with monitoring and analytics
+- Implement OAuth2 project backup and restore functionality
+
+**Quality Assurance**:
+- Cross-browser testing for OAuth2 flows
+- Mobile responsiveness testing for OAuth2 UI components
+- Accessibility testing for new OAuth2 interfaces
+- Load testing for Management API integration
+- Security audit of OAuth2 implementation
+- User acceptance testing for OAuth2 workflows
+
