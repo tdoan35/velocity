@@ -45,36 +45,38 @@ export class SnackService {
 
   constructor(config?: Partial<SnackServiceConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config };
+    console.log('[SnackService] Service initialized with config:', this.config);
+    console.log('[SnackService] Snack SDK available:', typeof Snack, Snack);
   }
 
   /**
-   * Initialize a new Snack session
+   * Initialize a new Snack session with webPreviewRef
    */
   async createSession(
     sessionId: string,
     options: SnackPreviewOptions,
     userId?: string,
-    projectId?: string
+    projectId?: string,
+    webPreviewRef?: React.RefObject<Window | null>
   ): Promise<SnackSession> {
+    console.log('[SnackService] Creating session:', sessionId, options);
+    
     // Clean up existing session if any
     await this.destroySession(sessionId);
 
-    // Create Snack options
-    const snackOptions: SnackOptions = {
-      name: options.name || 'Untitled',
-      description: options.description || '',
-      dependencies: options.dependencies || {},
-      sdkVersion: (options.sdkVersion || '52.0.0') as any,
-      files: options.files || {
-        'App.js': {
-          type: 'CODE' as const,
-          contents: `import React from 'react';
+    // Prepare files - use provided files or default
+    // Ensure we have a minimal, valid React Native app structure
+    const defaultFiles = {
+      'App.js': {
+        type: 'CODE' as const,
+        contents: `import * as React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 
 export default function App() {
   return (
     <View style={styles.container}>
       <Text style={styles.text}>Welcome to Velocity!</Text>
+      <Text style={styles.subtitle}>Your React Native app is running!</Text>
     </View>
   );
 }
@@ -84,28 +86,82 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: '#f0f0f0',
+    padding: 20,
   },
   text: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
   },
 });`
+      }
+    };
+
+    // Validate and sanitize the files input
+    let filesToUse = defaultFiles;
+    
+    if (options.files && Object.keys(options.files).length > 0) {
+      // Validate that all files have the correct structure
+      const validatedFiles: Record<string, { type: string; contents: string }> = {};
+      
+      for (const [path, file] of Object.entries(options.files)) {
+        // Only include valid files with proper structure
+        if (file && typeof file === 'object' && file.type && file.contents) {
+          // Ensure the file has the exact structure Snack expects
+          validatedFiles[path] = {
+            type: file.type === 'CODE' ? 'CODE' : 'CODE', // Force CODE type for now
+            contents: String(file.contents) // Ensure it's a string
+          };
         }
-      },
-      online: true,
+      }
+      
+      // Only use provided files if we have at least one valid file
+      if (Object.keys(validatedFiles).length > 0) {
+        filesToUse = validatedFiles;
+      }
+    }
+      
+    console.log('[SnackService] Files to use:', JSON.stringify(filesToUse, null, 2));
+
+    // Minimal dependencies for React Native app to function properly
+    // Using specific versions that are known to work with Expo SDK 52
+    const defaultDependencies = {
+      'expo': '~52.0.0',
+      'react': '18.3.1',
+      'react-native': '0.76.2'
     };
 
-    // Session options
-    const sessionOptions: SnackSessionOptions = {
-      snackApiUrl: this.config.snackApiUrl,
-      snackagerUrl: this.config.snackagerUrl,
-      verbose: this.config.verbose,
-      channel: this.config.channel as any,
+    // Create Snack options - according to official SDK docs
+    // Pass webPreviewRef during construction if available
+    const snackOptions: SnackOptions = {
+      name: options.name || 'Velocity Preview',
+      description: options.description || 'Live preview of your React Native app',
+      sdkVersion: '52.0.0',
+      files: filesToUse,
+      dependencies: { ...defaultDependencies, ...(options.dependencies || {}) },
+      verbose: false,
+      // Pass webPreviewRef if provided - this enables web preview functionality
+      ...(webPreviewRef && { webPreviewRef }),
     };
 
-    // Create new Snack instance
-    const snack = new (Snack as any)(snackOptions);
+    console.log('[SnackService] About to create Snack with options:', snackOptions);
+    console.log('[SnackService] Files being passed to Snack:', JSON.stringify(snackOptions.files, null, 2));
+    
+    let snack;
+    try {
+      snack = new Snack(snackOptions);
+      console.log('[SnackService] Snack instance created successfully:', snack);
+    } catch (error) {
+      console.error('[SnackService] Failed to create Snack instance:', error);
+      throw error;
+    }
 
     // Set up event listeners
     const subscriptions: SnackListenerSubscription[] = [];
@@ -113,7 +169,14 @@ const styles = StyleSheet.create({
     // Listen for state changes
     subscriptions.push(
       snack.addStateListener((state, prevState) => {
-        console.log('[SnackService] State changed:', state);
+        console.log('[SnackService] State changed:', {
+          webPreviewURL: state?.webPreviewURL,
+          online: state?.online,
+          url: state?.url,
+          channel: state?.channel,
+          isOnline: state?.isOnline,
+          state: state
+        });
         
         // Store state updates in Supabase if user is authenticated
         if (userId && projectId) {
@@ -135,6 +198,91 @@ const styles = StyleSheet.create({
         console.error('[SnackService] Errors:', errors);
       })
     );
+
+    // Set the Snack online immediately after creation
+    try {
+      console.log('[SnackService] Setting Snack online...');
+      
+      // Add error listener before going online to catch assertion errors
+      const errorSubscription = snack.addErrorListener?.((errors: any) => {
+        console.error('[SnackService] Snack SDK Errors:', errors);
+        if (errors && errors.length > 0) {
+          errors.forEach((error: any, index: number) => {
+            console.error(`[SnackService] Error ${index + 1}:`, {
+              message: error?.message,
+              stack: error?.stack,
+              code: error?.code,
+              type: error?.type,
+              error: error
+            });
+          });
+        }
+      });
+      
+      // Store the error subscription for cleanup
+      if (errorSubscription) {
+        subscriptions.push(errorSubscription);
+      }
+      
+      await snack.setOnline(true);
+      
+      // Try to request web preview after going online
+      console.log('[SnackService] Requesting web preview...');
+      try {
+        // According to the documentation, we need to explicitly request web preview
+        if (typeof (snack as any).requestWebPreview === 'function') {
+          console.log('[SnackService] Calling requestWebPreview method...');
+          await (snack as any).requestWebPreview();
+        } else if (typeof (snack as any).getWebPreviewAsync === 'function') {
+          console.log('[SnackService] Calling getWebPreviewAsync method...');
+          await (snack as any).getWebPreviewAsync();
+        }
+        
+        // Note: webPreviewRef will be set later when the iframe is ready and loaded
+      } catch (error) {
+        console.error('[SnackService] Failed to setup web preview:', error);
+      }
+      
+      // Wait for the state to stabilize, then log it
+      setTimeout(() => {
+        try {
+          const state = snack.getState();
+          console.log('[SnackService] State after going online:', {
+            webPreviewURL: state?.webPreviewURL,
+            online: state?.online,
+            url: state?.url,
+            channel: state?.channel,
+            isOnline: state?.isOnline,
+            state: state
+          });
+        } catch (error) {
+          console.error('[SnackService] Failed to get state after going online:', error);
+        }
+      }, 1000);
+    } catch (error) {
+      console.error('[SnackService] Failed to set Snack online:', error);
+      console.error('[SnackService] Error details:', {
+        message: error?.message,
+        stack: error?.stack,
+        name: error?.name,
+        error: error
+      });
+    }
+
+    // Log the initial files to verify they were applied
+    setTimeout(() => {
+      try {
+        const state = snack.getState();
+        console.log('[SnackService] Snack state after creation:', {
+          files: Object.keys(state?.files || {}),
+          fileDetails: state?.files,
+          name: state?.name,
+          online: state?.online
+        });
+      } catch (error) {
+        console.error('[SnackService] Failed to get state after creation:', error);
+      }
+    }, 1000);
 
     // Create session object
     const session: SnackSession = {
@@ -224,33 +372,93 @@ const styles = StyleSheet.create({
   }
 
   /**
-   * Get the web player URL for embedding
+   * Get the web preview URL from Snack state
    */
-  getWebPlayerUrl(sessionId: string, options?: { platform?: 'ios' | 'android' | 'web' }): string {
+  getWebPreviewUrl(sessionId: string): string | null {
+    const session = this.getSession(sessionId);
+    if (!session) {
+      console.log('[SnackService] getWebPreviewUrl: No session found for', sessionId);
+      return null;
+    }
+
+    try {
+      const state = session.snack.getState();
+      console.log('[SnackService] getWebPreviewUrl: Current state:', {
+        webPreviewURL: state?.webPreviewURL,
+        online: state?.online,
+        url: state?.url,
+        channel: state?.channel,
+        isOnline: state?.isOnline
+      });
+      
+      // The Snack SDK should provide webPreviewURL directly in the state
+      if (state?.webPreviewURL) {
+        console.log('[SnackService] Found webPreviewURL in state:', state.webPreviewURL);
+        return state.webPreviewURL;
+      }
+      
+      // If not available yet but we have a URL, it might be the general URL
+      if (state?.url && state?.online) {
+        // For web preview, we need to ensure we get the web player URL
+        // The SDK should handle this, but if not, we can try to construct it
+        const webUrl = state.url.includes('/web') ? state.url : `${state.url}/web`;
+        console.log('[SnackService] Using URL from state for web preview:', webUrl);
+        return webUrl;
+      }
+      
+      console.log('[SnackService] No webPreviewURL available yet, Snack may still be initializing');
+      return null;
+    } catch (error) {
+      console.error('[SnackService] Failed to get webPreviewURL:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Set webPreviewRef on existing session
+   */
+  setWebPreviewRef(sessionId: string, webPreviewRef: Window | null): void {
     const session = this.getSession(sessionId);
     if (!session) {
       throw new Error(`Session ${sessionId} not found`);
     }
 
-    const baseUrl = this.config.webPlayerUrl;
-    const params = new URLSearchParams();
+    console.log('[SnackService] Setting webPreviewRef:', webPreviewRef);
     
-    // Add session ID
-    params.append('id', (session.snack as any).getChannel?.() || session.id);
-    
-    // Add platform if specified
-    if (options?.platform) {
-      params.append('platform', options.platform);
+    // According to Snack SDK docs, the webPreviewRef should be set during construction
+    // But we can also try to update it if the method exists
+    try {
+      if (typeof (session.snack as any).setWebPreviewRef === 'function') {
+        (session.snack as any).setWebPreviewRef(webPreviewRef);
+        console.log('[SnackService] Successfully set webPreviewRef');
+        
+        // Try to refresh the web preview after setting the ref
+        setTimeout(async () => {
+          try {
+            if (typeof (session.snack as any).requestWebPreview === 'function') {
+              console.log('[SnackService] Requesting web preview after webPreviewRef update');
+              await (session.snack as any).requestWebPreview();
+            } else if (typeof (session.snack as any).getWebPreviewAsync === 'function') {
+              console.log('[SnackService] Calling getWebPreviewAsync after webPreviewRef update');
+              await (session.snack as any).getWebPreviewAsync();
+            }
+            
+            // Also try to trigger a code refresh to ensure the preview gets the latest code
+            const state = session.snack.getState();
+            if (state?.files) {
+              console.log('[SnackService] Refreshing code after webPreviewRef update');
+              await session.snack.updateFiles(state.files);
+            }
+          } catch (error) {
+            console.error('[SnackService] Failed to refresh preview after webPreviewRef update:', error);
+          }
+        }, 300);
+      } else {
+        console.warn('[SnackService] setWebPreviewRef method not available on Snack instance');
+      }
+    } catch (error) {
+      console.error('[SnackService] Failed to set webPreviewRef:', error);
     }
-
-    // Add theme
-    params.append('theme', 'light');
-    
-    // Hide panels for cleaner embed
-    params.append('preview', 'true');
-    params.append('hideDevTools', 'true');
-
-    return `${baseUrl}?${params.toString()}`;
   }
 
   /**

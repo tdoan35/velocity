@@ -26,6 +26,7 @@ interface SnackPreviewPanelProps {
   sessionId: string;
   userId?: string;
   projectId?: string;
+  files?: Record<string, { content: string; type: string; lastModified: Date; path: string }>;
   className?: string;
   onSessionReady?: (session: any) => void;
 }
@@ -34,6 +35,7 @@ export function SnackPreviewPanel({
   sessionId,
   userId,
   projectId,
+  files,
   className,
   onSessionReady
 }: SnackPreviewPanelProps) {
@@ -41,11 +43,79 @@ export function SnackPreviewPanel({
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const { toast } = useToast();
 
+  // Convert frontend files to Snack format
+  const convertFilesToSnackFormat = (files?: Record<string, { content: string; type: string; lastModified: Date; path: string }>) => {
+    if (!files || Object.keys(files).length === 0) {
+      // Return default files if no files provided
+      return {
+        'App.js': {
+          type: 'CODE' as const,
+          contents: `import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+
+export default function App() {
+  return (
+    <View style={styles.container}>
+      <Text style={styles.text}>Welcome to Velocity!</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  text: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+});`
+        }
+      };
+    }
+
+    // Convert project files to Snack format
+    const snackFiles: Record<string, { type: 'CODE'; contents: string }> = {};
+    
+    Object.entries(files).forEach(([path, file]) => {
+      // Remove 'frontend/' prefix and convert to appropriate filename
+      let snackPath = path.replace(/^frontend\//, '');
+      
+      // Convert .tsx to .js for Snack compatibility
+      if (snackPath.endsWith('.tsx')) {
+        snackPath = snackPath.replace('.tsx', '.js');
+      } else if (snackPath.endsWith('.ts')) {
+        snackPath = snackPath.replace('.ts', '.js');
+      }
+      
+      // Skip non-code files like package.json for now
+      if (snackPath === 'package.json') {
+        return;
+      }
+      
+      snackFiles[snackPath] = {
+        type: 'CODE' as const,
+        contents: file.content
+      };
+    });
+
+    return snackFiles;
+  };
+
+  // Convert files to Snack format first
+  const snackFiles = convertFilesToSnackFormat(files);
+  console.log('[SnackPreviewPanel] Converted files for Snack:', snackFiles);
+
   const {
     session,
     isLoading,
     error,
-    webPlayerUrl,
+    snack,
+    webPreviewUrl,
+    webPreviewRef,
     qrCodeUrl,
     createSession,
     saveSnapshot,
@@ -60,6 +130,7 @@ export function SnackPreviewPanel({
       name: 'Velocity Preview',
       description: 'Live preview of your React Native app',
       sdkVersion: '52.0.0',
+      files: snackFiles,
     }
   });
 
@@ -69,6 +140,32 @@ export function SnackPreviewPanel({
       onSessionReady(session);
     }
   }, [session, onSessionReady]);
+
+  // Update files when they change
+  useEffect(() => {
+    if (session && files && Object.keys(files).length > 0) {
+      const convertedFiles = convertFilesToSnackFormat(files);
+      console.log('[SnackPreviewPanel] Files changed, updating Snack:', convertedFiles);
+      
+      // Update files in the existing session
+      if (session.snack && typeof session.snack.updateFiles === 'function') {
+        try {
+          const updateResult = session.snack.updateFiles(convertedFiles);
+          // Check if the result is a promise before calling catch
+          if (updateResult !== undefined && updateResult !== null && typeof updateResult === 'object') {
+            const maybePromise = updateResult as any;
+            if ('catch' in maybePromise && typeof maybePromise.catch === 'function') {
+              maybePromise.catch((error: Error) => {
+                console.error('[SnackPreviewPanel] Failed to update files:', error);
+              });
+            }
+          }
+        } catch (error) {
+          console.error('[SnackPreviewPanel] Failed to update files:', error);
+        }
+      }
+    }
+  }, [files, session]);
 
   // Handle download
   const handleDownload = async () => {
@@ -203,7 +300,9 @@ export function SnackPreviewPanel({
         {/* Web preview */}
         <TabsContent value="web" className="flex-1 p-4">
           <SnackWebPlayer
-            webPlayerUrl={webPlayerUrl}
+            snack={snack}
+            webPreviewRef={webPreviewRef}
+            webPreviewUrl={webPreviewUrl}
             sessionId={sessionId}
             className="h-full"
             onError={(error) => {

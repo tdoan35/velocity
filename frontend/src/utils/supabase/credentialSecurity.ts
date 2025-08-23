@@ -98,14 +98,24 @@ const getEncryptionKey = (): string => {
 };
 
 export interface SupabaseCredentials {
-  url: string;
-  anonKey: string;
+  url?: string;
+  anonKey?: string;
+  // OAuth2 credentials
+  oauth_access_token?: string;
+  oauth_refresh_token?: string;
+  supabase_anon_key?: string;
+  supabase_service_role_key?: string;
 }
 
 export interface EncryptedCredentials {
-  projectUrl: string; // URLs are not sensitive, stored in plain text
-  encryptedAnonKey: string;
-  encryptionIv: string;
+  projectUrl?: string; // URLs are not sensitive, stored in plain text
+  encryptedAnonKey?: string;
+  encryptionIv?: string;
+  // OAuth2 encrypted fields
+  encryptedOAuthAccessToken?: string;
+  encryptedOAuthRefreshToken?: string;
+  encryptedSupabaseAnonKey?: string;
+  encryptedSupabaseServiceRoleKey?: string;
 }
 
 /**
@@ -122,30 +132,62 @@ export async function encryptCredentials(
     // Generate a random IV for this encryption
     const iv = CryptoJS.lib.WordArray.random(16);
     
-    // Encrypt the anon key
-    const encrypted = CryptoJS.AES.encrypt(
-      credentials.anonKey,
-      CryptoJS.enc.Utf8.parse(encryptionKey),
-      {
-        iv: iv,
-        mode: CryptoJS.mode.CBC,
-        padding: CryptoJS.pad.Pkcs7,
-      }
-    );
-    
-    return {
-      projectUrl: credentials.url, // URLs are not sensitive
-      encryptedAnonKey: encrypted.toString(),
+    const result: EncryptedCredentials = {
       encryptionIv: iv.toString(CryptoJS.enc.Hex),
     };
+
+    // Helper function to encrypt a value
+    const encryptValue = (value: string) => {
+      return CryptoJS.AES.encrypt(
+        value,
+        CryptoJS.enc.Utf8.parse(encryptionKey),
+        {
+          iv: iv,
+          mode: CryptoJS.mode.CBC,
+          padding: CryptoJS.pad.Pkcs7,
+        }
+      ).toString();
+    };
+
+    // Encrypt legacy fields if present
+    if (credentials.anonKey) {
+      result.encryptedAnonKey = encryptValue(credentials.anonKey);
+    }
+    if (credentials.url) {
+      result.projectUrl = credentials.url; // URLs are not sensitive
+    }
+
+    // Encrypt OAuth2 fields if present
+    if (credentials.oauth_access_token) {
+      result.encryptedOAuthAccessToken = encryptValue(credentials.oauth_access_token);
+    }
+    if (credentials.oauth_refresh_token) {
+      result.encryptedOAuthRefreshToken = encryptValue(credentials.oauth_refresh_token);
+    }
+    if (credentials.supabase_anon_key) {
+      result.encryptedSupabaseAnonKey = encryptValue(credentials.supabase_anon_key);
+    }
+    if (credentials.supabase_service_role_key) {
+      result.encryptedSupabaseServiceRoleKey = encryptValue(credentials.supabase_service_role_key);
+    }
+    
+    return result;
   } catch (error) {
     console.error('[Credential Security] Encryption failed:', error);
     throw new Error('Failed to encrypt credentials');
   }
 }
 
+export interface DecryptedCredentials {
+  anonKey?: string;
+  oauth_access_token?: string;
+  oauth_refresh_token?: string;
+  supabase_anon_key?: string;
+  supabase_service_role_key?: string;
+}
+
 /**
- * Decrypt Supabase credentials
+ * Decrypt Supabase credentials (legacy single value version)
  * @param encryptedAnonKey - The encrypted anon key
  * @param encryptionIv - The IV used for encryption
  * @returns Decrypted anon key
@@ -153,31 +195,79 @@ export async function encryptCredentials(
 export async function decryptCredentials(
   encryptedAnonKey: string,
   encryptionIv: string
-): Promise<string> {
+): Promise<string>;
+
+/**
+ * Decrypt Supabase credentials (object version)
+ * @param encryptedData - Object containing encrypted fields and IV
+ * @returns Object with decrypted credentials
+ */
+export async function decryptCredentials(
+  encryptedData: Partial<EncryptedCredentials>
+): Promise<DecryptedCredentials>;
+
+export async function decryptCredentials(
+  encryptedDataOrKey: string | Partial<EncryptedCredentials>,
+  encryptionIv?: string
+): Promise<string | DecryptedCredentials> {
   try {
     const encryptionKey = getEncryptionKey();
     
-    // Parse the IV from hex string
-    const iv = CryptoJS.enc.Hex.parse(encryptionIv);
-    
-    // Decrypt the anon key
-    const decrypted = CryptoJS.AES.decrypt(
-      encryptedAnonKey,
-      CryptoJS.enc.Utf8.parse(encryptionKey),
-      {
-        iv: iv,
-        mode: CryptoJS.mode.CBC,
-        padding: CryptoJS.pad.Pkcs7,
+    // Helper function to decrypt a value
+    const decryptValue = (encryptedValue: string, iv: CryptoJS.lib.WordArray) => {
+      const decrypted = CryptoJS.AES.decrypt(
+        encryptedValue,
+        CryptoJS.enc.Utf8.parse(encryptionKey),
+        {
+          iv: iv,
+          mode: CryptoJS.mode.CBC,
+          padding: CryptoJS.pad.Pkcs7,
+        }
+      );
+      
+      const decryptedString = decrypted.toString(CryptoJS.enc.Utf8);
+      
+      if (!decryptedString) {
+        throw new Error('Decryption resulted in empty string');
       }
-    );
-    
-    const decryptedString = decrypted.toString(CryptoJS.enc.Utf8);
-    
-    if (!decryptedString) {
-      throw new Error('Decryption resulted in empty string');
+      
+      return decryptedString;
+    };
+
+    // Legacy single value version
+    if (typeof encryptedDataOrKey === 'string' && encryptionIv) {
+      const iv = CryptoJS.enc.Hex.parse(encryptionIv);
+      return decryptValue(encryptedDataOrKey, iv);
     }
-    
-    return decryptedString;
+
+    // Object version
+    if (typeof encryptedDataOrKey === 'object' && encryptedDataOrKey.encryptionIv) {
+      const iv = CryptoJS.enc.Hex.parse(encryptedDataOrKey.encryptionIv);
+      const result: DecryptedCredentials = {};
+
+      // Decrypt legacy fields if present
+      if (encryptedDataOrKey.encryptedAnonKey) {
+        result.anonKey = decryptValue(encryptedDataOrKey.encryptedAnonKey, iv);
+      }
+
+      // Decrypt OAuth2 fields if present
+      if (encryptedDataOrKey.encryptedOAuthAccessToken) {
+        result.oauth_access_token = decryptValue(encryptedDataOrKey.encryptedOAuthAccessToken, iv);
+      }
+      if (encryptedDataOrKey.encryptedOAuthRefreshToken) {
+        result.oauth_refresh_token = decryptValue(encryptedDataOrKey.encryptedOAuthRefreshToken, iv);
+      }
+      if (encryptedDataOrKey.encryptedSupabaseAnonKey) {
+        result.supabase_anon_key = decryptValue(encryptedDataOrKey.encryptedSupabaseAnonKey, iv);
+      }
+      if (encryptedDataOrKey.encryptedSupabaseServiceRoleKey) {
+        result.supabase_service_role_key = decryptValue(encryptedDataOrKey.encryptedSupabaseServiceRoleKey, iv);
+      }
+
+      return result;
+    }
+
+    throw new Error('Invalid parameters for decryption');
   } catch (error) {
     console.error('[Credential Security] Decryption failed:', error);
     throw new Error('Failed to decrypt credentials');

@@ -13,7 +13,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/componen
 import { motion, AnimatePresence } from 'motion/react'
 import { cn } from '@/lib/utils'
 import { ProjectProvider, useProjectContext } from '@/contexts/ProjectContext'
-import { SupabaseConnectionManager } from '@/components/supabase/SupabaseConnectionManager'
+import { EnhancedSupabaseConnectionManager } from '@/components/supabase/EnhancedSupabaseConnectionManager'
 import { SupabaseConnectButton } from '@/components/supabase/SupabaseConnectButton'
 import { 
   ArrowLeft, 
@@ -529,7 +529,7 @@ function ProjectDesignContent() {
                       </Button>
                     </div>
                     <div className="flex-1 overflow-y-auto">
-                      <SupabaseConnectionManager
+                      <EnhancedSupabaseConnectionManager
                         projectId={projectId || ''}
                         showStatus={true}
                         allowDisconnect={true}

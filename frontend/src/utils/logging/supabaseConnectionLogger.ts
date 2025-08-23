@@ -89,7 +89,11 @@ class SecureLogger {
   /**
    * Sanitize a string by removing sensitive information
    */
-  private sanitize(input: string): string {
+  private sanitize(input: string | undefined | null): string {
+    if (!input || typeof input !== 'string') {
+      return String(input || '');
+    }
+    
     let sanitized = input;
     for (const pattern of this.sensitivePatterns) {
       sanitized = sanitized.replace(pattern.pattern, pattern.replacement);
@@ -247,24 +251,24 @@ class SecureLogger {
 
   // Public logging methods
   
-  public debug(category: string, message: string, metadata?: Record<string, any>): void {
-    this.log(LogLevel.DEBUG, category, message, metadata);
+  public debug(category: string, message: string | undefined | null, metadata?: Record<string, any>): void {
+    this.log(LogLevel.DEBUG, category, message || '', metadata);
   }
   
-  public info(category: string, message: string, metadata?: Record<string, any>): void {
-    this.log(LogLevel.INFO, category, message, metadata);
+  public info(category: string, message: string | undefined | null, metadata?: Record<string, any>): void {
+    this.log(LogLevel.INFO, category, message || '', metadata);
   }
   
-  public warn(category: string, message: string, metadata?: Record<string, any>): void {
-    this.log(LogLevel.WARN, category, message, metadata);
+  public warn(category: string, message: string | undefined | null, metadata?: Record<string, any>): void {
+    this.log(LogLevel.WARN, category, message || '', metadata);
   }
   
-  public error(category: string, message: string, metadata?: Record<string, any>): void {
-    this.log(LogLevel.ERROR, category, message, metadata);
+  public error(category: string, message: string | undefined | null, metadata?: Record<string, any>): void {
+    this.log(LogLevel.ERROR, category, message || '', metadata);
   }
   
-  public security(category: string, message: string, metadata?: Record<string, any>): void {
-    this.log(LogLevel.SECURITY, category, message, metadata);
+  public security(category: string, message: string | undefined | null, metadata?: Record<string, any>): void {
+    this.log(LogLevel.SECURITY, category, message || '', metadata);
   }
 
   /**
