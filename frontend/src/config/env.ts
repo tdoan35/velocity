@@ -25,6 +25,17 @@ export interface AppConfig {
   openaiApiKey?: string
   enableAIStreaming: boolean
   
+  // Supabase Backend Configuration
+  supabaseServiceRoleKey?: string // For server-side operations
+  
+  // Optional: Supabase OAuth Configuration (if allowing users to bring their own Supabase)
+  supabaseOAuthEnabled: boolean
+  supabaseManagementApiUrl?: string
+  supabaseAccessToken?: string
+  supabaseOAuthClientId?: string
+  supabaseOAuthClientSecret?: string
+  supabaseOAuthRedirectUri?: string
+  
   // Build
   sourceMap: boolean
   bundleAnalyze: boolean
@@ -91,6 +102,21 @@ export const config: AppConfig = {
   openaiApiKey: getEnvVar('VITE_OPENAI_API_KEY'),
   enableAIStreaming: getEnvBool('VITE_ENABLE_AI_STREAMING', true),
   
+  // Supabase Backend Configuration
+  supabaseServiceRoleKey: getEnvVar('SUPABASE_SERVICE_ROLE_KEY'),
+  
+  // Optional: Supabase OAuth Configuration
+  supabaseOAuthEnabled: getEnvBool('VITE_SUPABASE_OAUTH_ENABLED', false),
+  supabaseManagementApiUrl: getEnvVar('VITE_SUPABASE_MANAGEMENT_API_URL', 'https://api.supabase.com/v1'),
+  supabaseAccessToken: getEnvVar('SUPABASE_ACCESS_TOKEN'),
+  supabaseOAuthClientId: getEnvVar('SUPABASE_OAUTH_CLIENT_ID'),
+  supabaseOAuthClientSecret: getEnvVar('SUPABASE_OAUTH_CLIENT_SECRET'),
+  supabaseOAuthRedirectUri: getEnvVar('SUPABASE_OAUTH_REDIRECT_URI', 
+    isDevelopment 
+      ? 'http://localhost:5173/auth/supabase/callback'
+      : 'https://velocity.app/auth/supabase/callback'
+  ),
+  
   // Build
   sourceMap: getEnvBool('VITE_SOURCE_MAP', !isProduction),
   bundleAnalyze: getEnvBool('VITE_BUNDLE_ANALYZE', false),
@@ -123,6 +149,21 @@ export function validateConfig(): void {
     errors.push('Google Analytics tracking ID is required when analytics is enabled')
   }
   
+  // Validate Supabase OAuth configuration
+  if (config.supabaseOAuthEnabled) {
+    if (!config.supabaseOAuthClientId) {
+      errors.push('Supabase OAuth Client ID is required when OAuth is enabled')
+    }
+    
+    if (!config.supabaseOAuthClientSecret) {
+      errors.push('Supabase OAuth Client Secret is required when OAuth is enabled')
+    }
+    
+    if (isProduction && config.supabaseOAuthRedirectUri && !config.supabaseOAuthRedirectUri.startsWith('https://')) {
+      errors.push('Supabase OAuth Redirect URI must use HTTPS in production')
+    }
+  }
+  
   if (errors.length > 0) {
     console.error('Configuration validation errors:')
     errors.forEach(error => console.error(`  - ${error}`))
@@ -140,5 +181,11 @@ if (isDevelopment) {
     ...config,
     // Hide sensitive values
     sentryDsn: config.sentryDsn ? '***' : undefined,
+    anthropicApiKey: config.anthropicApiKey ? '***' : undefined,
+    openaiApiKey: config.openaiApiKey ? '***' : undefined,
+    supabaseServiceRoleKey: config.supabaseServiceRoleKey ? '***' : undefined,
+    supabaseAccessToken: config.supabaseAccessToken ? '***' : undefined,
+    supabaseOAuthClientId: config.supabaseOAuthClientId ? '***' : undefined,
+    supabaseOAuthClientSecret: config.supabaseOAuthClientSecret ? '***' : undefined,
   })
 }
