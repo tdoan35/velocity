@@ -1,27 +1,31 @@
-# Supabase OAuth Integration Implementation Plan
+# Supabase Direct Connection Implementation Plan - User's Own Projects
 
-**Document Version**: 1.0  
+**Document Version**: 2.0  
 **Created**: 2025-01-22  
-**Status**: Planning Phase  
+**Updated**: 2025-01-22  
+**Status**: Implementation Phase  
 **Architecture Reference**: `docs/feature-plans/editor-preview-page-architecture.md`
 
 ## Overview
 
-This document provides a comprehensive implementation plan for integrating Supabase OAuth functionality into Velocity's ProjectDesign page. The implementation follows a simplified, user-controlled approach where users manually connect their Supabase accounts via a "Connect Supabase" button, establishing the foundation for full-stack development capabilities.
+This document provides a comprehensive implementation plan for integrating Supabase direct connection functionality into Velocity's ProjectDesign page. The implementation allows users to connect their own existing Supabase projects by providing their project credentials (URL and anon key), maintaining full ownership and control over their backend infrastructure, data, and billing. Users bring their own Supabase accounts and projects, with Velocity acting as a frontend development environment that connects to user-owned backends through a simple, secure credential-based connection.
 
 ## Goals & Objectives
 
 ### Primary Goals
-1. **Enable Supabase Integration**: Allow users to connect their existing Supabase accounts
-2. **Automated Project Setup**: Create new Supabase projects with basic configuration
-3. **Seamless UX**: Provide intuitive OAuth flow within ProjectDesign interface
-4. **Foundation for Full-Stack**: Establish backend infrastructure for editor integration
+1. **Enable User's Supabase Integration**: Allow users to connect their own existing Supabase projects
+2. **Data Sovereignty**: Users maintain full ownership and control over their backend infrastructure
+3. **Simple Connection Flow**: Provide intuitive credential-based connection without OAuth complexity
+4. **User-Controlled Backend**: Users manage their own Supabase projects, billing, and resources
+5. **Privacy-First**: No third-party access, credentials stored encrypted, full user control
 
 ### Success Metrics
-- Successful OAuth connection rate > 95%
-- Project creation time < 30 seconds
-- User abandonment rate during flow < 10%
-- Zero authentication security vulnerabilities
+- Successful connection rate > 95%
+- Connection establishment time < 10 seconds
+- User abandonment rate during flow < 5%
+- Zero credential security vulnerabilities
+- 100% user data sovereignty maintained
+- No external API dependencies for connection
 
 ## Technical Requirements
 
@@ -32,53 +36,66 @@ This document provides a comprehensive implementation plan for integrating Supab
 - **React Hook Form** (if needed): For configuration forms
 
 ### Backend Dependencies
-- **Supabase Management API**: For programmatic project creation
-- **Supabase CLI Integration**: For project configuration and deployment
-- **OAuth Providers**: Supabase OAuth for account access
+- **@supabase/supabase-js**: For connecting to user projects
+- **Crypto Module**: For credential encryption/decryption
+- **No External APIs**: Direct connection using user-provided credentials
 
 ### Environment Variables Required
 ```env
-# Existing (already configured)
-VITE_SUPABASE_URL=
-VITE_SUPABASE_ANON_KEY=
+# Velocity's Supabase (for user auth and app data)
+VITE_SUPABASE_URL= # Velocity's Supabase project
+VITE_SUPABASE_ANON_KEY= # Velocity's anon key
 
-# New (to be added)
-VITE_SUPABASE_MANAGEMENT_API_URL=https://api.supabase.com/v1
-SUPABASE_ACCESS_TOKEN= # For server-side project creation
-SUPABASE_OAUTH_CLIENT_ID= # For OAuth integration
-SUPABASE_OAUTH_CLIENT_SECRET= # For OAuth integration
+# Direct Connection Configuration
+VITE_SUPABASE_DIRECT_CONNECTION_ENABLED=true
+CREDENTIAL_ENCRYPTION_KEY= # 32-byte encryption key
+CREDENTIAL_ENCRYPTION_IV= # 16-byte initialization vector
 ```
 
 ### Database Schema Extensions
 ```sql
--- Add to existing projects table
-ALTER TABLE projects ADD COLUMN IF NOT EXISTS supabase_project_ref TEXT;
+-- Add to existing projects table (connection metadata only)
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS supabase_project_url TEXT;
-ALTER TABLE projects ADD COLUMN IF NOT EXISTS supabase_anon_key TEXT;
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS backend_status TEXT DEFAULT 'disconnected';
-ALTER TABLE projects ADD COLUMN IF NOT EXISTS backend_config JSONB DEFAULT '{}';
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS backend_connected_at TIMESTAMP WITH TIME ZONE;
 
--- Add Supabase connections tracking
+-- User's Supabase connections (encrypted credentials)
 CREATE TABLE IF NOT EXISTS supabase_connections (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
-  supabase_access_token TEXT, -- Encrypted
-  supabase_refresh_token TEXT, -- Encrypted
-  supabase_org_id TEXT,
+  encrypted_url TEXT NOT NULL, -- Encrypted project URL
+  encrypted_anon_key TEXT NOT NULL, -- Encrypted anon key
+  encrypted_service_key TEXT, -- Optional encrypted service role key
   connection_status TEXT DEFAULT 'connected',
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  connected_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  last_tested TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   
-  UNIQUE(user_id, project_id)
+  UNIQUE(project_id) -- One Supabase connection per Velocity project
+);
+
+-- Connection test logs
+CREATE TABLE IF NOT EXISTS connection_tests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  connection_id UUID REFERENCES supabase_connections(id) ON DELETE CASCADE,
+  test_status TEXT NOT NULL, -- 'success' or 'failed'
+  error_message TEXT,
+  tested_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- RLS Policies
 ALTER TABLE supabase_connections ENABLE ROW LEVEL SECURITY;
+ALTER TABLE connection_tests ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can manage their own Supabase connections" 
 ON supabase_connections FOR ALL 
 USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can view their connection tests" 
+ON connection_tests FOR SELECT 
+USING (connection_id IN (
+  SELECT id FROM supabase_connections WHERE user_id = auth.uid()
+));
 ```
 
 ## Architecture Analysis
@@ -161,26 +178,29 @@ export const SUPABASE_OAUTH_CLIENT_ID = import.meta.env.VITE_SUPABASE_OAUTH_CLIE
 
 #### 1.2 Database Schema Updates
 **Files to Create**:
-- `supabase/migrations/20250122000001_supabase_integration.sql`
+- `supabase/migrations/20250122000001_supabase_direct_connection.sql`
 
 **Tasks**:
-1. Add Supabase connection tracking tables
-2. Extend projects table with backend fields
-3. Set up RLS policies
+1. Add Supabase connection tracking tables with encrypted fields
+2. Extend projects table with backend status fields
+3. Set up RLS policies for secure access
+4. Create connection test logging table
 
-#### 1.3 OAuth Service Layer
+#### 1.3 Connection Service Layer
 **Files to Create**:
-- `frontend/src/services/supabaseManagementService.ts`
-- `frontend/src/types/supabase-management.ts`
+- `frontend/src/services/supabaseConnectionService.ts`
+- `frontend/src/types/supabase-connection.ts`
 
 **Core Functions**:
 ```typescript
-interface SupabaseManagementService {
-  initiateOAuth(): Promise<{ url: string; state: string }>
-  handleOAuthCallback(code: string, state: string): Promise<OAuthTokens>
-  createProject(name: string, orgId: string): Promise<SupabaseProject>
-  listOrganizations(): Promise<SupabaseOrganization[]>
-  getProjectDetails(projectRef: string): Promise<SupabaseProject>
+interface SupabaseConnectionService {
+  validateCredentials(url: string, anonKey: string): Promise<boolean>
+  testConnection(url: string, anonKey: string): Promise<ConnectionTestResult>
+  saveConnection(projectId: string, credentials: SupabaseCredentials): Promise<void>
+  getConnection(projectId: string): Promise<SupabaseConnection | null>
+  disconnectProject(projectId: string): Promise<void>
+  encryptCredentials(credentials: SupabaseCredentials): EncryptedCredentials
+  decryptCredentials(encrypted: EncryptedCredentials): SupabaseCredentials
 }
 ```
 
@@ -193,19 +213,28 @@ interface SupabaseManagementService {
 interface SupabaseConnectionState {
   // Connection State
   isConnected: boolean
-  connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error'
-  currentProject: SupabaseProject | null
-  organizations: SupabaseOrganization[]
+  connectionStatus: 'disconnected' | 'testing' | 'connecting' | 'connected' | 'error'
+  projectUrl: string | null
+  isTestingConnection: boolean
   
-  // OAuth State
-  oauthState: string | null
-  isAuthenticating: boolean
+  // Credentials (never stored in state, only in encrypted DB)
+  tempCredentials: {
+    url: string
+    anonKey: string
+    serviceKey?: string
+  } | null
   
   // Actions
-  initiateConnection(): Promise<void>
-  handleOAuthSuccess(tokens: OAuthTokens): Promise<void>
-  createNewProject(name: string, orgId: string): Promise<void>
-  disconnectSupabase(): Promise<void>
+  setTempCredentials(credentials: SupabaseCredentials): void
+  testConnection(): Promise<ConnectionTestResult>
+  saveConnection(projectId: string): Promise<void>
+  loadConnection(projectId: string): Promise<void>
+  disconnectProject(projectId: string): Promise<void>
+  clearTempCredentials(): void
+  
+  // User Control
+  isUserOwned: true // Always true - users own their projects
+  canDisconnect: true // Users can always disconnect
   
   // Error Handling
   error: string | null
@@ -261,18 +290,18 @@ export function SupabaseConnectButton({ projectId, onConnectionSuccess, classNam
 <Button
   variant="outline"
   size="sm"
-  onClick={handleSupabaseConnection}
-  disabled={isSupabaseConnected}
+  onClick={handleUserSupabaseConnection}
+  disabled={isUserSupabaseConnected}
 >
-  {isSupabaseConnected ? (
+  {isUserSupabaseConnected ? (
     <>
       <Check className="w-4 h-4 mr-2" />
-      Supabase Connected
+      Connected: {userProject.name}
     </>
   ) : (
     <>
       <Database className="w-4 h-4 mr-2" />
-      Connect Supabase
+      Connect Your Supabase
     </>
   )}
 </Button>
@@ -331,15 +360,16 @@ export function SupabaseConnectButton({ projectId, onConnectionSuccess, classNam
 <Route path="/auth/supabase/callback" element={<SupabaseCallback />} />
 ```
 
-#### 3.2 Project Creation Flow
+#### 3.2 User Project Selection Flow
 **Files to Create**:
-- `frontend/src/components/supabase/ProjectCreationWizard.tsx`
+- `frontend/src/components/supabase/UserProjectSelector.tsx`
 
 **Features**:
-- Organization selection
-- Project naming
-- Configuration options
-- Progress tracking
+- Display user's existing Supabase projects
+- Project selection interface
+- Show project details (name, region, plan)
+- Connection confirmation
+- No project creation - users manage their own projects
 
 #### 3.3 Error Handling & Recovery
 **Error States to Handle**:
@@ -351,25 +381,29 @@ export function SupabaseConnectButton({ projectId, onConnectionSuccess, classNam
 
 ### Phase 4: Backend Integration (Week 3-4)
 
-#### 4.1 Edge Function for Project Management
+#### 4.1 Edge Function for User Project Connection
 **Files to Create**:
-- `supabase/functions/supabase-project-management/index.ts`
+- `supabase/functions/user-supabase-connection/index.ts`
 
 **Functions**:
 ```typescript
-// Handle secure project creation
-POST /supabase-project-management/create
+// List user's Supabase projects
+GET /user-supabase-connection/projects
+Authorization: Bearer <oauth-token>
+
+// Store user project connection
+POST /user-supabase-connection/connect
 {
-  "name": "string",
-  "organization_id": "string",
-  "user_tokens": "encrypted_tokens"
+  "velocity_project_id": "string",
+  "supabase_project_id": "string",
+  "supabase_project_name": "string"
 }
 
-// Get project status
-GET /supabase-project-management/status/:project_ref
+// Get connection status
+GET /user-supabase-connection/status/:velocity_project_id
 
-// Update project configuration
-PUT /supabase-project-management/configure/:project_ref
+// Disconnect user's project
+DELETE /user-supabase-connection/disconnect/:velocity_project_id
 ```
 
 #### 4.2 Token Security & Storage
@@ -390,11 +424,12 @@ PUT /supabase-project-management/configure/:project_ref
 
 ## Security Considerations
 
-### OAuth Security
+### OAuth Security & User Privacy
 1. **State Parameter Validation**: Prevent CSRF attacks
-2. **Token Encryption**: Encrypt stored OAuth tokens
-3. **Scope Limitation**: Request minimal required permissions
-4. **Token Rotation**: Implement refresh token rotation
+2. **Minimal Data Storage**: Store only connection metadata, no API keys
+3. **Minimal Scope**: Use read:projects scope only - no write access
+4. **User Control**: Users can revoke access at any time
+5. **Data Sovereignty**: User data remains in their own Supabase projects
 
 ### API Security
 1. **Rate Limiting**: Implement API rate limiting
@@ -479,10 +514,11 @@ interface SupabaseFeatureFlags {
 ## Success Criteria
 
 ### Functional Requirements
-- [ ] Users can connect Supabase accounts via OAuth
-- [ ] Projects are created automatically with correct configuration
-- [ ] Build button activates after successful connection
-- [ ] Connection status is clearly visible and accurate
+- [ ] Users can connect their own existing Supabase projects via OAuth
+- [ ] Users can select from their available Supabase projects
+- [ ] Build button activates after successful user project connection
+- [ ] User's project name and ownership is clearly displayed
+- [ ] Users can disconnect and revoke access at any time
 - [ ] Error states provide clear user guidance
 
 ### Non-Functional Requirements
@@ -501,17 +537,17 @@ interface SupabaseFeatureFlags {
 ## Risk Assessment & Mitigation
 
 ### High-Risk Areas
-1. **OAuth Token Security**: 
-   - Risk: Token theft or misuse
-   - Mitigation: Encryption, short expiry, audit logging
+1. **User Data Privacy**: 
+   - Risk: Accessing user's sensitive project data
+   - Mitigation: Minimal OAuth scopes (read:projects only), no API key storage
 
-2. **Project Creation Failures**: 
-   - Risk: Users unable to create projects
-   - Mitigation: Retry logic, fallback options, clear error messages
+2. **User Project Access**: 
+   - Risk: Users unable to connect their projects
+   - Mitigation: Clear error messages, support documentation, OAuth retry
 
-3. **API Rate Limiting**: 
-   - Risk: Users hitting Supabase API limits
-   - Mitigation: Request batching, intelligent retry, usage monitoring
+3. **Data Sovereignty Concerns**: 
+   - Risk: Users worried about data control
+   - Mitigation: Clear messaging about user ownership, easy disconnect option
 
 ### Medium-Risk Areas
 1. **Browser Compatibility**: OAuth popup handling
@@ -521,14 +557,14 @@ interface SupabaseFeatureFlags {
 ## Post-Implementation Roadmap
 
 ### Immediate Enhancements (Next Sprint)
-1. **Config Helper Integration**: AI-powered requirement analysis
-2. **Advanced Project Templates**: Pre-configured project types
-3. **Bulk Project Operations**: Manage multiple projects
+1. **Multi-Project Support**: Allow users to connect multiple Supabase projects
+2. **Project Switching**: Easy switching between connected user projects
+3. **Connection Health Monitoring**: Show user's project status
 
 ### Future Enhancements (Next Quarter)
-1. **Team Collaboration**: Shared Supabase projects
-2. **Advanced Configuration**: Database schema customization
-3. **Monitoring Dashboard**: Project health and usage analytics
+1. **Team Collaboration**: Share Velocity projects (users keep their own Supabase)
+2. **Project Templates**: Export/import configurations for user's projects
+3. **Usage Analytics**: Help users track their Supabase usage
 
 ## References
 

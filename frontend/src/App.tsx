@@ -28,7 +28,7 @@ import { Modal } from './components/ui/modal'
 import { SignupForm } from './components/ui/signup-form'
 import { AuthenticatedLayout } from './components/AuthenticatedLayout'
 import { Dashboard } from './pages/Dashboard'
-import { ProjectDesign } from './pages/ProjectDesign'
+import { ProjectDesign } from './pages/ProjectDesignWithSupabase'
 import { 
   Lightbulb,
   Layers,

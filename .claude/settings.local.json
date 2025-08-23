@@ -82,7 +82,8 @@
       "Bash(python3:*)",
       "mcp__playwright__browser_navigate_forward",
       "mcp__taskmaster-ai__remove_task",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "Bash(claude --version)"
     ],
     "defaultMode": "acceptEdits",
     "additionalDirectories": [

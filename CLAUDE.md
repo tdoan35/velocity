@@ -64,6 +64,14 @@ This project is in the **initial planning phase** with no source code files yet.
 - **API keys required**: Set up `.env` file with Anthropic and other provider keys
 - **Tagged task lists**: Default "master" tag context, create feature branches as needed
 
+## TypeScript Configuration
+
+- **Type-only imports required**: This project has `verbatimModuleSyntax` enabled in tsconfig.json
+  - Always use `import type` for TypeScript types, interfaces, and type-only imports
+  - Example: `import type { ConnectionTestResult } from './types'`
+  - Regular imports for values: `import { myFunction } from './module'`
+  - Combined imports: `import React, { type FC, type ReactNode } from 'react'`
+
 ## Architecture Insights
 
 Based on the PRD analysis:
