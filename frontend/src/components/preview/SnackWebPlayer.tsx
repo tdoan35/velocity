@@ -12,7 +12,12 @@ import {
   Maximize2,
   Minimize2,
   Download,
-  Share2
+  Share2,
+  ChevronDown,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  Maximize
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -90,11 +95,22 @@ export function SnackWebPlayer({
   const [selectedDevice, setSelectedDevice] = useState<DevicePreset>(DEVICE_PRESETS[0]);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isRotated, setIsRotated] = useState(false);
+  const [isPreviewHovered, setIsPreviewHovered] = useState(false);
+  const [isDeviceDropdownOpen, setIsDeviceDropdownOpen] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [isResponsiveZoom, setIsResponsiveZoom] = useState(false);
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+
+  // Zoom levels: 25%, 50%, 75%, 100%, 125%, 150%, 200%
+  const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
+  const DEFAULT_ZOOM_INDEX = 3; // 100%
 
   // Handle device selection
   const handleDeviceChange = (device: DevicePreset) => {
     setSelectedDevice(device);
     setIsRotated(false);
+    setZoomLevel(1); // Reset zoom when changing devices
+    // Keep responsive zoom mode active if it was enabled
     onDeviceChange?.(device);
   };
 
@@ -112,6 +128,70 @@ export function SnackWebPlayer({
       document.exitFullscreen();
       setIsFullscreen(false);
     }
+  };
+
+  // Handle zoom
+  const handleZoomIn = () => {
+    const currentIndex = ZOOM_LEVELS.findIndex(level => level === zoomLevel);
+    if (currentIndex < ZOOM_LEVELS.length - 1) {
+      setZoomLevel(ZOOM_LEVELS[currentIndex + 1]);
+    }
+  };
+
+  const handleZoomOut = () => {
+    const currentIndex = ZOOM_LEVELS.findIndex(level => level === zoomLevel);
+    if (currentIndex > 0) {
+      setZoomLevel(ZOOM_LEVELS[currentIndex - 1]);
+    }
+  };
+
+  const handleZoomReset = () => {
+    setZoomLevel(1);
+  };
+
+  // Toggle responsive zoom mode
+  const handleToggleResponsiveZoom = () => {
+    setIsResponsiveZoom(!isResponsiveZoom);
+    if (!isResponsiveZoom) {
+      // When enabling responsive zoom, reset manual zoom
+      setZoomLevel(1);
+    }
+  };
+
+  // Calculate responsive zoom level
+  const calculateResponsiveZoom = () => {
+    if (!isResponsiveZoom || containerSize.width === 0 || containerSize.height === 0) {
+      return zoomLevel;
+    }
+
+    const deviceWidth = isRotated ? selectedDevice.height : selectedDevice.width;
+    const deviceHeight = isRotated ? selectedDevice.width : selectedDevice.height;
+    
+    // Add some padding to ensure the device doesn't touch the edges
+    const PADDING = 80; // 40px on each side for controls and spacing
+    const availableWidth = containerSize.width - PADDING;
+    const availableHeight = containerSize.height - PADDING;
+    
+    // Calculate scale factors for both dimensions
+    const scaleX = availableWidth / deviceWidth;
+    const scaleY = availableHeight / deviceHeight;
+    
+    // Use the smaller scale factor to ensure the device fits completely
+    const responsiveScale = Math.min(scaleX, scaleY, 2); // Cap at 200% for sanity
+    
+    // Don't go below 0.25 (25%)
+    return Math.max(0.25, responsiveScale);
+  };
+
+  // Get current effective zoom level
+  const getEffectiveZoomLevel = () => {
+    return isResponsiveZoom ? calculateResponsiveZoom() : zoomLevel;
+  };
+
+  // Get zoom percentage for display
+  const getZoomPercentage = () => {
+    const effectiveZoom = getEffectiveZoomLevel();
+    return Math.round(effectiveZoom * 100);
   };
 
   // Handle iframe load
@@ -187,6 +267,65 @@ export function SnackWebPlayer({
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
+  // Handle click outside dropdown to close it
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (isDeviceDropdownOpen && containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsDeviceDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isDeviceDropdownOpen]);
+
+  // Handle keyboard shortcuts for zoom
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Only handle shortcuts when the container is focused or hovered
+      if (!isPreviewHovered && !isFullscreen) return;
+      
+      // Ctrl/Cmd + Plus/Equals for zoom in
+      if ((event.ctrlKey || event.metaKey) && (event.key === '+' || event.key === '=')) {
+        event.preventDefault();
+        if (!isResponsiveZoom) handleZoomIn();
+      }
+      // Ctrl/Cmd + Minus for zoom out
+      else if ((event.ctrlKey || event.metaKey) && event.key === '-') {
+        event.preventDefault();
+        if (!isResponsiveZoom) handleZoomOut();
+      }
+      // Ctrl/Cmd + 0 for reset zoom
+      else if ((event.ctrlKey || event.metaKey) && event.key === '0') {
+        event.preventDefault();
+        if (!isResponsiveZoom) handleZoomReset();
+      }
+      // Ctrl/Cmd + R for toggle responsive zoom
+      else if ((event.ctrlKey || event.metaKey) && event.key === 'r') {
+        event.preventDefault();
+        handleToggleResponsiveZoom();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isPreviewHovered, isFullscreen, zoomLevel, isResponsiveZoom]);
+
+  // Track container size for responsive zoom
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        setContainerSize({ width, height });
+      }
+    });
+
+    resizeObserver.observe(containerRef.current);
+    return () => resizeObserver.disconnect();
+  }, []);
+
   // No longer needed - webPreviewUrl is passed as prop
 
   // Set webPreviewRef on Snack instance when available
@@ -230,63 +369,131 @@ export function SnackWebPlayer({
 
   return (
     <div className={cn("flex flex-col h-full", className)}>
-      {/* Toolbar */}
-      <div className="flex items-center justify-between p-2 border-b bg-background">
-        <div className="flex items-center gap-2">
-          {/* Device selector */}
-          <div className="flex items-center gap-1">
-            {DEVICE_PRESETS.map((device) => (
+      {/* Preview container */}
+      <div 
+        ref={containerRef}
+        className={cn(
+          "flex-1 flex items-center justify-center bg-muted/20 overflow-auto relative",
+          isFullscreen && "fixed inset-0 z-50 bg-background"
+        )}
+        onMouseEnter={() => setIsPreviewHovered(true)}
+        onMouseLeave={() => setIsPreviewHovered(false)}
+      >
+        {/* Device selector dropdown - positioned in top-left corner */}
+        <div className={cn(
+          "absolute top-6 left-6 z-10 transition-opacity duration-200",
+          isPreviewHovered || isFullscreen ? "opacity-100" : "opacity-0"
+        )}>
+          {/* Device dropdown */}
+          <div className="relative">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsDeviceDropdownOpen(!isDeviceDropdownOpen)}
+              className="gap-2"
+            >
+              {selectedDevice.icon}
+              <span className="text-xs">{selectedDevice.name}</span>
+              <ChevronDown className={cn("w-3 h-3 transition-transform", isDeviceDropdownOpen && "rotate-180")} />
+            </Button>
+
+            {/* Dropdown menu */}
+            {isDeviceDropdownOpen && (
+              <div className="absolute top-full left-0 mt-1 bg-background border rounded-md shadow-lg min-w-[240px] z-20">
+                {DEVICE_PRESETS.map((device) => (
+                  <button
+                    key={device.name}
+                    onClick={() => {
+                      handleDeviceChange(device);
+                      setIsDeviceDropdownOpen(false);
+                    }}
+                    className={cn(
+                      "w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors",
+                      selectedDevice.name === device.name && "bg-accent text-accent-foreground"
+                    )}
+                  >
+                    {device.icon}
+                    <span>{device.name}</span>
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {device.width} × {device.height}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right-side controls - positioned in top-right corner */}
+        <div className={cn(
+          "absolute top-6 right-6 z-10 transition-opacity duration-200 flex items-center gap-2",
+          isPreviewHovered || isFullscreen ? "opacity-100" : "opacity-0"
+        )}>
+          {/* Zoom controls */}
+          <div className="flex items-center gap-1 bg-background/90 backdrop-blur-sm rounded-md p-1 border">
+            {/* Responsive zoom toggle */}
+            <Button
+              variant={isResponsiveZoom ? "default" : "ghost"}
+              size="sm"
+              onClick={handleToggleResponsiveZoom}
+              title="Toggle responsive zoom (Ctrl+R)"
+              className="h-7 w-7 p-0"
+            >
+              <Maximize className="w-3 h-3" />
+            </Button>
+            
+            {/* Manual zoom controls */}
+            <div className={cn("flex items-center gap-1", isResponsiveZoom && "opacity-50")}>
               <Button
-                key={device.name}
-                variant={selectedDevice.name === device.name ? "default" : "ghost"}
+                variant="ghost"
                 size="sm"
-                onClick={() => handleDeviceChange(device)}
-                className="gap-2"
+                onClick={handleZoomOut}
+                disabled={isResponsiveZoom || zoomLevel <= ZOOM_LEVELS[0]}
+                title="Zoom out"
+                className="h-7 w-7 p-0"
               >
-                {device.icon}
-                <span className="hidden sm:inline">{device.name}</span>
+                <ZoomOut className="w-3 h-3" />
               </Button>
-            ))}
+              
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleZoomReset}
+                disabled={isResponsiveZoom}
+                title={isResponsiveZoom ? "Responsive zoom active" : "Reset zoom to 100%"}
+                className={cn("h-7 px-2 text-xs font-mono", isResponsiveZoom && "text-primary")}
+              >
+                {isResponsiveZoom ? 'AUTO' : `${getZoomPercentage()}%`}
+              </Button>
+              
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleZoomIn}
+                disabled={isResponsiveZoom || zoomLevel >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]}
+                title="Zoom in"
+                className="h-7 w-7 p-0"
+              >
+                <ZoomIn className="w-3 h-3" />
+              </Button>
+            </div>
           </div>
 
           {/* Rotate button */}
           {selectedDevice.name !== 'Web' && (
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
               onClick={handleRotate}
               title="Rotate device"
             >
-              <RotateCw className={cn("w-4 h-4", isRotated && "rotate-90")} />
+              <RotateCw className={cn("w-4 h-4 transition-transform", isRotated && "rotate-90")} />
             </Button>
           )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* Loading indicator */}
-          {isLoading && (
-            <Badge variant="secondary" className="gap-2">
-              <Loader2 className="w-3 h-3 animate-spin" />
-              Loading...
-            </Badge>
-          )}
-
-          {/* Error indicator */}
-          {error && (
-            <Badge variant="destructive" className="gap-2">
-              <AlertCircle className="w-3 h-3" />
-              Error
-            </Badge>
-          )}
-
-          {/* Device dimensions */}
-          <Badge variant="outline" className="font-mono">
-            {deviceWidth} × {deviceHeight}
-          </Badge>
 
           {/* Fullscreen button */}
           <Button
-            variant="ghost"
+            variant="secondary"
             size="sm"
             onClick={handleFullscreen}
             title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
@@ -298,16 +505,7 @@ export function SnackWebPlayer({
             )}
           </Button>
         </div>
-      </div>
 
-      {/* Preview container */}
-      <div 
-        ref={containerRef}
-        className={cn(
-          "flex-1 flex items-center justify-center p-4 bg-muted/20 overflow-auto",
-          isFullscreen && "fixed inset-0 z-50 bg-background p-8"
-        )}
-      >
         <div 
           className={cn(
             "relative bg-black shadow-xl overflow-hidden",
@@ -318,6 +516,8 @@ export function SnackWebPlayer({
           style={{
             width: `${deviceWidth}px`,
             height: `${deviceHeight}px`,
+            transform: `scale(${getEffectiveZoomLevel()})`,
+            transformOrigin: 'center center',
           }}
         >
           {/* Device frame */}
