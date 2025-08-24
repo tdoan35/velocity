@@ -19,7 +19,10 @@ import {
   FolderOpen, 
   MessageSquare, 
   Zap, 
-  Smartphone 
+  Smartphone,
+  Monitor,
+  Edit3,
+  Layers3
 } from 'lucide-react'
 
 const navItems = [
@@ -32,6 +35,13 @@ const navItems = [
   { path: '/demo/chat', label: 'AI Chat', icon: MessageSquare },
   { path: '/demo/optimistic', label: 'Optimistic UI', icon: Zap },
   { path: '/demo/preview', label: 'Mobile Preview', icon: Smartphone },
+]
+
+// Component test demos
+const componentTestItems = [
+  { path: '/demo/preview-test', label: 'Preview Panel Test', icon: Monitor },
+  { path: '/demo/editor-test', label: 'Editor Container Test', icon: Edit3 },
+  { path: '/demo/project-editor-test', label: 'Project Editor Test', icon: Layers3 },
 ]
 
 export function NavbarMenu() {
@@ -57,6 +67,7 @@ export function NavbarMenu() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56 bg-background/95 backdrop-blur-md border-border/50">
+        {/* Main Navigation */}
         {navItems.map(({ path, label, icon: Icon }, index) => (
           <React.Fragment key={path}>
             <DropdownMenuItem asChild>
@@ -70,6 +81,26 @@ export function NavbarMenu() {
             </DropdownMenuItem>
             {(index === 0 || index === 3 || index === 7) && <DropdownMenuSeparator />}
           </React.Fragment>
+        ))}
+        
+        <DropdownMenuSeparator />
+        
+        {/* Component Tests Section */}
+        <div className="px-2 py-1.5">
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            Component Tests
+          </span>
+        </div>
+        {componentTestItems.map(({ path, label, icon: Icon }) => (
+          <DropdownMenuItem key={path} asChild>
+            <Link 
+              to={path} 
+              className="flex items-center gap-3 cursor-pointer"
+            >
+              <Icon className="w-4 h-4" />
+              <span>{label}</span>
+            </Link>
+          </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { visualizer } from 'rollup-plugin-visualizer'
 import viteCompression from 'vite-plugin-compression'
 import { VitePWA } from 'vite-plugin-pwa'
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -17,6 +18,17 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [
       react(),
+      
+      // Node.js polyfills for browser compatibility (needed for Snack SDK)
+      nodePolyfills({
+        include: ['assert', 'buffer', 'crypto', 'events', 'fs', 'http', 'https', 'os', 'path', 'querystring', 'stream', 'string_decoder', 'url', 'util', 'zlib'],
+        globals: {
+          Buffer: true,
+          global: true,
+          process: true,
+        },
+        protocolImports: true,
+      }),
       
       // Compression plugin for gzip and brotli
       isProduction && viteCompression({
@@ -85,16 +97,43 @@ export default defineConfig(({ mode }) => {
       port: parseInt(env.VITE_PORT || '5173'),
       strictPort: true,
       headers: {
-        // Development CSP headers - more permissive
+        // Development CSP headers - more permissive for Snack
         'Content-Security-Policy': [
           "default-src 'self'",
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net",
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://snack-web-player.s3.us-west-1.amazonaws.com",
           "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
           "img-src 'self' data: https:",
           "font-src 'self' https://cdn.jsdelivr.net",
-          "connect-src 'self' ws: wss: http: https:",
+          "connect-src 'self' ws: wss: http: https: https://exp.host https://snackager.expo.io",
           "worker-src 'self' blob:",
+          "frame-src 'self' https://snack.expo.dev https://*.expo.dev https://snack-web-player.s3.us-west-1.amazonaws.com https://*.amazonaws.com",
         ].join('; '),
+      },
+      // Proxy configuration to handle CORS issues with Expo APIs
+      proxy: {
+        '/api/expo': {
+          target: 'https://exp.host',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/expo/, ''),
+          configure: (proxy, options) => {
+            proxy.on('error', (err, req, res) => {
+              console.log('[Vite Proxy] Proxy error:', err);
+            });
+            proxy.on('proxyReq', (proxyReq, req, res) => {
+              console.log('[Vite Proxy] Proxying request:', req.method, req.url);
+            });
+          }
+        },
+        '/api/snackager': {
+          target: 'https://snackager.expo.io',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/snackager/, ''),
+          configure: (proxy, options) => {
+            proxy.on('error', (err, req, res) => {
+              console.log('[Vite Proxy] Snackager proxy error:', err);
+            });
+          }
+        }
       },
     },
     

@@ -17,7 +17,9 @@ import {
 import { cn } from '../../lib/utils';
 
 interface SnackWebPlayerProps {
-  webPlayerUrl: string | null;
+  snack: any; // Snack SDK instance
+  webPreviewRef: React.RefObject<Window | null>;
+  webPreviewUrl: string | null;
   sessionId: string;
   className?: string;
   onError?: (error: Error) => void;
@@ -34,6 +36,13 @@ export interface DevicePreset {
 }
 
 const DEVICE_PRESETS: DevicePreset[] = [
+  {
+    name: 'iPhone 16 Pro',
+    width: 402,
+    height: 874,
+    icon: <Smartphone className="w-4 h-4" />,
+    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15'
+  },
   {
     name: 'iPhone 14',
     width: 390,
@@ -65,7 +74,9 @@ const DEVICE_PRESETS: DevicePreset[] = [
 ];
 
 export function SnackWebPlayer({
-  webPlayerUrl,
+  snack,
+  webPreviewRef,
+  webPreviewUrl,
   sessionId,
   className,
   onError,
@@ -109,15 +120,29 @@ export function SnackWebPlayer({
     setError(null);
     onLoad?.();
 
-    // Set up message passing with iframe
-    if (iframeRef.current?.contentWindow) {
-      // Send initial configuration
-      iframeRef.current.contentWindow.postMessage({
-        type: 'SNACK_RUNTIME_INIT',
-        platform: selectedDevice.name === 'Web' ? 'web' : 'ios',
-        deviceName: selectedDevice.name,
-      }, '*');
+    console.log('[SnackWebPlayer] Iframe loaded, webPreviewRef current value:', webPreviewRef?.current);
+    
+    // Ensure webPreviewRef is set correctly (should already be set via ref callback)
+    if (iframeRef.current?.contentWindow && webPreviewRef && !webPreviewRef.current) {
+      webPreviewRef.current = iframeRef.current.contentWindow;
+      console.log('[SnackWebPlayer] Set webPreviewRef in load handler:', webPreviewRef.current);
     }
+
+    // Wait a bit for iframe to be fully ready, then notify the Snack service
+    setTimeout(() => {
+      if (snack && webPreviewRef?.current && typeof (snack as any).setWebPreviewRef === 'function') {
+        console.log('[SnackWebPlayer] Notifying Snack SDK of webPreviewRef after iframe load');
+        (snack as any).setWebPreviewRef(webPreviewRef.current);
+        
+        // Also try to trigger a refresh of the preview
+        if (typeof (snack as any).requestWebPreview === 'function') {
+          console.log('[SnackWebPlayer] Requesting web preview after webPreviewRef update');
+          (snack as any).requestWebPreview().catch((error: Error) => {
+            console.error('[SnackWebPlayer] Failed to request web preview:', error);
+          });
+        }
+      }
+    }, 300);
   };
 
   // Handle iframe error
@@ -162,14 +187,39 @@ export function SnackWebPlayer({
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  if (!webPlayerUrl) {
+  // No longer needed - webPreviewUrl is passed as prop
+
+  // Set webPreviewRef on Snack instance when available
+  useEffect(() => {
+    if (!snack || !webPreviewRef?.current) return;
+
+    console.log('[SnackWebPlayer] Updating Snack with webPreviewRef:', webPreviewRef.current);
+    
+    // According to Snack SDK docs, the webPreviewRef should be set during construction
+    // But we can also try to update it if the method exists
+    try {
+      if (typeof (snack as any).setWebPreviewRef === 'function') {
+        (snack as any).setWebPreviewRef(webPreviewRef.current);
+        console.log('[SnackWebPlayer] Successfully set webPreviewRef on Snack instance');
+      }
+    } catch (error) {
+      console.error('[SnackWebPlayer] Failed to set webPreviewRef on Snack:', error);
+    }
+  }, [snack, webPreviewRef?.current]);
+
+  if (!webPreviewUrl) {
     return (
       <Card className={cn("flex items-center justify-center p-8", className)}>
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
           <p className="text-sm text-muted-foreground">
-            No preview URL available. Please create a session first.
+            {snack ? 'Initializing preview...' : 'No Snack session available. Please create a session first.'}
           </p>
+          {snack && (
+            <div className="mt-4">
+              <div className="w-6 h-6 border-2 border-muted-foreground border-t-transparent rounded-full animate-spin mx-auto" />
+            </div>
+          )}
         </div>
       </Card>
     );
@@ -260,8 +310,10 @@ export function SnackWebPlayer({
       >
         <div 
           className={cn(
-            "relative bg-white rounded-lg shadow-xl overflow-hidden",
-            "transition-all duration-300 ease-in-out"
+            "relative bg-black shadow-xl overflow-hidden",
+            "transition-all duration-300 ease-in-out",
+            selectedDevice.name !== 'Web' && "rounded-[3rem] p-3",
+            selectedDevice.name === 'Web' && "bg-white"
           )}
           style={{
             width: `${deviceWidth}px`,
@@ -272,17 +324,32 @@ export function SnackWebPlayer({
           {selectedDevice.name !== 'Web' && (
             <div className="absolute inset-0 pointer-events-none">
               <div className="absolute inset-0 rounded-[2.5rem] ring-8 ring-black/10" />
-              {/* Notch for iPhone */}
+              {/* Notch/Dynamic Island for iPhone */}
               {selectedDevice.name.includes('iPhone') && !selectedDevice.name.includes('SE') && (
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-7 bg-black rounded-b-2xl" />
+                <>
+                  {selectedDevice.name.includes('16 Pro') ? (
+                    /* Dynamic Island for iPhone 16 Pro */
+                    <div className="absolute top-6 left-1/2 -translate-x-1/2 w-32 h-6 bg-black rounded-full" />
+                  ) : (
+                    /* Traditional notch for other iPhones */
+                    <div className="absolute top-3 left-1/2 -translate-x-1/2 w-40 h-7 bg-black rounded-b-2xl" />
+                  )}
+                </>
               )}
             </div>
           )}
 
           {/* Iframe */}
           <iframe
-            ref={iframeRef}
-            src={webPlayerUrl}
+            ref={(element) => {
+              iframeRef.current = element;
+              // According to Snack SDK docs, webPreviewRef should be set to the iframe's contentWindow
+              if (element?.contentWindow && webPreviewRef) {
+                webPreviewRef.current = element.contentWindow;
+                console.log('[SnackWebPlayer] Set webPreviewRef via ref callback:', webPreviewRef.current);
+              }
+            }}
+            src={webPreviewUrl}
             className={cn(
               "w-full h-full border-0",
               selectedDevice.name !== 'Web' && "rounded-[2rem]"

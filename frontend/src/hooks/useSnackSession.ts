@@ -15,7 +15,9 @@ export interface UseSnackSessionReturn {
   session: SnackSession | null;
   isLoading: boolean;
   error: Error | null;
-  webPlayerUrl: string | null;
+  snack: any; // Snack SDK instance
+  webPreviewUrl: string | null;
+  webPreviewRef: React.RefObject<Window | null>;
   qrCodeUrl: string | null;
   createSession: (options?: SnackPreviewOptions) => Promise<void>;
   updateCode: (filePath: string, contents: string) => Promise<void>;
@@ -24,6 +26,7 @@ export interface UseSnackSessionReturn {
   saveSnapshot: () => Promise<void>;
   getDownloadUrl: () => Promise<string | null>;
   destroySession: () => Promise<void>;
+  setWebPreviewRef: (ref: Window | null) => void;
 }
 
 export function useSnackSession({
@@ -36,8 +39,9 @@ export function useSnackSession({
   const [session, setSession] = useState<SnackSession | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  const [webPlayerUrl, setWebPlayerUrl] = useState<string | null>(null);
+  const [webPreviewUrl, setWebPreviewUrl] = useState<string | null>(null);
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
+  const webPreviewRef = useRef<Window | null>(null);
   
   const { toast } = useToast();
   const isMountedRef = useRef(true);
@@ -50,17 +54,55 @@ export function useSnackSession({
     setError(null);
 
     try {
+      // Pass webPreviewRef during creation - this is required for web preview functionality
       const newSession = await snackService.createSession(
         sessionId,
         options || initialOptions || {},
         userId,
-        projectId
+        projectId,
+        webPreviewRef
       );
 
       if (isMountedRef.current) {
         setSession(newSession);
-        setWebPlayerUrl(snackService.getWebPlayerUrl(sessionId));
+        // webPreviewUrl will be updated via Snack state listener
         setQrCodeUrl(snackService.getQRCodeUrl(sessionId));
+        
+        // Set up listener for webPreviewURL updates
+        const unsubscribe = newSession.snack.addStateListener?.((state: any) => {
+          if (isMountedRef.current) {
+            console.log('[useSnackSession] State listener triggered:', {
+              webPreviewURL: state?.webPreviewURL,
+              online: state?.online,
+              url: state?.url
+            });
+            
+            // Use webPreviewURL from state if available, otherwise try url
+            const url = state?.webPreviewURL || state?.url;
+            if (url && url !== webPreviewUrl) {
+              console.log('[useSnackSession] Setting webPreviewUrl:', url);
+              setWebPreviewUrl(url);
+            }
+          }
+        });
+
+        // Store the unsubscribe function for cleanup
+        if (unsubscribe) {
+          (newSession as any)._webPreviewUrlUnsubscribe = unsubscribe;
+        }
+        
+        // Immediately try to get webPreviewURL after session creation
+        setTimeout(() => {
+          if (isMountedRef.current) {
+            const url = snackService.getWebPreviewUrl(sessionId);
+            if (url) {
+              console.log('[useSnackSession] Got initial webPreviewUrl from service:', url);
+              setWebPreviewUrl(url);
+            } else {
+              console.log('[useSnackSession] No webPreviewUrl available yet, waiting for state updates...');
+            }
+          }
+        }, 1500);
       }
     } catch (err) {
       const error = err as Error;
@@ -187,12 +229,25 @@ export function useSnackSession({
     }
   }, [session, sessionId, toast]);
 
+  // Set webPreviewRef
+  const setWebPreviewRef = useCallback((ref: Window | null) => {
+    webPreviewRef.current = ref;
+    if (session) {
+      snackService.setWebPreviewRef(sessionId, ref);
+    }
+  }, [session, sessionId]);
+
   // Destroy session
   const destroySession = useCallback(async () => {
     try {
+      // Clean up webPreviewURL listener if exists
+      if (session && (session as any)._webPreviewUrlUnsubscribe) {
+        (session as any)._webPreviewUrlUnsubscribe();
+      }
+      
       await snackService.destroySession(sessionId);
       setSession(null);
-      setWebPlayerUrl(null);
+      setWebPreviewUrl(null);
       setQrCodeUrl(null);
     } catch (err) {
       const error = err as Error;
@@ -203,7 +258,7 @@ export function useSnackSession({
         variant: 'destructive',
       });
     }
-  }, [sessionId, toast]);
+  }, [sessionId, session, toast]);
 
   // Initialize session
   useEffect(() => {
@@ -213,8 +268,34 @@ export function useSnackSession({
     const existingSession = snackService.getSession(sessionId);
     if (existingSession) {
       setSession(existingSession);
-      setWebPlayerUrl(snackService.getWebPlayerUrl(sessionId));
+      // Get current webPreviewUrl from Snack state
+      const currentUrl = snackService.getWebPreviewUrl(sessionId);
+      if (currentUrl) {
+        setWebPreviewUrl(currentUrl);
+      }
       setQrCodeUrl(snackService.getQRCodeUrl(sessionId));
+      
+      // Set up listener for existing session
+      const unsubscribe = existingSession.snack.addStateListener?.((state: any) => {
+        if (isMountedRef.current) {
+          console.log('[useSnackSession] Existing session state listener triggered:', {
+            webPreviewURL: state?.webPreviewURL,
+            online: state?.online,
+            url: state?.url
+          });
+          
+          // Use webPreviewURL from state if available, otherwise try url
+          const url = state?.webPreviewURL || state?.url;
+          if (url && url !== webPreviewUrl) {
+            console.log('[useSnackSession] Setting webPreviewUrl from existing session:', url);
+            setWebPreviewUrl(url);
+          }
+        }
+      });
+      
+      if (unsubscribe) {
+        (existingSession as any)._webPreviewUrlUnsubscribe = unsubscribe;
+      }
     } else if (autoCreate) {
       createSession();
     }
@@ -228,7 +309,9 @@ export function useSnackSession({
     session,
     isLoading,
     error,
-    webPlayerUrl,
+    snack: session?.snack || null,
+    webPreviewUrl,
+    webPreviewRef,
     qrCodeUrl,
     createSession,
     updateCode,
@@ -237,5 +320,6 @@ export function useSnackSession({
     saveSnapshot,
     getDownloadUrl,
     destroySession,
+    setWebPreviewRef,
   };
 }

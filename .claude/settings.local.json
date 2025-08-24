@@ -83,7 +83,9 @@
       "mcp__playwright__browser_navigate_forward",
       "mcp__taskmaster-ai__remove_task",
       "Bash(cp:*)",
-      "Bash(claude --version)"
+      "Bash(claude --version)",
+      "Bash(git checkout:*)",
+      "Bash(PORT=5174 npm run dev)"
     ],
     "defaultMode": "acceptEdits",
     "additionalDirectories": [

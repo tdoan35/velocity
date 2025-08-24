@@ -29,13 +29,16 @@ import { SignupForm } from './components/ui/signup-form'
 import { AuthenticatedLayout } from './components/AuthenticatedLayout'
 import { Dashboard } from './pages/Dashboard'
 import { ProjectDesign } from './pages/ProjectDesignWithSupabase'
+import { ProjectEditor } from './pages/ProjectEditor'
+import { FullStackPreviewPanelTest } from './components/preview/FullStackPreviewPanelTest'
+import { EnhancedEditorContainerTest } from './components/editor/EnhancedEditorContainerTest'
+import { ProjectEditorTest } from './pages/ProjectEditorTest'
 import { 
   Lightbulb,
   Layers,
   Play
 } from 'lucide-react'
 import { Navbar } from './components/navigation'
-import { AuthDebug } from './components/AuthDebug'
 
 function Navigation({ onOpenAuthModal }: { onOpenAuthModal?: (mode: 'signup' | 'login') => void }) {
   const [localAuthModalOpen, setLocalAuthModalOpen] = useState(false)
@@ -290,7 +293,6 @@ function App() {
   return (
     <Router>
       <div>
-        <AuthDebug />
         <Routes>
           {/* Auth callback route */}
           <Route path="/auth/callback" element={<AuthCallback />} />
@@ -318,6 +320,7 @@ function App() {
                 <Route path="dashboard" element={<Dashboard />} />
                 <Route path="apps" element={<SnackProjects />} />
                 <Route path="project/:id" element={<ProjectDesign />} />
+                <Route path="project/:id/editor" element={<ProjectEditor />} />
                 <Route path="editor" element={
                   <LazyBoundary>
                     <EditorDemo />
@@ -390,6 +393,15 @@ function App() {
                     <LazyBoundary>
                       <PreviewDemo />
                     </LazyBoundary>
+                  } />
+                  <Route path="preview-test" element={
+                    <FullStackPreviewPanelTest />
+                  } />
+                  <Route path="editor-test" element={
+                    <EnhancedEditorContainerTest />
+                  } />
+                  <Route path="project-editor-test" element={
+                    <ProjectEditorTest />
                   } />
                 </Routes>
               </div>
