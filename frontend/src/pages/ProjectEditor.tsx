@@ -7,9 +7,17 @@ import { Loader2, Settings, Download, Share2, Eye, Code, FileText, Play, Shield,
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../components/ui/resizable';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger 
+} from '../components/ui/dropdown-menu';
 import { FullStackFileExplorer } from '../components/editor/FullStackFileExplorer';
 import { EnhancedEditorContainer } from '../components/editor/EnhancedEditorContainer';
 import { FullStackPreviewPanel } from '../components/preview/FullStackPreviewPanel';
+import { PreviewTabsPanel } from '../components/preview/PreviewTabsPanel';
 import { FullStackAIAssistant } from '../components/ai/FullStackAIAssistant';
 import { VerticalCollapsiblePanel } from '../components/layout/vertical-collapsible-panel';
 import { SecurityProvider, useSecurity } from '../components/security/SecurityProvider';
@@ -18,8 +26,18 @@ import { useFileSecurityMonitoring } from '../hooks/useSecurityMonitoring';
 import { PerformanceDashboard } from '../components/performance/PerformanceDashboard';
 import { usePerformanceMonitoring } from '../hooks/usePerformanceMonitoring';
 
-function ProjectEditorContent() {
-  const { id: projectId } = useParams<{ id: string }>();
+// Core ProjectEditor component that can be used with or without router
+function ProjectEditorCore({ 
+  projectId, 
+  showAuthRedirect = true,
+  showProjectValidation = true,
+  skipInitialization = false
+}: { 
+  projectId: string | undefined;
+  showAuthRedirect?: boolean;
+  showProjectValidation?: boolean;
+  skipInitialization?: boolean;
+}) {
   const { user } = useAuthStore();
   const { activeThreats, isSecurityEnabled } = useSecurity();
   const securityMonitoring = useFileSecurityMonitoring();
@@ -38,9 +56,16 @@ function ProjectEditorContent() {
   const [isAIAssistantOpen, setIsAIAssistantOpen] = useState(false);
   const [isSecurityPanelOpen, setIsSecurityPanelOpen] = useState(false);
   const [isPerformancePanelOpen, setIsPerformancePanelOpen] = useState(false);
+  const [isPreviewTabsOpen, setIsPreviewTabsOpen] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
+    if (skipInitialization) {
+      // Skip API initialization for test mode
+      setIsInitialized(true);
+      return;
+    }
+    
     if (projectId && user && !isInitialized) {
       initializeProject(projectId)
         .then(() => {
@@ -50,15 +75,15 @@ function ProjectEditorContent() {
           toast.error('Failed to initialize project: ' + error.message);
         });
     }
-  }, [projectId, user, initializeProject, isInitialized]);
+  }, [projectId, user, initializeProject, isInitialized, skipInitialization]);
 
-  // Redirect if not authenticated
-  if (!user) {
+  // Redirect if not authenticated (only if enabled)
+  if (showAuthRedirect && !user) {
     return <Navigate to="/signup" replace />;
   }
 
-  // Project validation
-  if (!projectId) {
+  // Project validation (only if enabled)
+  if (showProjectValidation && !projectId) {
     return <Navigate to="/" replace />;
   }
 
@@ -69,6 +94,18 @@ function ProjectEditorContent() {
         <div className="text-center space-y-4">
           <Loader2 className="h-8 w-8 animate-spin mx-auto" />
           <p className="text-muted-foreground">Loading project...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Ensure projectId is available at this point
+  const currentProjectId = projectId;
+  if (!currentProjectId) {
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <p className="text-muted-foreground">No project ID provided</p>
         </div>
       </div>
     );
@@ -112,118 +149,45 @@ function ProjectEditorContent() {
               {projectData?.name || 'Untitled Project'}
             </h1>
           </div>
-          
-          {/* Build Status */}
-          <div className="flex items-center space-x-2 text-sm">
-            {buildStatus === 'generating' && (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-                <span className="text-blue-600">Generating...</span>
-              </>
-            )}
-            {buildStatus === 'building' && (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin text-orange-500" />
-                <span className="text-orange-600">Building...</span>
-              </>
-            )}
-            {buildStatus === 'success' && (
-              <>
-                <div className="h-2 w-2 bg-green-500 rounded-full" />
-                <span className="text-green-600">Ready</span>
-              </>
-            )}
-            {buildStatus === 'error' && (
-              <>
-                <div className="h-2 w-2 bg-red-500 rounded-full" />
-                <span className="text-red-600">Error</span>
-              </>
-            )}
-          </div>
 
-          {/* Supabase Connection Status */}
-          {isSupabaseConnected && (
-            <div className="flex items-center space-x-2 text-sm">
-              <div className="h-2 w-2 bg-green-500 rounded-full" />
-              <span className="text-green-600">Supabase Connected</span>
-            </div>
-          )}
         </div>
 
         {/* Actions */}
         <div className="flex items-center space-x-2">
-          {/* Security Status */}
-          {isSecurityEnabled && (
-            <div className="flex items-center space-x-2 text-sm">
-              <Shield className={`h-4 w-4 ${activeThreats > 0 ? 'text-red-500' : 'text-green-500'}`} />
-              {activeThreats > 0 ? (
-                <Badge variant="destructive" className="text-xs">
-                  {activeThreats} threats
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Settings className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setIsSecurityPanelOpen(!isSecurityPanelOpen)}>
+                <Shield className="h-4 w-4 mr-2" />
+                Security
+                {activeThreats > 0 && (
+                  <Badge variant="destructive" className="ml-auto text-xs">
+                    {activeThreats}
+                  </Badge>
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsPerformancePanelOpen(!isPerformancePanelOpen)}>
+                <Activity className="h-4 w-4 mr-2" />
+                Performance
+                <Badge variant="outline" className="ml-auto text-xs">
+                  {performanceMonitoring.getPerformanceScore()}/100
                 </Badge>
-              ) : (
-                <Badge variant="outline" className="text-xs bg-green-100 text-green-800">
-                  Secure
-                </Badge>
-              )}
-            </div>
-          )}
-
-          {/* Performance Status */}
-          <div className="flex items-center space-x-2 text-sm">
-            <Activity className="h-4 w-4 text-blue-500" />
-            <Badge variant="outline" className="text-xs bg-blue-100 text-blue-800">
-              Score: {performanceMonitoring.getPerformanceScore()}/100
-            </Badge>
-          </div>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleGenerateProject}
-            disabled={buildStatus === 'generating' || buildStatus === 'building'}
-          >
-            <FileText className="h-4 w-4 mr-2" />
-            Generate
-          </Button>
-          
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleDeploy}
-            disabled={buildStatus !== 'success'}
-          >
-            <Play className="h-4 w-4 mr-2" />
-            Deploy
-          </Button>
-          
-          {deploymentUrl && (
-            <Button variant="outline" size="sm" onClick={handleShare}>
-              <Share2 className="h-4 w-4 mr-2" />
-              Share
-            </Button>
-          )}
-          
-          <Button
-            variant="outline" 
-            size="sm"
-            onClick={() => setIsSecurityPanelOpen(!isSecurityPanelOpen)}
-          >
-            <Shield className="h-4 w-4 mr-2" />
-            Security
-          </Button>
-
-          <Button
-            variant="outline" 
-            size="sm"
-            onClick={() => setIsPerformancePanelOpen(!isPerformancePanelOpen)}
-          >
-            <Activity className="h-4 w-4 mr-2" />
-            Performance
-          </Button>
-          
-          <Button variant="outline" size="sm">
-            <Settings className="h-4 w-4" />
-          </Button>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsPreviewTabsOpen(!isPreviewTabsOpen)}>
+                <Eye className="h-4 w-4 mr-2" />
+                Tools
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem>
+                <Settings className="h-4 w-4 mr-2" />
+                Project Settings
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
@@ -233,7 +197,7 @@ function ProjectEditorContent() {
           {/* File Explorer */}
           <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
             <FullStackFileExplorer
-              projectId={projectId}
+              projectId={currentProjectId}
               showBackend={isSupabaseConnected}
             />
           </ResizablePanel>
@@ -243,7 +207,7 @@ function ProjectEditorContent() {
           {/* Editor */}
           <ResizablePanel defaultSize={50} minSize={30}>
             <EnhancedEditorContainer
-              projectId={projectId}
+              projectId={currentProjectId}
               projectType={isSupabaseConnected ? 'full-stack' : 'frontend-only'}
               onFileSave={securityMonitoring.onFileSave}
               onFileOpen={securityMonitoring.onFileOpen}
@@ -255,8 +219,7 @@ function ProjectEditorContent() {
           {/* Preview */}
           <ResizablePanel defaultSize={30} minSize={20}>
             <FullStackPreviewPanel
-              projectId={projectId}
-              showAPITesting={isSupabaseConnected}
+              projectId={currentProjectId}
             />
           </ResizablePanel>
         </ResizablePanelGroup>
@@ -281,7 +244,21 @@ function ProjectEditorContent() {
         className="border-t"
         defaultHeight={400}
       >
-        <SecurityDashboard projectId={projectId} />
+        <SecurityDashboard projectId={currentProjectId} />
+      </VerticalCollapsiblePanel>
+
+      {/* Preview Tools Panel (Collapsible) */}
+      <VerticalCollapsiblePanel
+        isOpen={isPreviewTabsOpen}
+        onToggle={setIsPreviewTabsOpen}
+        title="Preview Tools"
+        className="border-t"
+        defaultHeight={400}
+      >
+        <PreviewTabsPanel
+          projectId={currentProjectId}
+          showAPITesting={isSupabaseConnected}
+        />
       </VerticalCollapsiblePanel>
 
       {/* AI Assistant Panel (Collapsible) */}
@@ -292,51 +269,36 @@ function ProjectEditorContent() {
         className="border-t"
       >
         <FullStackAIAssistant
-          projectId={projectId}
+          projectId={currentProjectId}
           projectType={isSupabaseConnected ? 'full-stack' : 'frontend-only'}
         />
       </VerticalCollapsiblePanel>
 
       {/* Floating Action Buttons */}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col space-y-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => setIsPerformancePanelOpen(!isPerformancePanelOpen)}
-          className={performanceMonitoring.getPerformanceScore() < 70 ? 'border-orange-500 bg-orange-50' : ''}
-        >
-          <Activity className="h-4 w-4 mr-2" />
-          Performance
-          <Badge variant="outline" className="ml-2 text-xs">
-            {performanceMonitoring.getPerformanceScore()}
-          </Badge>
-        </Button>
-
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => setIsSecurityPanelOpen(!isSecurityPanelOpen)}
-          className={activeThreats > 0 ? 'border-red-500 bg-red-50' : ''}
-        >
-          <Shield className="h-4 w-4 mr-2" />
-          Security
-          {activeThreats > 0 && (
-            <Badge variant="destructive" className="ml-2 text-xs">
-              {activeThreats}
-            </Badge>
-          )}
-        </Button>
-        
+      <div className="fixed bottom-4 right-4 z-50">
         <Button
           variant="secondary"
           size="sm"
           onClick={() => setIsAIAssistantOpen(!isAIAssistantOpen)}
         >
-          <Eye className="h-4 w-4 mr-2" />
+          <Code className="h-4 w-4 mr-2" />
           AI Assistant
         </Button>
       </div>
     </div>
+  );
+}
+
+// Router-dependent wrapper that uses useParams
+function ProjectEditorContent() {
+  const { id: projectId } = useParams<{ id: string }>();
+  
+  return (
+    <ProjectEditorCore 
+      projectId={projectId}
+      showAuthRedirect={true}
+      showProjectValidation={true}
+    />
   );
 }
 
@@ -353,3 +315,6 @@ export function ProjectEditor() {
     </SecurityProvider>
   );
 }
+
+// Export the core component for testing purposes
+export { ProjectEditorCore };
