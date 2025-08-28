@@ -50,25 +50,8 @@ export function useSnackSession({
   const createSession = useCallback(async (options?: SnackPreviewOptions, retryCount = 0, forceNew = false) => {
     if (!isMountedRef.current) return;
 
-    // Check if we can reuse existing session with same ID
-    if (!forceNew && retryCount === 0) {
-      const existingSession = snackService.getSession(sessionId);
-      if (existingSession && !error) {
-        console.log('[useSnackSession] Reusing existing session:', sessionId);
-        setSession(existingSession);
-        
-        // Get current webPreviewUrl from existing session
-        const currentUrl = snackService.getWebPreviewUrl(sessionId);
-        if (currentUrl) {
-          console.log('[useSnackSession] Found existing webPreviewUrl:', currentUrl);
-          setWebPreviewUrl(currentUrl);
-        }
-        setQrCodeUrl(snackService.getQRCodeUrl(sessionId));
-        setIsLoading(false);
-        setError(null);
-        return;
-      }
-    }
+    // Session reuse is now handled in the useEffect hook
+    // This function is only called when we need to create a new session
 
     const maxRetries = 3;
     const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 5000); // Exponential backoff, max 5s
@@ -292,8 +275,14 @@ export function useSnackSession({
   // Set webPreviewRef
   const setWebPreviewRef = useCallback((ref: Window | null) => {
     webPreviewRef.current = ref;
-    if (session) {
-      snackService.setWebPreviewRef(sessionId, ref);
+    
+    if (session && ref) {
+      console.log('[useSnackSession] Setting webPreviewRef on session:', ref);
+      try {
+        snackService.setWebPreviewRef(sessionId, ref);
+      } catch (error) {
+        console.error('[useSnackSession] Failed to set webPreviewRef:', error);
+      }
     }
   }, [session, sessionId]);
 
@@ -320,50 +309,63 @@ export function useSnackSession({
     }
   }, [sessionId, session, toast]);
 
-  // Initialize session
+  // Initialize session with smart recreation for webPreviewRef issues
   useEffect(() => {
     isMountedRef.current = true;
 
-    // Check for existing session
     const existingSession = snackService.getSession(sessionId);
+    
     if (existingSession) {
-      setSession(existingSession);
-      // Get current webPreviewUrl from Snack state
-      const currentUrl = snackService.getWebPreviewUrl(sessionId);
-      if (currentUrl) {
-        setWebPreviewUrl(currentUrl);
-      }
-      setQrCodeUrl(snackService.getQRCodeUrl(sessionId));
+      console.log('[useSnackSession] Found existing session, checking webPreviewRef compatibility');
       
-      // Set up listener for existing session
-      const unsubscribe = existingSession.snack.addStateListener?.((state: any) => {
-        if (isMountedRef.current) {
-          console.log('[useSnackSession] Existing session state listener triggered:', {
-            webPreviewURL: state?.webPreviewURL,
-            online: state?.online,
-            url: state?.url
-          });
-          
-          // Use webPreviewURL from state if available, otherwise try url
-          const url = state?.webPreviewURL || state?.url;
-          if (url && url !== webPreviewUrl) {
-            console.log('[useSnackSession] Setting webPreviewUrl from existing session:', url);
-            setWebPreviewUrl(url);
+      // Check if we need to recreate due to webPreviewRef issues
+      const webPreviewRefStale = !webPreviewRef.current;
+      
+      if (webPreviewRefStale) {
+        console.log('[useSnackSession] webPreviewRef is stale - session needs recreation');
+        console.log('[useSnackSession] Destroying and recreating session for proper iframe connection');
+        
+        // Destroy and recreate session
+        snackService.destroySession(sessionId).then(() => {
+          if (autoCreate && isMountedRef.current) {
+            createSession();
           }
+        });
+      } else {
+        console.log('[useSnackSession] Reusing existing session with valid webPreviewRef');
+        setSession(existingSession);
+        
+        // Get current webPreviewUrl from existing session
+        const currentUrl = snackService.getWebPreviewUrl(sessionId);
+        if (currentUrl) {
+          setWebPreviewUrl(currentUrl);
         }
-      });
-      
-      if (unsubscribe) {
-        (existingSession as any)._webPreviewUrlUnsubscribe = unsubscribe;
+        setQrCodeUrl(snackService.getQRCodeUrl(sessionId));
+        
+        // Set up listener for existing session
+        const unsubscribe = existingSession.snack.addStateListener?.((state: any) => {
+          if (isMountedRef.current) {
+            const url = state?.webPreviewURL || state?.url;
+            if (url && url !== webPreviewUrl) {
+              console.log('[useSnackSession] Setting webPreviewUrl from existing session:', url);
+              setWebPreviewUrl(url);
+            }
+          }
+        });
+        
+        if (unsubscribe) {
+          (existingSession as any)._webPreviewUrlUnsubscribe = unsubscribe;
+        }
       }
     } else if (autoCreate) {
+      console.log('[useSnackSession] No existing session - creating new one');
       createSession();
     }
 
     return () => {
       isMountedRef.current = false;
     };
-  }, [sessionId, autoCreate]); // Removed createSession from deps to avoid loop
+  }, [sessionId, autoCreate]);
 
   return {
     session,

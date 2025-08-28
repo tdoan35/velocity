@@ -582,8 +582,22 @@ const styles = StyleSheet.create({
       return;
     }
 
-    // Unsubscribe from all listeners
-    session.subscriptions.forEach(sub => sub());
+    console.log('[SnackService] Destroying session:', sessionId);
+
+    // Unsubscribe from all listeners - safely handle different subscription types
+    session.subscriptions.forEach(sub => {
+      try {
+        if (typeof sub === 'function') {
+          sub();
+        } else if (sub && typeof sub.unsubscribe === 'function') {
+          sub.unsubscribe();
+        } else if (sub && typeof sub.remove === 'function') {
+          sub.remove();
+        }
+      } catch (error) {
+        console.warn('[SnackService] Failed to unsubscribe listener:', error);
+      }
+    });
 
     // Clear timeout
     const timeout = this.sessionTimeouts.get(sessionId);
@@ -594,6 +608,7 @@ const styles = StyleSheet.create({
 
     // Remove session
     this.sessions.delete(sessionId);
+    console.log('[SnackService] Session destroyed:', sessionId);
 
     // Log session destruction
     if (session.userId && session.projectId) {

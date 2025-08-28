@@ -30,6 +30,7 @@ interface SnackWebPlayerProps {
   onError?: (error: Error) => void;
   onLoad?: () => void;
   onDeviceChange?: (device: DevicePreset) => void;
+  setWebPreviewRef?: (ref: Window | null) => void;
 }
 
 export interface DevicePreset {
@@ -86,7 +87,8 @@ export function SnackWebPlayer({
   className,
   onError,
   onLoad,
-  onDeviceChange
+  onDeviceChange,
+  setWebPreviewRef
 }: SnackWebPlayerProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -98,7 +100,7 @@ export function SnackWebPlayer({
   const [isPreviewHovered, setIsPreviewHovered] = useState(false);
   const [isDeviceDropdownOpen, setIsDeviceDropdownOpen] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
-  const [isResponsiveZoom, setIsResponsiveZoom] = useState(true);
+  const [isResponsiveZoom, setIsResponsiveZoom] = useState(false);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   
   // Enhanced error handling and retry logic
@@ -235,27 +237,30 @@ export function SnackWebPlayer({
 
     console.log('[SnackWebPlayer] Iframe loaded, webPreviewRef current value:', webPreviewRef?.current);
     
-    // Ensure webPreviewRef is set correctly (should already be set via ref callback)
-    if (iframeRef.current?.contentWindow && webPreviewRef && !webPreviewRef.current) {
-      webPreviewRef.current = iframeRef.current.contentWindow;
-      console.log('[SnackWebPlayer] Set webPreviewRef in load handler:', webPreviewRef.current);
-    }
+    // Ensure webPreviewRef is set correctly
+    if (iframeRef.current?.contentWindow && webPreviewRef) {
+      const newWindowRef = iframeRef.current.contentWindow;
+      
+      // Always update webPreviewRef, even if it was already set
+      // This handles the remounting case where we need to reconnect
+      console.log('[SnackWebPlayer] Setting webPreviewRef to new iframe contentWindow:', newWindowRef);
+      webPreviewRef.current = newWindowRef;
 
-    // Wait a bit for iframe to be fully ready, then notify the Snack service
-    setTimeout(() => {
-      if (snack && webPreviewRef?.current && typeof (snack as any).setWebPreviewRef === 'function') {
-        console.log('[SnackWebPlayer] Notifying Snack SDK of webPreviewRef after iframe load');
-        (snack as any).setWebPreviewRef(webPreviewRef.current);
-        
-        // Also try to trigger a refresh of the preview
-        if (typeof (snack as any).requestWebPreview === 'function') {
-          console.log('[SnackWebPlayer] Requesting web preview after webPreviewRef update');
-          (snack as any).requestWebPreview().catch((error: Error) => {
-            console.error('[SnackWebPlayer] Failed to request web preview:', error);
-          });
+      // Wait a bit for iframe to be fully ready, then notify the Snack service
+      setTimeout(() => {
+        if (webPreviewRef?.current) {
+          console.log('[SnackWebPlayer] Notifying Snack service of webPreviewRef after iframe load');
+          
+          // Use the hook's setWebPreviewRef function 
+          if (setWebPreviewRef) {
+            setWebPreviewRef(webPreviewRef.current);
+            console.log('[SnackWebPlayer] Called setWebPreviewRef from hook');
+          } else {
+            console.warn('[SnackWebPlayer] setWebPreviewRef function not provided - iframe may not connect properly');
+          }
         }
-      }
-    }, 300);
+      }, 300); // Reduced delay since we're not doing complex reconnection logic
+    }
   };
 
   // Handle iframe error
@@ -646,11 +651,8 @@ export function SnackWebPlayer({
           <iframe
             ref={(element) => {
               iframeRef.current = element;
-              // According to Snack SDK docs, webPreviewRef should be set to the iframe's contentWindow
-              if (element?.contentWindow && webPreviewRef) {
-                webPreviewRef.current = element.contentWindow;
-                console.log('[SnackWebPlayer] Set webPreviewRef via ref callback:', webPreviewRef.current);
-              }
+              // Note: webPreviewRef will be set in handleIframeLoad after contentWindow is ready
+              // This ensures proper timing and handles remounting scenarios
             }}
             src={webPreviewUrl}
             className={cn(

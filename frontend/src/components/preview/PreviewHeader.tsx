@@ -76,7 +76,7 @@ export function PreviewHeader({
   };
 
   return (
-    <div className="px-4 py-1 border-b">
+    <div className="px-4 py-1 border-b border-gray-300 dark:border-gray-700/50">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">

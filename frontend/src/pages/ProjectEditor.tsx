@@ -183,7 +183,7 @@ function ProjectEditorCore({
           <div className="h-full p-2">
             <Card className="h-full flex flex-col bg-transparent border-gray-300 dark:border-gray-700/50">
               {/* Header */}
-              <header className="px-4 py-2 flex items-center justify-between border-b">
+              <header className="px-4 py-2 flex items-center justify-between border-b border-gray-300 dark:border-gray-700/50">
 
         {/* View Toggle */}
         <div className="flex items-center space-x-2">
@@ -305,7 +305,7 @@ function ProjectEditorCore({
             variant="default"
           />
         }
-        className="border-t"
+        className="border-t border-gray-300 dark:border-gray-700/50"
         defaultHeight={400}
       >
         <div className="h-full overflow-hidden">

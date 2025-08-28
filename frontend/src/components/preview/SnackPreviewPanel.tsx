@@ -136,7 +136,8 @@ const styles = StyleSheet.create({
     createSession,
     saveSnapshot,
     getDownloadUrl,
-    destroySession
+    destroySession,
+    setWebPreviewRef
   } = useSnackSession({
     sessionId,
     userId,
@@ -327,6 +328,7 @@ const styles = StyleSheet.create({
           webPreviewUrl={isStuck ? getFallbackPreviewUrl() : webPreviewUrl}
           sessionId={sessionId}
           className="h-full"
+          setWebPreviewRef={setWebPreviewRef}
           onError={(error) => {
             toast({
               title: 'Preview error',
