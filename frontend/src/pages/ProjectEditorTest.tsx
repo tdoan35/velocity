@@ -1,19 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useProjectEditorStore } from '../stores/useProjectEditorStore';
-import { toast } from 'sonner';
-import { Loader2, Settings, Download, Share2, Eye, Code, FileText, Play, Shield, Activity, RefreshCw, Zap } from 'lucide-react';
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../components/ui/resizable';
-import { Button } from '../components/ui/button';
-import { Badge } from '../components/ui/badge';
-import { FullStackFileExplorer } from '../components/editor/FullStackFileExplorer';
-import { EnhancedEditorContainer } from '../components/editor/EnhancedEditorContainer';
-import { FullStackPreviewPanel } from '../components/preview/FullStackPreviewPanel';
-import { FullStackAIAssistant } from '../components/ai/FullStackAIAssistant';
-import { VerticalCollapsiblePanel } from '../components/layout/vertical-collapsible-panel';
-import { SecurityProvider, useSecurity } from '../components/security/SecurityProvider';
-import { SecurityDashboard } from '../components/security/SecurityDashboard';
-import { PerformanceDashboard } from '../components/performance/PerformanceDashboard';
+import { SecurityProvider } from '../components/security/SecurityProvider';
+import { ProjectEditorCore } from './ProjectEditor';
 
 // Comprehensive mock data for a complete project
 const mockProjectData = {
@@ -496,349 +485,32 @@ INSERT INTO products (name, description, price, image_url, category) VALUES
   },
 };
 
-// Mock monitoring hooks
-const mockSecurityMonitoring = {
-  onFileSave: (fileName: string, content: string, language: string) => {
-    console.log(`Security scan: ${fileName} (${language})`);
-  },
-  onFileOpen: (fileName: string, content: string, language: string) => {
-    console.log(`File opened: ${fileName} (${language})`);
-  },
-};
-
-const mockPerformanceMonitoring = {
-  getPerformanceScore: () => 85,
-};
-
 function ProjectEditorTestContent() {
-  const [activeThreats] = useState(0);
-  const [isSecurityEnabled] = useState(true);
-  const [buildStatus, setBuildStatus] = useState<'idle' | 'generating' | 'building' | 'success' | 'error'>('success');
-  const [deploymentUrl] = useState('https://snack.expo.dev/@velocity/ecommerce-demo');
-  
-  const [isAIAssistantOpen, setIsAIAssistantOpen] = useState(false);
-  const [isSecurityPanelOpen, setIsSecurityPanelOpen] = useState(false);
-  const [isPerformancePanelOpen, setIsPerformancePanelOpen] = useState(false);
-
-  const {
-    projectData,
-    isSupabaseConnected,
-  } = useProjectEditorStore();
-
-  const handleGenerateProject = async () => {
-    setBuildStatus('generating');
-    toast.info('Generating project structure...');
-    
-    // Simulate generation process
-    setTimeout(() => {
-      setBuildStatus('building');
-      toast.info('Building project...');
-      
-      setTimeout(() => {
-        setBuildStatus('success');
-        toast.success('Project structure generated successfully!');
-      }, 2000);
-    }, 1500);
-  };
-
-  const handleDeploy = async () => {
-    toast.info('Deploying to Expo Snack...');
-    
-    setTimeout(() => {
-      toast.success('Project deployed successfully!');
-    }, 2000);
-  };
-
-  const handleShare = () => {
-    if (deploymentUrl) {
-      navigator.clipboard.writeText(deploymentUrl);
-      toast.success('Deployment URL copied to clipboard!');
-    } else {
-      toast.error('No deployment URL available');
-    }
-  };
-
-  const simulateThreat = () => {
-    toast.warning('Security threat detected in uploaded file!');
-  };
-
-  const simulatePerformanceIssue = () => {
-    toast.warning('Performance degradation detected - consider code optimization');
-  };
-
   return (
-    <div className="h-screen flex flex-col bg-background">
-      {/* Demo Control Bar */}
-      <div className="border-b bg-muted/50 px-4 py-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <Zap className="h-4 w-4 text-primary" />
-            <span className="text-sm font-medium">Project Editor Demo Controls</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Button variant="ghost" size="sm" onClick={handleGenerateProject}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Simulate Generate
-            </Button>
-            <Button variant="ghost" size="sm" onClick={simulateThreat}>
-              <Shield className="h-4 w-4 mr-2" />
-              Test Security Alert
-            </Button>
-            <Button variant="ghost" size="sm" onClick={simulatePerformanceIssue}>
-              <Activity className="h-4 w-4 mr-2" />
-              Test Performance Alert
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Header */}
-      <header className="border-b bg-card px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
-            <Code className="h-5 w-5 text-primary" />
-            <h1 className="font-semibold text-foreground">
-              {projectData?.name || 'Velocity E-commerce App'}
-            </h1>
-          </div>
-          
-          {/* Build Status */}
-          <div className="flex items-center space-x-2 text-sm">
-            {buildStatus === 'generating' && (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-                <span className="text-blue-600">Generating...</span>
-              </>
-            )}
-            {buildStatus === 'building' && (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin text-orange-500" />
-                <span className="text-orange-600">Building...</span>
-              </>
-            )}
-            {buildStatus === 'success' && (
-              <>
-                <div className="h-2 w-2 bg-green-500 rounded-full" />
-                <span className="text-green-600">Ready</span>
-              </>
-            )}
-            {buildStatus === 'error' && (
-              <>
-                <div className="h-2 w-2 bg-red-500 rounded-full" />
-                <span className="text-red-600">Error</span>
-              </>
-            )}
-          </div>
-
-          {/* Supabase Connection Status */}
-          {isSupabaseConnected && (
-            <div className="flex items-center space-x-2 text-sm">
-              <div className="h-2 w-2 bg-green-500 rounded-full" />
-              <span className="text-green-600">Supabase Connected</span>
-            </div>
-          )}
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center space-x-2">
-          {/* Security Status */}
-          {isSecurityEnabled && (
-            <div className="flex items-center space-x-2 text-sm">
-              <Shield className={`h-4 w-4 ${activeThreats > 0 ? 'text-red-500' : 'text-green-500'}`} />
-              {activeThreats > 0 ? (
-                <Badge variant="destructive" className="text-xs">
-                  {activeThreats} threats
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="text-xs bg-green-100 text-green-800">
-                  Secure
-                </Badge>
-              )}
-            </div>
-          )}
-
-          {/* Performance Status */}
-          <div className="flex items-center space-x-2 text-sm">
-            <Activity className="h-4 w-4 text-blue-500" />
-            <Badge variant="outline" className="text-xs bg-blue-100 text-blue-800">
-              Score: {mockPerformanceMonitoring.getPerformanceScore()}/100
-            </Badge>
-          </div>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleGenerateProject}
-            disabled={buildStatus === 'generating' || buildStatus === 'building'}
-          >
-            <FileText className="h-4 w-4 mr-2" />
-            Generate
-          </Button>
-          
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleDeploy}
-            disabled={buildStatus !== 'success'}
-          >
-            <Play className="h-4 w-4 mr-2" />
-            Deploy
-          </Button>
-          
-          {deploymentUrl && (
-            <Button variant="outline" size="sm" onClick={handleShare}>
-              <Share2 className="h-4 w-4 mr-2" />
-              Share
-            </Button>
-          )}
-          
-          <Button
-            variant="outline" 
-            size="sm"
-            onClick={() => setIsSecurityPanelOpen(!isSecurityPanelOpen)}
-          >
-            <Shield className="h-4 w-4 mr-2" />
-            Security
-          </Button>
-
-          <Button
-            variant="outline" 
-            size="sm"
-            onClick={() => setIsPerformancePanelOpen(!isPerformancePanelOpen)}
-          >
-            <Activity className="h-4 w-4 mr-2" />
-            Performance
-          </Button>
-          
-          <Button variant="outline" size="sm">
-            <Settings className="h-4 w-4" />
-          </Button>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <div className="flex-1 overflow-hidden">
-        <ResizablePanelGroup direction="horizontal" className="h-full">
-          {/* File Explorer */}
-          <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
-            <FullStackFileExplorer
-              projectId="demo-project-12345"
-              showBackend={isSupabaseConnected}
-            />
-          </ResizablePanel>
-          
-          <ResizableHandle withHandle />
-          
-          {/* Editor */}
-          <ResizablePanel defaultSize={50} minSize={30}>
-            <EnhancedEditorContainer
-              projectId="demo-project-12345"
-              projectType={isSupabaseConnected ? 'full-stack' : 'frontend-only'}
-              onFileSave={mockSecurityMonitoring.onFileSave}
-              onFileOpen={mockSecurityMonitoring.onFileOpen}
-            />
-          </ResizablePanel>
-          
-          <ResizableHandle withHandle />
-          
-          {/* Preview */}
-          <ResizablePanel defaultSize={30} minSize={20}>
-            <FullStackPreviewPanel
-              projectId="demo-project-12345"
-              showAPITesting={isSupabaseConnected}
-            />
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      </div>
-
-      {/* Performance Panel (Collapsible) */}
-      <VerticalCollapsiblePanel
-        isOpen={isPerformancePanelOpen}
-        onToggle={setIsPerformancePanelOpen}
-        title="Performance Dashboard"
-        className="border-t"
-        defaultHeight="400px"
-      >
-        <PerformanceDashboard />
-      </VerticalCollapsiblePanel>
-
-      {/* Security Panel (Collapsible) */}
-      <VerticalCollapsiblePanel
-        isOpen={isSecurityPanelOpen}
-        onToggle={setIsSecurityPanelOpen}
-        title="Security Dashboard"
-        className="border-t"
-        defaultHeight="400px"
-      >
-        <SecurityDashboard projectId="demo-project-12345" />
-      </VerticalCollapsiblePanel>
-
-      {/* AI Assistant Panel (Collapsible) */}
-      <VerticalCollapsiblePanel
-        isOpen={isAIAssistantOpen}
-        onToggle={setIsAIAssistantOpen}
-        title="AI Assistant"
-        className="border-t"
-      >
-        <FullStackAIAssistant
-          projectId="demo-project-12345"
-          projectType={isSupabaseConnected ? 'full-stack' : 'frontend-only'}
-        />
-      </VerticalCollapsiblePanel>
-
-      {/* Floating Action Buttons */}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col space-y-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => setIsPerformancePanelOpen(!isPerformancePanelOpen)}
-          className={mockPerformanceMonitoring.getPerformanceScore() < 70 ? 'border-orange-500 bg-orange-50' : ''}
-        >
-          <Activity className="h-4 w-4 mr-2" />
-          Performance
-          <Badge variant="outline" className="ml-2 text-xs">
-            {mockPerformanceMonitoring.getPerformanceScore()}
-          </Badge>
-        </Button>
-
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => setIsSecurityPanelOpen(!isSecurityPanelOpen)}
-          className={activeThreats > 0 ? 'border-red-500 bg-red-50' : ''}
-        >
-          <Shield className="h-4 w-4 mr-2" />
-          Security
-          {activeThreats > 0 && (
-            <Badge variant="destructive" className="ml-2 text-xs">
-              {activeThreats}
-            </Badge>
-          )}
-        </Button>
-        
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => setIsAIAssistantOpen(!isAIAssistantOpen)}
-        >
-          <Eye className="h-4 w-4 mr-2" />
-          AI Assistant
-        </Button>
-      </div>
+    <div className="h-full">
+      <ProjectEditorCore 
+        projectId="demo-project-12345"
+        showAuthRedirect={false}  // Don't redirect in test mode
+        showProjectValidation={false}  // Don't validate project in test mode
+        skipInitialization={true}  // Skip API calls, use mock data
+      />
     </div>
   );
 }
 
 export function ProjectEditorTest() {
-  // Mock authentication
+  // Mock authentication and project data
   useEffect(() => {
     const authStore = useAuthStore.getState();
     useAuthStore.setState({
       user: {
         id: 'demo-user-123',
         email: 'demo@velocity.com',
-        name: 'Demo User',
         created_at: new Date().toISOString(),
+        aud: '',
+        app_metadata: {},
+        user_metadata: {},
+        role: 'authenticated',
       },
       isAuthenticated: true,
       isLoading: false,
@@ -871,8 +543,12 @@ export function ProjectEditorTest() {
   }, []);
 
   return (
-    <SecurityProvider projectId="demo-project-12345">
-      <ProjectEditorTestContent />
-    </SecurityProvider>
+    <div className="min-h-screen w-full bg-background p-8 pt-16">
+      <div className="w-full max-w-7xl mx-auto border border-border rounded-lg overflow-hidden" style={{ height: 'calc(100vh - 8rem)' }}>
+        <SecurityProvider projectId="demo-project-12345">
+          <ProjectEditorTestContent />
+        </SecurityProvider>
+      </div>
+    </div>
   );
 }

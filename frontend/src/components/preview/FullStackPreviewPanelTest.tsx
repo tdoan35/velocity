@@ -108,7 +108,6 @@ export function FullStackPreviewPanelTest() {
       <div className="w-full max-w-6xl mx-auto border border-border rounded-lg overflow-auto" style={{ height: 'calc(100vh - 8rem)' }}>
         <FullStackPreviewPanel 
           projectId="test-project-123" 
-          showAPITesting={true} 
         />
       </div>
     </div>

@@ -33,6 +33,7 @@ import { ProjectEditor } from './pages/ProjectEditor'
 import { FullStackPreviewPanelTest } from './components/preview/FullStackPreviewPanelTest'
 import { EnhancedEditorContainerTest } from './components/editor/EnhancedEditorContainerTest'
 import { ProjectEditorTest } from './pages/ProjectEditorTest'
+import { ProjectTester } from './components/testing/ProjectTester'
 import { 
   Lightbulb,
   Layers,
@@ -402,6 +403,9 @@ function App() {
                   } />
                   <Route path="project-editor-test" element={
                     <ProjectEditorTest />
+                  } />
+                  <Route path="project-tester" element={
+                    <ProjectTester />
                   } />
                 </Routes>
               </div>

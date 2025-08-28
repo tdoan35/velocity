@@ -1,18 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { 
-  Monitor, 
   Smartphone, 
-  Download, 
   Share2, 
   RefreshCw,
-  Save,
   AlertCircle,
-  CheckCircle,
-  Code2,
+  Info,
   Package
 } from 'lucide-react';
 import { useSnackSession } from '../../hooks/useSnackSession';
@@ -39,8 +34,9 @@ export function SnackPreviewPanel({
   className,
   onSessionReady
 }: SnackPreviewPanelProps) {
-  const [activeTab, setActiveTab] = useState('web');
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+  const [isMobilePreviewOpen, setIsMobilePreviewOpen] = useState(false);
+  const [isSessionInfoOpen, setIsSessionInfoOpen] = useState(false);
   const { toast } = useToast();
 
   // Convert frontend files to Snack format
@@ -167,25 +163,6 @@ const styles = StyleSheet.create({
     }
   }, [files, session]);
 
-  // Handle download
-  const handleDownload = async () => {
-    try {
-      const url = await getDownloadUrl();
-      if (url) {
-        window.open(url, '_blank');
-        toast({
-          title: 'Download started',
-          description: 'Your project is being downloaded.',
-        });
-      }
-    } catch (error) {
-      toast({
-        title: 'Download failed',
-        description: 'Failed to generate download link.',
-        variant: 'destructive',
-      });
-    }
-  };
 
   // Handle refresh
   const handleRefresh = async () => {
@@ -197,28 +174,19 @@ const styles = StyleSheet.create({
   const renderStatus = () => {
     if (isLoading) {
       return (
-        <Badge variant="secondary" className="gap-1">
-          <RefreshCw className="w-3 h-3 animate-spin" />
-          Initializing...
-        </Badge>
+        <div className="w-2 h-2 rounded-full bg-yellow-500" title="Loading..." />
       );
     }
 
     if (error) {
       return (
-        <Badge variant="destructive" className="gap-1">
-          <AlertCircle className="w-3 h-3" />
-          Error
-        </Badge>
+        <div className="w-2 h-2 rounded-full bg-red-500" title="Error" />
       );
     }
 
     if (session) {
       return (
-        <Badge variant="default" className="gap-1">
-          <CheckCircle className="w-3 h-3" />
-          Connected
-        </Badge>
+        <div className="w-2 h-2 rounded-full bg-green-500" title="Connected" />
       );
     }
 
@@ -238,21 +206,21 @@ const styles = StyleSheet.create({
           <Button
             variant="ghost"
             size="sm"
-            onClick={saveSnapshot}
+            onClick={() => setIsMobilePreviewOpen(true)}
             disabled={!session}
-            title="Save snapshot"
+            title="Mobile preview"
           >
-            <Save className="w-4 h-4" />
+            <Smartphone className="w-4 h-4" />
           </Button>
           
           <Button
             variant="ghost"
             size="sm"
-            onClick={handleDownload}
+            onClick={() => setIsSessionInfoOpen(true)}
             disabled={!session}
-            title="Download project"
+            title="Session info"
           >
-            <Download className="w-4 h-4" />
+            <Info className="w-4 h-4" />
           </Button>
           
           <Button
@@ -276,163 +244,167 @@ const styles = StyleSheet.create({
         </div>
       </div>
 
-      {/* Preview tabs */}
-      <Tabs 
-        value={activeTab} 
-        onValueChange={setActiveTab}
-        className="flex-1 flex flex-col"
-      >
-        <TabsList className="mx-4 mt-4">
-          <TabsTrigger value="web" className="gap-2">
-            <Monitor className="w-4 h-4" />
-            Web Preview
-          </TabsTrigger>
-          <TabsTrigger value="mobile" className="gap-2">
-            <Smartphone className="w-4 h-4" />
-            Mobile Preview
-          </TabsTrigger>
-          <TabsTrigger value="info" className="gap-2">
-            <Code2 className="w-4 h-4" />
-            Session Info
-          </TabsTrigger>
-        </TabsList>
+      {/* Web preview container - with relative positioning for contained modals */}
+      <div className="flex-1 relative">
+        <SnackWebPlayer
+          snack={snack}
+          webPreviewRef={webPreviewRef}
+          webPreviewUrl={webPreviewUrl}
+          sessionId={sessionId}
+          className="h-full"
+          onError={(error) => {
+            toast({
+              title: 'Preview error',
+              description: error.message,
+              variant: 'destructive',
+            });
+          }}
+        />
 
-        {/* Web preview */}
-        <TabsContent value="web" className="flex-1 p-4">
-          <SnackWebPlayer
-            snack={snack}
-            webPreviewRef={webPreviewRef}
-            webPreviewUrl={webPreviewUrl}
-            sessionId={sessionId}
-            className="h-full"
-            onError={(error) => {
-              toast({
-                title: 'Preview error',
-                description: error.message,
-                variant: 'destructive',
-              });
-            }}
-          />
-        </TabsContent>
-
-        {/* Mobile preview */}
-        <TabsContent value="mobile" className="flex-1 p-4">
-          <Card className="h-full flex flex-col items-center justify-center p-8">
-            {qrCodeUrl ? (
-              <div className="text-center max-w-md">
-                <h4 className="text-lg font-semibold mb-2">
-                  Scan with Expo Go
-                </h4>
-                <p className="text-sm text-muted-foreground mb-6">
-                  Scan this QR code with the Expo Go app on your iOS or Android device
-                </p>
-                
-                <div className="bg-white p-4 rounded-lg shadow-sm mb-6">
-                  <QRCode value={qrCodeUrl} size={200} />
-                </div>
-                
-                <div className="flex flex-col gap-3">
-                  <a
-                    href="https://expo.dev/client"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-primary hover:underline"
-                  >
-                    Don't have Expo Go? Download it here →
-                  </a>
-                  
-                  <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-                    <Badge variant="outline" className="font-mono">
-                      {qrCodeUrl}
-                    </Badge>
-                  </div>
-                </div>
+        {/* Mobile Preview Modal - positioned within container */}
+        {isMobilePreviewOpen && (
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-10">
+            <Card className="w-full max-w-md mx-4 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-lg font-semibold">Mobile Preview</h4>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsMobilePreviewOpen(false)}
+                >
+                  ✕
+                </Button>
               </div>
-            ) : (
-              <div className="text-center">
-                <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-sm text-muted-foreground">
-                  No QR code available. Please wait for the session to initialize.
-                </p>
-              </div>
-            )}
-          </Card>
-        </TabsContent>
-
-        {/* Session info */}
-        <TabsContent value="info" className="flex-1 p-4">
-          <Card className="h-full p-6 overflow-auto">
-            <h4 className="text-lg font-semibold mb-4">Session Information</h4>
-            
-            <div className="space-y-4">
-              <div>
-                <h5 className="text-sm font-medium text-muted-foreground mb-1">
-                  Session ID
-                </h5>
-                <code className="text-xs bg-muted px-2 py-1 rounded">
-                  {sessionId}
-                </code>
-              </div>
-
-              {session && (
-                <>
-                  <div>
-                    <h5 className="text-sm font-medium text-muted-foreground mb-1">
-                      Channel
+              
+              <div className="flex flex-col items-center justify-center">
+                {qrCodeUrl ? (
+                  <div className="text-center">
+                    <h5 className="text-base font-medium mb-2">
+                      Scan with Expo Go
                     </h5>
-                    <code className="text-xs bg-muted px-2 py-1 rounded">
-                      {(session.snack as any).getChannel?.() || session.id}
-                    </code>
-                  </div>
-
-                  <div>
-                    <h5 className="text-sm font-medium text-muted-foreground mb-1">
-                      SDK Version
-                    </h5>
-                    <Badge variant="outline">
-                      {(session.snack as any).getSdkVersion?.() || '52.0.0'}
-                    </Badge>
-                  </div>
-
-                  <div>
-                    <h5 className="text-sm font-medium text-muted-foreground mb-1">
-                      Dependencies
-                    </h5>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {Object.entries((session.snack as any).getDependencies?.() || {}).map(([name, version]) => (
-                        <Badge key={name} variant="secondary" className="gap-1">
-                          <Package className="w-3 h-3" />
-                          {name}@{String(version)}
+                    <p className="text-sm text-muted-foreground mb-6">
+                      Scan this QR code with the Expo Go app on your iOS or Android device
+                    </p>
+                    
+                    <div className="bg-white p-4 rounded-lg shadow-sm mb-6">
+                      <QRCode value={qrCodeUrl} size={180} />
+                    </div>
+                    
+                    <div className="flex flex-col gap-3">
+                      <a
+                        href="https://expo.dev/client"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-primary hover:underline"
+                      >
+                        Don't have Expo Go? Download it here →
+                      </a>
+                      
+                      <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {qrCodeUrl}
                         </Badge>
-                      ))}
+                      </div>
                     </div>
                   </div>
-
-                  <div>
-                    <h5 className="text-sm font-medium text-muted-foreground mb-1">
-                      Last Activity
-                    </h5>
-                    <p className="text-sm">
-                      {session.lastActivity.toLocaleString()}
+                ) : (
+                  <div className="text-center">
+                    <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-sm text-muted-foreground">
+                      No QR code available. Please wait for the session to initialize.
                     </p>
                   </div>
-                </>
-              )}
+                )}
+              </div>
+            </Card>
+          </div>
+        )}
 
-              {error && (
-                <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
-                  <h5 className="text-sm font-medium text-destructive mb-1">
-                    Error Details
+        {/* Session Info Modal - positioned within container */}
+        {isSessionInfoOpen && (
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-10">
+            <Card className="w-full max-w-lg mx-4 p-6 max-h-[80%] flex flex-col">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-lg font-semibold">Session Information</h4>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsSessionInfoOpen(false)}
+                >
+                  ✕
+                </Button>
+              </div>
+              
+              <div className="space-y-4 overflow-auto">
+                <div>
+                  <h5 className="text-sm font-medium text-muted-foreground mb-1">
+                    Session ID
                   </h5>
-                  <p className="text-xs text-destructive/80">
-                    {error.message}
-                  </p>
+                  <code className="text-xs bg-muted px-2 py-1 rounded">
+                    {sessionId}
+                  </code>
                 </div>
-              )}
-            </div>
-          </Card>
-        </TabsContent>
-      </Tabs>
+
+                {session && (
+                  <>
+                    <div>
+                      <h5 className="text-sm font-medium text-muted-foreground mb-1">
+                        Channel
+                      </h5>
+                      <code className="text-xs bg-muted px-2 py-1 rounded">
+                        {(session.snack as any).getChannel?.() || session.id}
+                      </code>
+                    </div>
+
+                    <div>
+                      <h5 className="text-sm font-medium text-muted-foreground mb-1">
+                        SDK Version
+                      </h5>
+                      <Badge variant="outline">
+                        {(session.snack as any).getSdkVersion?.() || '52.0.0'}
+                      </Badge>
+                    </div>
+
+                    <div>
+                      <h5 className="text-sm font-medium text-muted-foreground mb-1">
+                        Dependencies
+                      </h5>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {Object.entries((session.snack as any).getDependencies?.() || {}).map(([name, version]) => (
+                          <Badge key={name} variant="secondary" className="gap-1">
+                            <Package className="w-3 h-3" />
+                            {name}@{String(version)}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h5 className="text-sm font-medium text-muted-foreground mb-1">
+                        Last Activity
+                      </h5>
+                      <p className="text-sm">
+                        {session.lastActivity.toLocaleString()}
+                      </p>
+                    </div>
+                  </>
+                )}
+
+                {error && (
+                  <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+                    <h5 className="text-sm font-medium text-destructive mb-1">
+                      Error Details
+                    </h5>
+                    <p className="text-xs text-destructive/80">
+                      {error.message}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </Card>
+          </div>
+        )}
+      </div>
 
       {/* Share dialog */}
       {isShareDialogOpen && session && (

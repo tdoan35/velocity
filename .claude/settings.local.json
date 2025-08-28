@@ -85,7 +85,8 @@
       "Bash(cp:*)",
       "Bash(claude --version)",
       "Bash(git checkout:*)",
-      "Bash(PORT=5174 npm run dev)"
+      "Bash(PORT=5174 npm run dev)",
+      "Read(/C:\\c\\Users\\Ty\\Desktop\\velocity/**)"
     ],
     "defaultMode": "acceptEdits",
     "additionalDirectories": [

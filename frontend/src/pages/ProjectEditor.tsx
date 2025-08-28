@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Navigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
+import { useAppStore } from '../stores/useAppStore';
 import { useProjectEditorStore } from '../stores/useProjectEditorStore';
 import { toast } from 'sonner';
 import { Loader2, Settings, Download, Share2, Eye, Code, FileText, Play, Shield, Activity } from 'lucide-react';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../components/ui/resizable';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { ToggleGroup, ToggleGroupItem } from '../components/ui/toggle-group';
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -19,6 +22,7 @@ import { EnhancedEditorContainer } from '../components/editor/EnhancedEditorCont
 import { FullStackPreviewPanel } from '../components/preview/FullStackPreviewPanel';
 import { PreviewTabsPanel } from '../components/preview/PreviewTabsPanel';
 import { FullStackAIAssistant } from '../components/ai/FullStackAIAssistant';
+import { EnhancedChatInterface } from '@/components/chat/enhanced-chat-interface';
 import { VerticalCollapsiblePanel } from '../components/layout/vertical-collapsible-panel';
 import { SecurityProvider, useSecurity } from '../components/security/SecurityProvider';
 import { SecurityDashboard } from '../components/security/SecurityDashboard';
@@ -39,6 +43,7 @@ function ProjectEditorCore({
   skipInitialization?: boolean;
 }) {
   const { user } = useAuthStore();
+  const { setCurrentProject } = useAppStore();
   const { activeThreats, isSecurityEnabled } = useSecurity();
   const securityMonitoring = useFileSecurityMonitoring();
   const performanceMonitoring = usePerformanceMonitoring(true);
@@ -58,6 +63,7 @@ function ProjectEditorCore({
   const [isPerformancePanelOpen, setIsPerformancePanelOpen] = useState(false);
   const [isPreviewTabsOpen, setIsPreviewTabsOpen] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [activeView, setActiveView] = useState<'code' | 'preview'>('code');
 
   useEffect(() => {
     if (skipInitialization) {
@@ -76,6 +82,21 @@ function ProjectEditorCore({
         });
     }
   }, [projectId, user, initializeProject, isInitialized, skipInitialization]);
+
+  // Set current project in app store when project data is available
+  useEffect(() => {
+    if (projectData && projectId) {
+      setCurrentProject({
+        id: projectId,
+        name: projectData.name || 'Untitled Project',
+        description: projectData.description || '',
+        createdAt: new Date(projectData.created_at || Date.now()),
+        updatedAt: new Date(projectData.updated_at || Date.now()),
+        template: 'react-native',
+        status: 'ready'
+      });
+    }
+  }, [projectData, projectId, setCurrentProject]);
 
   // Redirect if not authenticated (only if enabled)
   if (showAuthRedirect && !user) {
@@ -139,9 +160,49 @@ function ProjectEditorCore({
   };
 
   return (
-    <div className="h-screen flex flex-col bg-background">
-      {/* Header */}
-      <header className="border-b bg-card px-4 py-3 flex items-center justify-between">
+    <div className="flex flex-col h-full mx-2 mb-2 rounded-lg overflow-hidden bg-white/30 dark:bg-gray-900/30 backdrop-blur-lg border border-gray-200/50 dark:border-gray-700/50 shadow-xl">
+      <ResizablePanelGroup direction="horizontal" className="h-full">
+        {/* Left Panel - AI Chat */}
+        <ResizablePanel defaultSize={35} minSize={25} maxSize={50}>
+          <div className="h-full p-2">
+            <Card className="h-full flex flex-col bg-transparent border-gray-300 dark:border-gray-700/50">
+              <EnhancedChatInterface
+              projectId={currentProjectId}
+              conversationId={undefined}
+              onApplyCode={(code) => {
+                console.log('Applying code:', code);
+                toast.success('Code applied successfully!');
+              }}
+              className="flex-1"
+              activeAgent="project_manager"
+              onAgentChange={() => {}}
+              conversationTitle="Project Chat"
+              onNewConversation={() => {}}
+              onToggleHistory={() => {}}
+              isHistoryOpen={false}
+              projectContext={projectData ? {
+                id: currentProjectId,
+                name: projectData.name || 'Untitled Project',
+                description: projectData.description,
+                template: 'react-native'
+              } : undefined}
+              onInitialMessageSent={() => {}}
+              onConversationCreated={() => {}}
+              onTitleGenerated={() => {}}
+              onConversationTitleUpdated={() => {}}
+              />
+            </Card>
+          </div>
+        </ResizablePanel>
+
+        <ResizableHandle withHandle />
+
+        {/* Right Panel - Current Project Editor Content */}
+        <ResizablePanel defaultSize={65} minSize={50}>
+          <div className="h-full p-2">
+            <Card className="h-full flex flex-col bg-transparent border-gray-300 dark:border-gray-700/50">
+              {/* Header */}
+              <header className="border-b bg-card px-4 py-3 flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2">
             <Code className="h-5 w-5 text-primary" />
@@ -149,7 +210,25 @@ function ProjectEditorCore({
               {projectData?.name || 'Untitled Project'}
             </h1>
           </div>
+        </div>
 
+        {/* View Toggle */}
+        <div className="flex items-center">
+          <ToggleGroup 
+            type="single" 
+            value={activeView} 
+            onValueChange={(value) => value && setActiveView(value as 'code' | 'preview')}
+            className="bg-muted rounded-md p-1"
+          >
+            <ToggleGroupItem value="code" className="data-[state=on]:bg-background">
+              <Code className="h-4 w-4 mr-2" />
+              Code
+            </ToggleGroupItem>
+            <ToggleGroupItem value="preview" className="data-[state=on]:bg-background">
+              <Eye className="h-4 w-4 mr-2" />
+              Preview
+            </ToggleGroupItem>
+          </ToggleGroup>
         </div>
 
         {/* Actions */}
@@ -193,36 +272,35 @@ function ProjectEditorCore({
 
       {/* Main Content */}
       <div className="flex-1 overflow-hidden">
-        <ResizablePanelGroup direction="horizontal" className="h-full">
-          {/* File Explorer */}
-          <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
-            <FullStackFileExplorer
-              projectId={currentProjectId}
-              showBackend={isSupabaseConnected}
-            />
-          </ResizablePanel>
-          
-          <ResizableHandle withHandle />
-          
-          {/* Editor */}
-          <ResizablePanel defaultSize={50} minSize={30}>
-            <EnhancedEditorContainer
-              projectId={currentProjectId}
-              projectType={isSupabaseConnected ? 'full-stack' : 'frontend-only'}
-              onFileSave={securityMonitoring.onFileSave}
-              onFileOpen={securityMonitoring.onFileOpen}
-            />
-          </ResizablePanel>
-          
-          <ResizableHandle withHandle />
-          
-          {/* Preview */}
-          <ResizablePanel defaultSize={30} minSize={20}>
+        {activeView === 'code' ? (
+          <ResizablePanelGroup direction="horizontal" className="h-full">
+            {/* File Explorer */}
+            <ResizablePanel defaultSize={25} minSize={20} maxSize={40}>
+              <FullStackFileExplorer
+                projectId={currentProjectId}
+                showBackend={isSupabaseConnected}
+              />
+            </ResizablePanel>
+            
+            <ResizableHandle withHandle />
+            
+            {/* Editor */}
+            <ResizablePanel defaultSize={75} minSize={60}>
+              <EnhancedEditorContainer
+                projectId={currentProjectId}
+                projectType={isSupabaseConnected ? 'full-stack' : 'frontend-only'}
+                onFileSave={securityMonitoring.onFileSave}
+                onFileOpen={securityMonitoring.onFileOpen}
+              />
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        ) : (
+          <div className="h-full">
             <FullStackPreviewPanel
               projectId={currentProjectId}
             />
-          </ResizablePanel>
-        </ResizablePanelGroup>
+          </div>
+        )}
       </div>
 
       {/* Performance Panel (Collapsible) */}
@@ -274,17 +352,21 @@ function ProjectEditorCore({
         />
       </VerticalCollapsiblePanel>
 
-      {/* Floating Action Buttons */}
-      <div className="fixed bottom-4 right-4 z-50">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => setIsAIAssistantOpen(!isAIAssistantOpen)}
-        >
-          <Code className="h-4 w-4 mr-2" />
-          AI Assistant
-        </Button>
-      </div>
+              {/* Floating Action Buttons */}
+              <div className="fixed bottom-4 right-4 z-50">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setIsAIAssistantOpen(!isAIAssistantOpen)}
+                >
+                  <Code className="h-4 w-4 mr-2" />
+                  AI Assistant
+                </Button>
+              </div>
+            </Card>
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }

@@ -97,16 +97,17 @@ export default defineConfig(({ mode }) => {
       port: parseInt(env.VITE_PORT || '5173'),
       strictPort: true,
       headers: {
-        // Development CSP headers - more permissive for Snack
+        // Development CSP headers - secure but allows required Snack domains
         'Content-Security-Policy': [
           "default-src 'self'",
           "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://snack-web-player.s3.us-west-1.amazonaws.com",
           "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
-          "img-src 'self' data: https:",
+          "img-src 'self' data: https://cdn.jsdelivr.net",
           "font-src 'self' https://cdn.jsdelivr.net",
-          "connect-src 'self' ws: wss: http: https: https://exp.host https://snackager.expo.io",
+          "connect-src 'self' ws: wss: https://exp.host https://snackager.expo.io https://cdn.jsdelivr.net https://ozjipxxukgrvjxlefslq.supabase.co",
           "worker-src 'self' blob:",
-          "frame-src 'self' https://snack.expo.dev https://*.expo.dev https://snack-web-player.s3.us-west-1.amazonaws.com https://*.amazonaws.com",
+          "frame-src 'self' https://snack.expo.dev https://*.expo.dev https://snack-web-player.s3.us-west-1.amazonaws.com",
+          "child-src 'self' https://snack.expo.dev https://*.expo.dev https://snack-web-player.s3.us-west-1.amazonaws.com",
         ].join('; '),
       },
       // Proxy configuration to handle CORS issues with Expo APIs

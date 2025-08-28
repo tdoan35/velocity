@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { supabase } from '../lib/supabase';
+import { getDefaultFrontendFiles, getDefaultBackendFiles, getDefaultSharedFiles } from '../utils/defaultProjectFiles';
 import type { FileTree, FileContent, ProjectData, SupabaseProject, BuildStatus, DeploymentStatus } from '../types/editor';
 
 export interface ProjectEditorState {
@@ -71,8 +72,12 @@ export const useProjectEditorStore = create<ProjectEditorState>()(
         set({ isLoading: true, error: null, projectId });
 
         try {
-          // Fetch project data
-          const { data: project, error: projectError } = await supabase
+          // Fetch project data (try with prd_sections first, fallback to basic project data)
+          let project = null;
+          let projectError = null;
+          
+          // First try with prd_sections
+          const { data: projectWithSections, error: sectionsError } = await supabase
             .from('projects')
             .select(`
               *,
@@ -86,41 +91,161 @@ export const useProjectEditorStore = create<ProjectEditorState>()(
             .eq('id', projectId)
             .single();
 
-          if (projectError) throw projectError;
+          // If the prd_sections relationship fails, try without it
+          if (sectionsError && sectionsError.code === 'PGRST200') {
+            console.log('prd_sections table not found, trying basic project query...');
+            const { data, error } = await supabase
+              .from('projects')
+              .select('*')
+              .eq('id', projectId)
+              .single();
+            project = data;
+            projectError = error;
+            
+            // Add empty prd_sections array if project exists
+            if (project && !projectError) {
+              project.prd_sections = [];
+            }
+          } else {
+            project = projectWithSections;
+            projectError = sectionsError;
+          }
 
-          // Check Supabase connection
-          const { data: supabaseConnection } = await supabase
-            .from('supabase_connections')
-            .select('*')
-            .eq('project_id', projectId)
-            .single();
-
-          // Load existing files if any
-          const { data: files } = await supabase
-            .from('project_files')
-            .select('*')
-            .eq('project_id', projectId);
-
-          const frontendFiles: FileTree = {};
-          const backendFiles: FileTree = {};
-          const sharedFiles: FileTree = {};
-
-          files?.forEach((file) => {
-            const fileContent: FileContent = {
-              path: file.path,
-              content: file.content,
-              type: file.type,
-              lastModified: new Date(file.updated_at),
+          // If project doesn't exist or has invalid format, create a temporary project structure  
+          if (projectError && (projectError.code === 'PGRST116' || projectError.code === '22P02')) {
+            console.log('Project not found in database or invalid ID format, creating temporary project structure...');
+            
+            const tempProject = {
+              id: projectId,
+              name: 'Temporary Project',
+              description: 'A temporary project for testing',
+              user_id: null,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              prd_sections: [],
             };
 
-            if (file.path.startsWith('frontend/')) {
-              frontendFiles[file.path] = fileContent;
-            } else if (file.path.startsWith('backend/')) {
-              backendFiles[file.path] = fileContent;
-            } else {
-              sharedFiles[file.path] = fileContent;
+            const frontendFiles = getDefaultFrontendFiles('Temporary Project');
+            const sharedFiles = getDefaultSharedFiles('Temporary Project');
+
+            set({
+              projectData: tempProject,
+              frontendFiles,
+              backendFiles: {},
+              sharedFiles,
+              isSupabaseConnected: false,
+              supabaseProject: null,
+              projectType: 'frontend-only',
+              activeFile: 'frontend/App.tsx',
+              openTabs: ['frontend/App.tsx'],
+              isLoading: false,
+            });
+            return;
+          }
+
+          if (projectError) throw projectError;
+
+          // Check Supabase connection (handle missing table gracefully)
+          let supabaseConnection = null;
+          try {
+            const { data } = await supabase
+              .from('supabase_connections')
+              .select('*')
+              .eq('project_id', projectId)
+              .single();
+            supabaseConnection = data;
+          } catch (err: any) {
+            console.log('supabase_connections table not found or no connection exists');
+            supabaseConnection = null;
+          }
+
+          // Load existing files if any (handle missing table gracefully)
+          let files = null;
+          try {
+            const { data } = await supabase
+              .from('project_files')
+              .select('*')
+              .eq('project_id', projectId);
+            files = data;
+          } catch (err: any) {
+            console.log('project_files table not found, will create default files');
+            files = null;
+          }
+
+          let frontendFiles: FileTree = {};
+          let backendFiles: FileTree = {};
+          let sharedFiles: FileTree = {};
+
+          // If no files exist, create default project structure
+          if (!files || files.length === 0) {
+            console.log('No files found for project, creating default structure...');
+            
+            const projectName = project?.name || 'My Velocity App';
+            const isFullStack = !!supabaseConnection;
+            
+            // Create default files
+            frontendFiles = getDefaultFrontendFiles(projectName);
+            sharedFiles = getDefaultSharedFiles(projectName);
+            
+            if (isFullStack) {
+              backendFiles = getDefaultBackendFiles(projectName);
             }
-          });
+
+            // Save default files to database (if table exists)
+            const allDefaultFiles = { ...frontendFiles, ...backendFiles, ...sharedFiles };
+            const fileInserts = Object.values(allDefaultFiles).map(file => ({
+              project_id: projectId,
+              path: file.path,
+              content: file.content,
+              type: file.type === 'typescript' ? 'typescript' : 
+                    file.type === 'javascript' ? 'javascript' :
+                    file.type === 'json' ? 'json' :
+                    file.type === 'sql' ? 'sql' :
+                    file.type === 'markdown' ? 'markdown' :
+                    file.type === 'toml' ? 'toml' : 'text',
+            }));
+
+            if (fileInserts.length > 0) {
+              try {
+                const { error: insertError } = await supabase
+                  .from('project_files')
+                  .insert(fileInserts);
+
+                if (insertError) {
+                  console.error('Failed to save default files:', insertError);
+                } else {
+                  console.log(`Created ${fileInserts.length} default files for project`);
+                }
+              } catch (err: any) {
+                console.log('Could not save files to database (table may not exist), using in-memory files only');
+              }
+            }
+          } else {
+            // Load existing files
+            files.forEach((file) => {
+              const fileContent: FileContent = {
+                path: file.path,
+                content: file.content,
+                type: file.type,
+                lastModified: new Date(file.updated_at),
+              };
+
+              if (file.path.startsWith('frontend/')) {
+                frontendFiles[file.path] = fileContent;
+              } else if (file.path.startsWith('backend/')) {
+                backendFiles[file.path] = fileContent;
+              } else {
+                sharedFiles[file.path] = fileContent;
+              }
+            });
+          }
+
+          // Set initial active file if none exists
+          const allFiles = { ...frontendFiles, ...backendFiles, ...sharedFiles };
+          const fileKeys = Object.keys(allFiles);
+          const defaultActiveFile = fileKeys.includes('frontend/App.tsx') ? 'frontend/App.tsx' : 
+                                  fileKeys.includes('frontend/App.js') ? 'frontend/App.js' :
+                                  fileKeys[0] || null;
 
           set({
             projectData: project,
@@ -130,9 +255,12 @@ export const useProjectEditorStore = create<ProjectEditorState>()(
             isSupabaseConnected: !!supabaseConnection,
             supabaseProject: supabaseConnection || null,
             projectType: supabaseConnection ? 'full-stack' : 'frontend-only',
+            activeFile: defaultActiveFile,
+            openTabs: defaultActiveFile ? [defaultActiveFile] : [],
             isLoading: false,
           });
         } catch (error: any) {
+          console.error('Project initialization error:', error);
           set({ error: error.message, isLoading: false });
           throw error;
         }
