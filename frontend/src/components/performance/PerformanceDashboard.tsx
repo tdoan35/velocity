@@ -17,6 +17,8 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { usePerformanceMonitoring, useAPIPerformanceMonitoring } from '../../hooks/usePerformanceMonitoring';
+import { NavigationPerformanceMonitor } from './NavigationPerformanceMonitor';
+import { PerformanceDashboardSkeleton } from '../ui/skeleton-loader';
 
 interface PerformanceDashboardProps {
   className?: string;
@@ -26,6 +28,15 @@ export function PerformanceDashboard({ className }: PerformanceDashboardProps) {
   const performance = usePerformanceMonitoring(true);
   const apiPerformance = useAPIPerformanceMonitoring();
   const [refreshKey, setRefreshKey] = useState(0);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+
+  useEffect(() => {
+    // Simulate initial loading
+    const timer = setTimeout(() => {
+      setIsInitialLoading(false);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, []);
 
   const performanceScore = performance.getPerformanceScore();
   const report = performance.generatePerformanceReport();
@@ -61,6 +72,11 @@ export function PerformanceDashboard({ className }: PerformanceDashboardProps) {
   const refresh = () => {
     setRefreshKey(prev => prev + 1);
   };
+
+  // Show skeleton while loading
+  if (isInitialLoading) {
+    return <PerformanceDashboardSkeleton className={className} />;
+  }
 
   return (
     <div className={`h-full flex flex-col ${className}`}>
@@ -156,6 +172,7 @@ export function PerformanceDashboard({ className }: PerformanceDashboardProps) {
           <div className="p-4 border-b">
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="navigation">Navigation</TabsTrigger>
               <TabsTrigger value="metrics">Detailed Metrics</TabsTrigger>
               <TabsTrigger value="issues">Issues</TabsTrigger>
               <TabsTrigger value="optimizations">Optimizations</TabsTrigger>
@@ -303,6 +320,10 @@ export function PerformanceDashboard({ className }: PerformanceDashboardProps) {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="navigation" className="p-4">
+            <NavigationPerformanceMonitor />
           </TabsContent>
 
           <TabsContent value="metrics" className="p-4">

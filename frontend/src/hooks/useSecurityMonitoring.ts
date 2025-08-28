@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useSecurity, useSecurityValidation } from '../components/security/SecurityProvider';
+import { useSecurity } from '../contexts/UnifiedProjectContext';
 import { toast } from 'sonner';
 import type { SecurityViolation } from '../services/securityService';
 
@@ -28,8 +28,15 @@ export function useSecurityMonitoring(options: SecurityMonitoringOptions = {}) {
     onSecurityViolation,
   } = options;
 
-  const { isSecurityEnabled, activeThreats, recentScans } = useSecurity();
-  const { validateCode, validateDatabase, validateAPI, validateFile } = useSecurityValidation();
+  const { 
+    isSecurityEnabled, 
+    activeThreats, 
+    recentScans,
+    scanCode,
+    validateDatabaseSecurity,
+    validateAPIEndpoint,
+    validateFileUpload
+  } = useSecurity();
 
   const [monitoringState, setMonitoringState] = useState<SecurityMonitoringState>({
     isMonitoring: false,
@@ -86,9 +93,9 @@ export function useSecurityMonitoring(options: SecurityMonitoringOptions = {}) {
     try {
       setMonitoringState(prev => ({ ...prev, pendingScans: prev.pendingScans + 1 }));
 
-      const result = await validateCode(fileName, content, language);
+      const result = await scanCode(fileName, content, language);
       
-      if (result?.hasIssues && result.violations) {
+      if (result?.violations && result.violations.length > 0) {
         const criticalViolations = result.violations.filter(v => v.severity === 'critical');
         
         if (showToastOnViolations && criticalViolations.length > 0) {
@@ -115,7 +122,7 @@ export function useSecurityMonitoring(options: SecurityMonitoringOptions = {}) {
         lastScanTime: new Date(),
       }));
     }
-  }, [isSecurityEnabled, monitoringState.isMonitoring, validateCode, showToastOnViolations, onSecurityViolation]);
+  }, [isSecurityEnabled, monitoringState.isMonitoring, scanCode, showToastOnViolations, onSecurityViolation]);
 
   const queueScan = useCallback((fileName: string, content: string, language: string, priority = 5) => {
     if (!isSecurityEnabled || !monitoringState.isMonitoring) return;
@@ -151,10 +158,10 @@ export function useSecurityMonitoring(options: SecurityMonitoringOptions = {}) {
     if (!isSecurityEnabled || !autoValidateDatabase) return null;
 
     try {
-      const result = await validateDatabase(schema);
+      const result = await validateDatabaseSecurity(schema);
       
-      if (result?.hasIssues && showToastOnViolations) {
-        toast.warning(`Database security issues: ${result.message}`);
+      if (!result?.isValid && showToastOnViolations) {
+        toast.warning(`Database security issues: ${result.violations.join(', ')}`);
       }
 
       return result;
@@ -165,16 +172,16 @@ export function useSecurityMonitoring(options: SecurityMonitoringOptions = {}) {
       }
       return null;
     }
-  }, [isSecurityEnabled, autoValidateDatabase, validateDatabase, showToastOnViolations]);
+  }, [isSecurityEnabled, autoValidateDatabase, validateDatabaseSecurity, showToastOnViolations]);
 
   const validateAPICall = useCallback(async (endpoint: string, method: string, headers: Record<string, string>) => {
     if (!isSecurityEnabled || !autoValidateAPI) return null;
 
     try {
-      const result = await validateAPI(endpoint, method, headers);
+      const result = await validateAPIEndpoint(endpoint, method, headers);
       
-      if (result?.hasIssues && result.riskLevel === 'critical' && showToastOnViolations) {
-        toast.error(`Critical API security issue: ${result.message}`);
+      if (!result?.isValid && result.riskLevel === 'critical' && showToastOnViolations) {
+        toast.error(`Critical API security issue: ${result.violations.join(', ')}`);
       }
 
       return result;
@@ -182,16 +189,16 @@ export function useSecurityMonitoring(options: SecurityMonitoringOptions = {}) {
       console.error('API security validation failed:', error);
       return null;
     }
-  }, [isSecurityEnabled, autoValidateAPI, validateAPI, showToastOnViolations]);
+  }, [isSecurityEnabled, autoValidateAPI, validateAPIEndpoint, showToastOnViolations]);
 
-  const validateFileUpload = useCallback(async (fileName: string, content: string, size: number) => {
+  const validateFileUploadHook = useCallback(async (fileName: string, content: string, size: number) => {
     if (!isSecurityEnabled) return null;
 
     try {
-      const result = await validateFile(fileName, content, size);
+      const result = await validateFileUpload(fileName, content, size);
       
-      if (result?.hasIssues && showToastOnViolations) {
-        toast.error(`File upload blocked: ${result.message}`);
+      if (!result?.isValid && showToastOnViolations) {
+        toast.error(`File upload blocked: ${result.violations.join(', ')}`);
       }
 
       return result;
@@ -202,7 +209,7 @@ export function useSecurityMonitoring(options: SecurityMonitoringOptions = {}) {
       }
       return null;
     }
-  }, [isSecurityEnabled, validateFile, showToastOnViolations]);
+  }, [isSecurityEnabled, validateFileUpload, showToastOnViolations]);
 
   // Auto-scan on file save
   const handleFileSave = useCallback((fileName: string, content: string, language: string) => {
@@ -241,7 +248,7 @@ export function useSecurityMonitoring(options: SecurityMonitoringOptions = {}) {
     queueScan,
     validateDatabaseSchema,
     validateAPICall,
-    validateFileUpload,
+    validateFileUpload: validateFileUploadHook,
     handleFileSave,
     
     // Utils
@@ -303,8 +310,8 @@ export function useAPISecurityMonitoring() {
     // Validate the request first
     const validation = await validateRequest(url, method, headers);
     
-    if (validation?.hasIssues && validation.riskLevel === 'critical') {
-      throw new Error(`Request blocked by security validation: ${validation.message}`);
+    if (!validation?.isValid && validation.riskLevel === 'critical') {
+      throw new Error(`Request blocked by security validation: ${validation.violations.join(', ')}`);
     }
 
     // Proceed with the request

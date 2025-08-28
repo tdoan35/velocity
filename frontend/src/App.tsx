@@ -5,7 +5,7 @@ import { useAuthStore } from './stores/useAuthStore'
 import { useAppStore } from './stores/useAppStore'
 import { authService } from './services/auth'
 import { projectService } from './services/projectService'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { AuroraBackground } from './components/ui/aurora-background'
 import { AnimatedTooltip } from './components/ui/animated-tooltip'
 import { EnhancedTextarea } from './components/ui/enhanced-textarea'
@@ -30,6 +30,8 @@ import { AuthenticatedLayout } from './components/AuthenticatedLayout'
 import { Dashboard } from './pages/Dashboard'
 import { ProjectDesign } from './pages/ProjectDesign'
 import { ProjectEditor } from './pages/ProjectEditor'
+import { UnifiedProjectProvider } from './contexts/UnifiedProjectContext'
+import { NavigationTracker } from './components/navigation/NavigationTracker'
 import { FullStackPreviewPanelTest } from './components/preview/FullStackPreviewPanelTest'
 import { EnhancedEditorContainerTest } from './components/editor/EnhancedEditorContainerTest'
 import { ProjectEditorTest } from './pages/ProjectEditorTest'
@@ -270,6 +272,19 @@ function HomePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
   )
 }
 
+// Wrapper component for project routes that provides UnifiedProjectProvider and NavigationTracker
+function ProjectRouteWrapper({ children }: { children: React.ReactNode }) {
+  const { id } = useParams<{ id: string }>();
+  
+  return (
+    <NavigationTracker>
+      <UnifiedProjectProvider projectId={id}>
+        {children}
+      </UnifiedProjectProvider>
+    </NavigationTracker>
+  );
+}
+
 function App() {
   const { setUser, checkAuth, isAuthenticated } = useAuthStore()
   
@@ -320,8 +335,14 @@ function App() {
                 <Route index element={<HomePage />} />
                 <Route path="dashboard" element={<Dashboard />} />
                 <Route path="apps" element={<SnackProjects />} />
-                <Route path="project/:id" element={<ProjectDesign />} />
-                <Route path="project/:id/editor" element={<ProjectEditor />} />
+                <Route path="project/:id/*" element={
+                  <ProjectRouteWrapper>
+                    <Routes>
+                      <Route index element={<ProjectDesign />} />
+                      <Route path="editor" element={<ProjectEditor />} />
+                    </Routes>
+                  </ProjectRouteWrapper>
+                } />
                 <Route path="editor" element={
                   <LazyBoundary>
                     <EditorDemo />

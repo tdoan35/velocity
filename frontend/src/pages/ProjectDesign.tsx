@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { motion, AnimatePresence } from 'motion/react'
 import { cn } from '@/lib/utils'
-import { ProjectProvider, useProjectContext } from '@/contexts/ProjectContext'
+import { useUnifiedProjectContext } from '@/contexts/UnifiedProjectContext'
 import { EnhancedSupabaseConnectionManager } from '@/components/supabase/EnhancedSupabaseConnectionManager'
 import { SupabaseConnectButton } from '@/components/supabase/SupabaseConnectButton'
 import { 
@@ -83,7 +83,7 @@ function ProjectDesignContent() {
     supabaseConnection, 
     isBuildReady,
     testSupabaseConnection 
-  } = useProjectContext()
+  } = useUnifiedProjectContext()
   
   const [project, setProject] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -1061,13 +1061,7 @@ function ProjectDesignContent() {
   )
 }
 
-// Main component with ProjectProvider wrapper
+// Main component - provider is now handled by the router
 export function ProjectDesign() {
-  const { id: projectId } = useParams<{ id: string }>()
-  
-  return (
-    <ProjectProvider projectId={projectId}>
-      <ProjectDesignContent />
-    </ProjectProvider>
-  )
+  return <ProjectDesignContent />
 }

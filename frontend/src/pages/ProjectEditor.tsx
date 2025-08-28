@@ -24,7 +24,7 @@ import { PreviewTabsPanel } from '../components/preview/PreviewTabsPanel';
 import { FullStackAIAssistant } from '../components/ai/FullStackAIAssistant';
 import { EnhancedChatInterface } from '@/components/chat/enhanced-chat-interface';
 import { VerticalCollapsiblePanel } from '../components/layout/vertical-collapsible-panel';
-import { SecurityProvider, useSecurity } from '../components/security/SecurityProvider';
+import { useUnifiedProjectContext } from '../contexts/UnifiedProjectContext';
 import { SecurityDashboard } from '../components/security/SecurityDashboard';
 import { useFileSecurityMonitoring } from '../hooks/useSecurityMonitoring';
 import { PerformanceDashboard } from '../components/performance/PerformanceDashboard';
@@ -44,7 +44,8 @@ function ProjectEditorCore({
 }) {
   const { user } = useAuthStore();
   const { setCurrentProject } = useAppStore();
-  const { activeThreats, isSecurityEnabled } = useSecurity();
+  const { security } = useUnifiedProjectContext();
+  const { activeThreats, isSecurityEnabled } = security;
   const securityMonitoring = useFileSecurityMonitoring();
   const performanceMonitoring = usePerformanceMonitoring(true);
   const {
@@ -391,11 +392,7 @@ export function ProjectEditor() {
     return <Navigate to="/" replace />;
   }
 
-  return (
-    <SecurityProvider projectId={projectId}>
-      <ProjectEditorContent />
-    </SecurityProvider>
-  );
+  return <ProjectEditorContent />;
 }
 
 // Export the core component for testing purposes

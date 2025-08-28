@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Shield, ShieldAlert, ShieldCheck, ShieldX, AlertTriangle, TrendingUp, Lock, Unlock, Settings, RefreshCw } from 'lucide-react';
-import { useSecurity } from './SecurityProvider';
+import { useSecurity } from '../../contexts/UnifiedProjectContext';
+import { SecurityDashboardSkeleton } from '../ui/skeleton-loader';
 import { SecurityScanner } from './SecurityScanner';
 
 interface SecurityDashboardProps {
@@ -23,6 +24,8 @@ export function SecurityDashboard({ projectId, className }: SecurityDashboardPro
     updateConfig
   } = useSecurity();
   
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  
   const [securityMetrics, setSecurityMetrics] = useState({
     totalScans: 0,
     filesScanned: 0,
@@ -40,7 +43,14 @@ export function SecurityDashboard({ projectId, className }: SecurityDashboardPro
 
   useEffect(() => {
     updateMetrics();
-  }, [recentScans]);
+    // Simulate initial loading
+    if (isInitialLoading) {
+      const timer = setTimeout(() => {
+        setIsInitialLoading(false);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [recentScans, isInitialLoading]);
 
   const updateMetrics = () => {
     const metrics = {
@@ -83,6 +93,11 @@ export function SecurityDashboard({ projectId, className }: SecurityDashboardPro
       weeklyVulns: prev.weeklyVulns.map(val => Math.max(0, val + Math.floor(Math.random() * 3) - 1)),
     }));
   };
+
+  // Show skeleton while loading
+  if (isInitialLoading) {
+    return <SecurityDashboardSkeleton className={className} />;
+  }
 
   return (
     <div className={`h-full flex flex-col ${className}`}>
