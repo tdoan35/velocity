@@ -13,8 +13,8 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/componen
 import { motion, AnimatePresence } from 'motion/react'
 import { cn } from '@/lib/utils'
 import { ProjectProvider, useProjectContext } from '@/contexts/ProjectContext'
-import { SupabaseConnectionManager } from '@/components/supabase/SupabaseConnectionManager'
-import { ConnectionStatusIndicator } from '@/components/supabase/ConnectionStatusIndicator'
+import { EnhancedSupabaseConnectionManager } from '@/components/supabase/EnhancedSupabaseConnectionManager'
+import { SupabaseConnectButton } from '@/components/supabase/SupabaseConnectButton'
 import { 
   ArrowLeft, 
   Loader2,
@@ -31,7 +31,8 @@ import {
   Trash2,
   Check,
   FileText,
-  Database
+  Database,
+  AlertCircle
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { supabase } from '@/lib/supabase'
@@ -56,6 +57,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 
 interface ConversationTab {
   id: string
@@ -70,12 +72,19 @@ interface ConversationTab {
   }
 }
 
-export function ProjectDesign() {
+// Inner component that uses the ProjectContext
+function ProjectDesignContent() {
   const { id: projectId } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { user, isAuthenticated, isLoading: authLoading } = useAuthStore()
   const { setCurrentProject } = useAppStore()
   const { toast } = useToast()
+  const { 
+    supabaseConnection, 
+    isBuildReady,
+    testSupabaseConnection 
+  } = useProjectContext()
+  
   const [project, setProject] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [currentConversation, setCurrentConversation] = useState<ConversationTab | null>(null)
@@ -102,6 +111,8 @@ export function ProjectDesign() {
   const titleInputRef = useRef<HTMLInputElement>(null)
   const [showPRD, setShowPRD] = useState(false)
   const [hasPRD, setHasPRD] = useState(false)
+  const [showSupabaseManager, setShowSupabaseManager] = useState(false)
+
   // Helper function to get agent info
   const getAgentInfo = (agentType?: string) => {
     switch (agentType) {
@@ -435,6 +446,32 @@ export function ProjectDesign() {
     })
   }
 
+  // Handle Build button click
+  const handleBuildClick = () => {
+    if (!supabaseConnection.isConnected) {
+      toast({
+        title: 'Supabase Connection Required',
+        description: 'Please connect your Supabase project to enable the Build functionality',
+        variant: 'destructive',
+      })
+      setShowSupabaseManager(true)
+    } else if (!supabaseConnection.isHealthy) {
+      toast({
+        title: 'Connection Issue',
+        description: 'Your Supabase connection is unhealthy. Please check your credentials.',
+        variant: 'destructive',
+      })
+      setShowSupabaseManager(true)
+    } else {
+      // Proceed with build
+      toast({
+        title: 'Build Started',
+        description: 'Your project is being built...',
+      })
+      // TODO: Implement actual build logic
+    }
+  }
+
   if (authLoading || isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -457,7 +494,6 @@ export function ProjectDesign() {
     )
   }
 
-
   return (
     <div className="flex flex-col h-full mx-2 mb-2 rounded-lg overflow-hidden bg-white/30 dark:bg-gray-900/30 backdrop-blur-lg border border-gray-200/50 dark:border-gray-700/50 shadow-xl">
       <ResizablePanelGroup direction="horizontal" className="h-full">
@@ -466,7 +502,42 @@ export function ProjectDesign() {
           <div className="h-full p-2">
             <Card className="h-full flex flex-col bg-transparent border-gray-300 dark:border-gray-700/50 relative overflow-hidden">
               <AnimatePresence mode="wait">
-                {showPRD ? (
+                {showSupabaseManager ? (
+                  <motion.div
+                    key="supabase-manager"
+                    className="flex-1 flex flex-col absolute inset-0 p-6"
+                    initial={{ opacity: 0, x: 100, scale: 0.95 }}
+                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                    exit={{ opacity: 0, x: -100, scale: 0.95 }}
+                    transition={{ 
+                      duration: 0.3,
+                      ease: [0.4, 0, 0.2, 1] 
+                    }}
+                  >
+                    <div className="flex items-center justify-between mb-6">
+                      <h2 className="text-2xl font-semibold flex items-center gap-2">
+                        <Database className="w-6 h-6" />
+                        Supabase Connection
+                      </h2>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowSupabaseManager(false)}
+                      >
+                        <ArrowLeft className="w-4 h-4 mr-2" />
+                        Back to Chat
+                      </Button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto">
+                      <EnhancedSupabaseConnectionManager
+                        projectId={projectId || ''}
+                        showStatus={true}
+                        allowDisconnect={true}
+                        allowUpdate={true}
+                      />
+                    </div>
+                  </motion.div>
+                ) : showPRD ? (
                   <motion.div
                     key="prd-editor"
                     className="flex-1 flex flex-col absolute inset-0"
@@ -495,89 +566,89 @@ export function ProjectDesign() {
                     }}
                   >
                     <EnhancedChatInterface
-                  projectId={projectId || ''}
-                  conversationId={currentConversation?.id}
-                  onApplyCode={handleApplyCode}
-                  className="flex-1"
-                  activeAgent={currentConversation?.activeAgent || activeAgent}
-                  onAgentChange={updateActiveAgent}
-                  conversationTitle={currentConversation?.title}
-                  onNewConversation={() => createNewConversation(undefined, undefined, true)}
-                  onToggleHistory={() => setShowHistory(!showHistory)}
-                  isHistoryOpen={showHistory}
-                  initialMessage={isFirstVisit && initialPromptRef.current ? initialPromptRef.current : undefined}
-                  projectContext={project ? {
-                    id: project.id,
-                    name: project.name || project.title || 'Untitled Project',
-                    description: project.description,
-                    template: project.template_type || project.template,
-                    initialPrompt: initialPromptRef.current || undefined
-                  } : undefined}
-                  onInitialMessageSent={() => {
-                    setIsFirstVisit(false)
-                    setInitialPromptSubmitted(true)
-                  }}
-                  onConversationCreated={(newConversationId) => {
-                    // Update the current conversation with the real ID
-                    if (currentConversation?.isTemporary) {
-                      setCurrentConversation({
-                        ...currentConversation,
-                        id: newConversationId,
-                        isTemporary: false,
-                      })
-                      // Reload conversation history
-                      loadConversationHistory()
-                    } else if (!currentConversation) {
-                      // Create a new conversation state when none exists
-                      setCurrentConversation({
-                        id: newConversationId,
-                        title: 'New Conversation',
-                        isLoading: false,
-                        activeAgent: activeAgent,
-                        isTemporary: false,
-                        metadata: {
-                          primaryAgent: activeAgent,
-                          agentsUsed: [activeAgent],
-                          lastAgent: activeAgent
+                      projectId={projectId || ''}
+                      conversationId={currentConversation?.id}
+                      onApplyCode={handleApplyCode}
+                      className="flex-1"
+                      activeAgent={currentConversation?.activeAgent || activeAgent}
+                      onAgentChange={updateActiveAgent}
+                      conversationTitle={currentConversation?.title}
+                      onNewConversation={() => createNewConversation(undefined, undefined, true)}
+                      onToggleHistory={() => setShowHistory(!showHistory)}
+                      isHistoryOpen={showHistory}
+                      initialMessage={isFirstVisit && initialPromptRef.current ? initialPromptRef.current : undefined}
+                      projectContext={project ? {
+                        id: project.id,
+                        name: project.name || project.title || 'Untitled Project',
+                        description: project.description,
+                        template: project.template_type || project.template,
+                        initialPrompt: initialPromptRef.current || undefined
+                      } : undefined}
+                      onInitialMessageSent={() => {
+                        setIsFirstVisit(false)
+                        setInitialPromptSubmitted(true)
+                      }}
+                      onConversationCreated={(newConversationId) => {
+                        // Update the current conversation with the real ID
+                        if (currentConversation?.isTemporary) {
+                          setCurrentConversation({
+                            ...currentConversation,
+                            id: newConversationId,
+                            isTemporary: false,
+                          })
+                          // Reload conversation history
+                          loadConversationHistory()
+                        } else if (!currentConversation) {
+                          // Create a new conversation state when none exists
+                          setCurrentConversation({
+                            id: newConversationId,
+                            title: 'New Conversation',
+                            isLoading: false,
+                            activeAgent: activeAgent,
+                            isTemporary: false,
+                            metadata: {
+                              primaryAgent: activeAgent,
+                              agentsUsed: [activeAgent],
+                              lastAgent: activeAgent
+                            }
+                          })
+                          loadConversationHistory()
                         }
-                      })
-                      loadConversationHistory()
-                    }
-                  }}
-                  onTitleGenerated={(generatedTitle) => {
-                    // Update the conversation title with the AI-generated title
-                    if (currentConversation) {
-                      setCurrentConversation(prev => prev ? {
-                        ...prev,
-                        title: generatedTitle
-                      } : null)
-                      // Also update in conversation history if it exists
-                      setConversationHistory(prev => 
-                        prev.map(conv => 
-                          conv.id === currentConversation.id 
-                            ? { ...conv, title: generatedTitle } 
-                            : conv
-                        )
-                      )
-                    }
-                  }}
-                  onConversationTitleUpdated={(updatedTitle) => {
-                    // Update the conversation title when manually renamed
-                    if (currentConversation) {
-                      setCurrentConversation(prev => prev ? {
-                        ...prev,
-                        title: updatedTitle
-                      } : null)
-                      // Also update in conversation history if it exists
-                      setConversationHistory(prev => 
-                        prev.map(conv => 
-                          conv.id === currentConversation.id 
-                            ? { ...conv, title: updatedTitle } 
-                            : conv
-                        )
-                      )
-                    }
-                  }}
+                      }}
+                      onTitleGenerated={(generatedTitle) => {
+                        // Update the conversation title with the AI-generated title
+                        if (currentConversation) {
+                          setCurrentConversation(prev => prev ? {
+                            ...prev,
+                            title: generatedTitle
+                          } : null)
+                          // Also update in conversation history if it exists
+                          setConversationHistory(prev => 
+                            prev.map(conv => 
+                              conv.id === currentConversation.id 
+                                ? { ...conv, title: generatedTitle } 
+                                : conv
+                            )
+                          )
+                        }
+                      }}
+                      onConversationTitleUpdated={(updatedTitle) => {
+                        // Update the conversation title when manually renamed
+                        if (currentConversation) {
+                          setCurrentConversation(prev => prev ? {
+                            ...prev,
+                            title: updatedTitle
+                          } : null)
+                          // Also update in conversation history if it exists
+                          setConversationHistory(prev => 
+                            prev.map(conv => 
+                              conv.id === currentConversation.id 
+                                ? { ...conv, title: updatedTitle } 
+                                : conv
+                            )
+                          )
+                        }
+                      }}
                     />
                   </motion.div>
                 )}
@@ -586,49 +657,49 @@ export function ProjectDesign() {
           </div>
         </ResizablePanel>
 
-          <ResizableHandle withHandle />
+        <ResizableHandle withHandle />
 
-          {/* Right Panel - Agents List or History */}
-          <ResizablePanel defaultSize={35} minSize={25}>
-            <div className="h-full p-2">
-              <Card className="h-full flex flex-col bg-transparent border-gray-300 dark:border-gray-700/50">
-                <CardHeader className="p-4 pl-5 border-b border-gray-300 dark:border-gray-700/50">
-                  <AnimatePresence mode="wait">
-                    <motion.div 
-                      key={showHistory ? 'history' : 'agents'}
-                      className="flex items-center gap-2"
-                      initial={{ opacity: 0, x: showHistory ? 10 : -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: showHistory ? -10 : 10 }}
-                      transition={{ duration: 0.2, ease: "easeInOut" }}
-                    >
-                      {showHistory ? (
-                        <>
-                          <History className="w-5 h-5" />
-                          <CardTitle className="text-lg">Chat History</CardTitle>
-                        </>
-                      ) : (
-                        <>
-                          <Users className="w-5 h-5" />
-                          <CardTitle className="text-lg">AI Agents</CardTitle>
-                        </>
-                      )}
-                    </motion.div>
-                  </AnimatePresence>
-                </CardHeader>
-                <CardContent className="p-4 flex-1 overflow-y-auto">
-                  <AnimatePresence mode="wait">
+        {/* Right Panel - Agents List or History */}
+        <ResizablePanel defaultSize={35} minSize={25}>
+          <div className="h-full p-2">
+            <Card className="h-full flex flex-col bg-transparent border-gray-300 dark:border-gray-700/50">
+              <CardHeader className="p-4 pl-5 border-b border-gray-300 dark:border-gray-700/50">
+                <AnimatePresence mode="wait">
+                  <motion.div 
+                    key={showHistory ? 'history' : 'agents'}
+                    className="flex items-center gap-2"
+                    initial={{ opacity: 0, x: showHistory ? 10 : -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: showHistory ? -10 : 10 }}
+                    transition={{ duration: 0.2, ease: "easeInOut" }}
+                  >
                     {showHistory ? (
-                      // Conversation History View
-                      <motion.div 
-                        key="history-content"
-                        className="space-y-2"
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -20 }}
-                        transition={{ duration: 0.25, ease: "easeInOut" }}
-                      >
-                        {conversationHistory.length === 0 ? (
+                      <>
+                        <History className="w-5 h-5" />
+                        <CardTitle className="text-lg">Chat History</CardTitle>
+                      </>
+                    ) : (
+                      <>
+                        <Users className="w-5 h-5" />
+                        <CardTitle className="text-lg">AI Agents</CardTitle>
+                      </>
+                    )}
+                  </motion.div>
+                </AnimatePresence>
+              </CardHeader>
+              <CardContent className="p-4 flex-1 overflow-y-auto">
+                <AnimatePresence mode="wait">
+                  {showHistory ? (
+                    // Conversation History View
+                    <motion.div 
+                      key="history-content"
+                      className="space-y-2"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      transition={{ duration: 0.25, ease: "easeInOut" }}
+                    >
+                      {conversationHistory.length === 0 ? (
                         <div className="text-center py-8">
                           <History className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
                           <p className="text-sm text-muted-foreground">No conversation history yet</p>
@@ -780,18 +851,18 @@ export function ProjectDesign() {
                           )
                         })
                       )}
-                      </motion.div>
-                    ) : (
-                      // AI Agents View
-                      <motion.div 
-                        key="agents-content"
-                        className="space-y-3"
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 20 }}
-                        transition={{ duration: 0.25, ease: "easeInOut" }}
-                      >
-                        {/* Project Manager */}
+                    </motion.div>
+                  ) : (
+                    // AI Agents View
+                    <motion.div 
+                      key="agents-content"
+                      className="space-y-3"
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 20 }}
+                      transition={{ duration: 0.25, ease: "easeInOut" }}
+                    >
+                      {/* Project Manager */}
                       <motion.div 
                         className="space-y-2"
                         initial={{ opacity: 0, y: 10 }}
@@ -907,72 +978,96 @@ export function ProjectDesign() {
                           </div>
                         </div>
                       </motion.div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </CardContent>
-                {/* Card Footer with View PRD and Build Buttons */}
-                {!showHistory && activeAgent === 'project_manager' && (
-                  <CardFooter className="p-4 border-t border-gray-300 dark:border-gray-700/50">
-                    <div className="flex gap-2 w-full">
-                      <Button
-                        variant={showPRD ? "default" : "outline"}
-                        size="sm"
-                        className="flex-1"
-                        onClick={() => setShowPRD(!showPRD)}
-                      >
-                        <FileText className="w-4 h-4 mr-2" />
-                        {showPRD ? 'Show Chat' : 'View PRD'}
-                        {hasPRD && !showPRD && (
-                          <div className="ml-auto w-2 h-2 rounded-full bg-green-500" />
-                        )}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
-                        disabled={true}
-                      >
-                        <Code2 className="w-4 h-4 mr-2" />
-                        Build
-                      </Button>
-                    </div>
-                  </CardFooter>
-                )}
-              </Card>
-            </div>
-          </ResizablePanel>
-        </ResizablePanelGroup>
-        
-        {/* Delete Confirmation Dialog */}
-        <Dialog open={!!deletingConversationId} onOpenChange={(open) => !open && setDeletingConversationId(null)}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Delete Conversation</DialogTitle>
-              <DialogDescription>
-                Are you sure you want to delete this conversation? This action cannot be undone and will permanently delete all messages in this conversation.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setDeletingConversationId(null)}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={() => {
-                  if (deletingConversationId) {
-                    handleConversationDelete(deletingConversationId)
-                  }
-                }}
-              >
-                Delete
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </CardContent>
+              
+              {/* Card Footer with Action Buttons */}
+              {!showHistory && activeAgent === 'project_manager' && (
+                <CardFooter className="p-4 border-t border-gray-300 dark:border-gray-700/50 flex flex-col gap-3">
+                  {/* Action Buttons */}
+                  <div className="flex gap-2 w-full">
+                    <SupabaseConnectButton
+                      connectionStatus={supabaseConnection.connectionStatus}
+                      isHealthy={supabaseConnection.isHealthy}
+                      onClick={() => setShowSupabaseManager(!showSupabaseManager)}
+                      className="flex-1"
+                      size="sm"
+                      variant="outline"
+                      isShowingSupabaseManager={showSupabaseManager}
+                    />
+                    <Button
+                      variant={showPRD ? "default" : "outline"}
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => setShowPRD(!showPRD)}
+                    >
+                      <FileText className="w-4 h-4 mr-2" />
+                      {showPRD ? 'Chat' : 'PRD'}
+                      {hasPRD && !showPRD && (
+                        <div className="ml-auto w-2 h-2 rounded-full bg-green-500" />
+                      )}
+                    </Button>
+                    <Button
+                      variant={isBuildReady ? "default" : "outline"}
+                      size="sm"
+                      className="flex-1"
+                      disabled={!isBuildReady}
+                      onClick={handleBuildClick}
+                    >
+                      <Code2 className="w-4 h-4 mr-2" />
+                      Build
+                    </Button>
+                  </div>
+                  
+                </CardFooter>
+              )}
+            </Card>
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
+      
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deletingConversationId} onOpenChange={(open) => !open && setDeletingConversationId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Conversation</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this conversation? This action cannot be undone and will permanently delete all messages in this conversation.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeletingConversationId(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (deletingConversationId) {
+                  handleConversationDelete(deletingConversationId)
+                }
+              }}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+  )
+}
+
+// Main component with ProjectProvider wrapper
+export function ProjectDesign() {
+  const { id: projectId } = useParams<{ id: string }>()
+  
+  return (
+    <ProjectProvider projectId={projectId}>
+      <ProjectDesignContent />
+    </ProjectProvider>
   )
 }

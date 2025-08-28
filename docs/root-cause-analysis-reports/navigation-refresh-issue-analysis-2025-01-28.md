@@ -35,8 +35,8 @@ Both routes are properly configured within the same authenticated layout structu
 ### 2. Context Provider Mismatch
 **Critical Finding:** The two pages use different React Context providers:
 
-#### Project Design Page (`ProjectDesignWithSupabase.tsx`)
-- **File:** `frontend/src/pages/ProjectDesignWithSupabase.tsx` (Line 1069)
+#### Project Design Page (`ProjectDesign.tsx`)
+- **File:** `frontend/src/pages/ProjectDesign.tsx` (Line 1069)
 - **Provider:** `ProjectProvider` from `frontend/src/contexts/ProjectContext.tsx`
 - **Purpose:** Manages project data and Supabase connection state
 
@@ -94,11 +94,11 @@ Both routes are properly configured within the same authenticated layout structu
 | Component | File | Lines | Issue |
 |-----------|------|-------|--------|
 | Route Configuration | `frontend/src/App.tsx` | 323-324 | Properly configured |
-| Project Design Provider | `frontend/src/pages/ProjectDesignWithSupabase.tsx` | 1069 | Uses ProjectProvider |
+| Project Design Provider | `frontend/src/pages/ProjectDesign.tsx` | 1069 | Uses ProjectProvider |
 | Project Editor Provider | `frontend/src/pages/ProjectEditor.tsx` | 395 | Uses SecurityProvider |
 | ProjectProvider | `frontend/src/contexts/ProjectContext.tsx` | 57-174 | Manages project/Supabase state |
 | SecurityProvider | `frontend/src/components/security/SecurityProvider.tsx` | 26-223 | Manages security state |
-| Heavy Initialization | `frontend/src/pages/ProjectDesignWithSupabase.tsx` | 367-438 | Multiple DB queries on mount |
+| Heavy Initialization | `frontend/src/pages/ProjectDesign.tsx` | 367-438 | Multiple DB queries on mount |
 | Store Conflicts | `frontend/src/stores/useProjectEditorStore.ts` | 71-267 | Different initialization logic |
 
 ### Navigation Implementation

@@ -95,7 +95,7 @@ interface UnifiedProjectContextType {
 
 ### 1.2 Update Project Design Component
 
-**File:** `frontend/src/pages/ProjectDesignWithSupabase.tsx`
+**File:** `frontend/src/pages/ProjectDesign.tsx`
 
 **Changes Required:**
 
@@ -227,7 +227,7 @@ const setCachedProjectData = (projectId: string, data: any) => {
 
 ### 2.2 Optimize Heavy Initialization
 
-**File:** `frontend/src/pages/ProjectDesignWithSupabase.tsx`
+**File:** `frontend/src/pages/ProjectDesign.tsx`
 
 **Lines 367-438:** Optimize loadProject function
 ```typescript
@@ -276,7 +276,7 @@ const loadProject = async () => {
 const handleViewPreload = (value: string) => {
   // Preload route components when hovering over navigation buttons
   if (value === 'design') {
-    import('@/pages/ProjectDesignWithSupabase');
+    import('@/pages/ProjectDesign');
   } else if (value === 'editor') {
     import('@/pages/ProjectEditor');
   }
@@ -294,7 +294,7 @@ const handleViewPreload = (value: string) => {
 
 ### 3.2 Lazy Component Loading
 
-**File:** `frontend/src/pages/ProjectDesignWithSupabase.tsx`
+**File:** `frontend/src/pages/ProjectDesign.tsx`
 
 **Lines 500-656:** Implement lazy loading for heavy components
 ```typescript
@@ -323,7 +323,7 @@ const LazySupabaseManager = lazy(() => import('@/components/supabase/EnhancedSup
 - [ ] Test context functionality in isolation
 
 ### Day 2: Component Integration  
-- [ ] Update ProjectDesignWithSupabase.tsx to use unified provider
+- [ ] Update ProjectDesign.tsx to use unified provider
 - [ ] Update ProjectEditor.tsx to use unified provider
 - [ ] Update dependent components and hooks
 - [ ] Test navigation behavior

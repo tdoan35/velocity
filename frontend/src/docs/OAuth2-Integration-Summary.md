@@ -138,7 +138,7 @@ This document summarizes the complete implementation of Supabase OAuth2 integrat
 ### 7. Integration Points
 
 #### Project Design Page:
-- Seamless integration with existing `ProjectDesignWithSupabase.tsx`
+- Seamless integration with existing `ProjectDesign.tsx`
 - Drop-in replacement for original connection manager
 - Backward compatibility with direct connections
 - Enhanced build readiness detection
