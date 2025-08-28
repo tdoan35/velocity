@@ -4,6 +4,7 @@ export { useEditorStore } from './useEditorStore'
 export { useFileSystemStore } from './useFileSystemStore'
 export { usePreferencesStore, usePreferences } from './usePreferencesStore'
 export { useAuthStore } from './useAuthStore'
+export { useProjectStore, useProject, useProjectSecurity, useSupabaseProject } from './useProjectStore'
 
 // Re-export types
 export type { 
@@ -23,6 +24,7 @@ import { useEditorStore } from './useEditorStore'
 import { useFileSystemStore } from './useFileSystemStore'
 import { usePreferencesStore } from './usePreferencesStore'
 import { useAuthStore } from './useAuthStore'
+import { useProjectStore } from './useProjectStore'
 
 // Helper to reset all stores (useful for testing or logout)
 export const resetAllStores = () => {
@@ -61,6 +63,7 @@ if (import.meta.env.DEV) {
     fileSystem: useFileSystemStore,
     preferences: usePreferencesStore,
     auth: useAuthStore,
+    project: useProjectStore,
   }
   
   console.log('🔧 Zustand stores exposed to window.__stores for debugging')

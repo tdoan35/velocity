@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useSecurity } from '../contexts/UnifiedProjectContext';
+import { useProjectSecurityContext } from '../contexts/ProjectContext';
 import { toast } from 'sonner';
 import type { SecurityViolation } from '../services/securityService';
 
@@ -36,7 +36,7 @@ export function useSecurityMonitoring(options: SecurityMonitoringOptions = {}) {
     validateDatabaseSecurity,
     validateAPIEndpoint,
     validateFileUpload
-  } = useSecurity();
+  } = useProjectSecurityContext();
 
   const [monitoringState, setMonitoringState] = useState<SecurityMonitoringState>({
     isMonitoring: false,

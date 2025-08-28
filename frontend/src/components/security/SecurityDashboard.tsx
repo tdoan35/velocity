@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Shield, ShieldAlert, ShieldCheck, ShieldX, AlertTriangle, TrendingUp, Lock, Unlock, Settings, RefreshCw } from 'lucide-react';
-import { useSecurity } from '../../contexts/UnifiedProjectContext';
+import { useProjectSecurityContext } from '../../contexts/ProjectContext';
 import { SecurityDashboardSkeleton } from '../ui/skeleton-loader';
 import { SecurityScanner } from './SecurityScanner';
 
@@ -22,7 +22,7 @@ export function SecurityDashboard({ projectId, className }: SecurityDashboardPro
     enableSecurity,
     disableSecurity,
     updateConfig
-  } = useSecurity();
+  } = useProjectSecurityContext();
   
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   

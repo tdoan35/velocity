@@ -15,7 +15,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/useAuthStore";
-import { useAppStore } from "@/stores/useAppStore";
+import { useProjectContext } from "@/contexts/ProjectContext";
 import { ChevronRight, FolderOpen, MoreHorizontal, Edit, Trash2 } from "lucide-react";
 import { Navbar } from "./navigation";
 import {
@@ -40,7 +40,7 @@ export function AuthenticatedLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuthStore();
-  const { currentProject, projects, setProjects, updateProject, deleteProject } = useAppStore();
+  const { currentProject, projects, setProjects, updateProject, deleteProject } = useProjectContext();
   const [pinned, setPinned] = useState(false);
   const [open, setOpen] = useState(pinned);
   const [mounted, setMounted] = useState(false);

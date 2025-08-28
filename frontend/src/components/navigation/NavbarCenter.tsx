@@ -10,7 +10,7 @@ import {
 } from '../ui/popover'
 import { Edit, Check } from 'lucide-react'
 import { projectService } from '@/services/projectService'
-import { useAppStore } from '@/stores/useAppStore'
+import { useCurrentProject } from '@/contexts/ProjectContext'
 
 interface NavbarCenterProps {
   isAuthenticated?: boolean
@@ -19,7 +19,7 @@ interface NavbarCenterProps {
 
 export function NavbarCenter({ isAuthenticated, showProjectTitle }: NavbarCenterProps) {
   const location = useLocation()
-  const { currentProject, setCurrentProject } = useAppStore()
+  const { currentProject, setCurrentProject } = useCurrentProject()
   const [isEditingProjectName, setIsEditingProjectName] = useState(false)
   const [projectNameInput, setProjectNameInput] = useState("")
   const [isSavingProjectName, setIsSavingProjectName] = useState(false)
@@ -64,6 +64,7 @@ export function NavbarCenter({ isAuthenticated, showProjectTitle }: NavbarCenter
       }, 100)
     }
   }
+
 
   // Show project title when authenticated and on a project page
   if (isAuthenticated && isProjectPage && currentProject && showProjectTitle) {

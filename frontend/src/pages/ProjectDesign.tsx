@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { motion, AnimatePresence } from 'motion/react'
 import { cn } from '@/lib/utils'
-import { useUnifiedProjectContext } from '@/contexts/UnifiedProjectContext'
+import { useProjectContext } from '@/contexts/ProjectContext'
 import { EnhancedSupabaseConnectionManager } from '@/components/supabase/EnhancedSupabaseConnectionManager'
 import { SupabaseConnectButton } from '@/components/supabase/SupabaseConnectButton'
 import { 
@@ -77,13 +77,13 @@ function ProjectDesignContent() {
   const { id: projectId } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { user, isAuthenticated, isLoading: authLoading } = useAuthStore()
-  const { setCurrentProject } = useAppStore()
+  // No longer need to manually sync - ProjectContext handles this automatically
   const { toast } = useToast()
   const { 
     supabaseConnection, 
     isBuildReady,
     testSupabaseConnection 
-  } = useUnifiedProjectContext()
+  } = useProjectContext()
   
   const [project, setProject] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -358,10 +358,7 @@ function ProjectDesignContent() {
 
     loadProject()
     
-    // Clear current project when component unmounts
-    return () => {
-      setCurrentProject(null)
-    }
+    // ProjectContext automatically handles currentProject cleanup on route change
   }, [user, isAuthenticated, authLoading, projectId, navigate])
 
   const loadProject = async () => {
@@ -393,16 +390,7 @@ function ProjectDesignContent() {
         initialPromptRef.current = initialPrompt
       }
       
-      // Set the current project in the app store
-      setCurrentProject({
-        id: loadedProject.id,
-        name: loadedProject.name || loadedProject.title || 'Untitled Project',
-        description: loadedProject.description || '',
-        createdAt: new Date(loadedProject.created_at || Date.now()),
-        updatedAt: new Date(loadedProject.updated_at || Date.now()),
-        template: loadedProject.template_type || loadedProject.template || 'react-native',
-        status: loadedProject.status || 'ready'
-      })
+      // ProjectContext automatically syncs currentProject based on route changes
       
       // Check for existing conversation
       const { conversation: existingConv } = await conversationService.getConversationByProjectId(projectId)

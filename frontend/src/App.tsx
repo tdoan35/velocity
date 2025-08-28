@@ -2,10 +2,9 @@ import React, { useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { initializeStoreSubscriptions } from './stores'
 import { useAuthStore } from './stores/useAuthStore'
-import { useAppStore } from './stores/useAppStore'
 import { authService } from './services/auth'
 import { projectService } from './services/projectService'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { AuroraBackground } from './components/ui/aurora-background'
 import { AnimatedTooltip } from './components/ui/animated-tooltip'
 import { EnhancedTextarea } from './components/ui/enhanced-textarea'
@@ -30,7 +29,7 @@ import { AuthenticatedLayout } from './components/AuthenticatedLayout'
 import { Dashboard } from './pages/Dashboard'
 import { ProjectDesign } from './pages/ProjectDesign'
 import { ProjectEditor } from './pages/ProjectEditor'
-import { UnifiedProjectProvider } from './contexts/UnifiedProjectContext'
+import { ProjectProvider, useProjectContext } from './contexts/ProjectContext'
 import { NavigationTracker } from './components/navigation/NavigationTracker'
 import { FullStackPreviewPanelTest } from './components/preview/FullStackPreviewPanelTest'
 import { EnhancedEditorContainerTest } from './components/editor/EnhancedEditorContainerTest'
@@ -113,7 +112,7 @@ function HomePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
   const [isHovering, setIsHovering] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { isAuthenticated } = useAuthStore()
-  const { addProject } = useAppStore()
+  const { addProject } = useProjectContext()
   const navigate = useNavigate()
 
   const handleSubmit = async () => {
@@ -272,15 +271,11 @@ function HomePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
   )
 }
 
-// Wrapper component for project routes that provides UnifiedProjectProvider and NavigationTracker
+// Wrapper component for project routes that provides NavigationTracker
 function ProjectRouteWrapper({ children }: { children: React.ReactNode }) {
-  const { id } = useParams<{ id: string }>();
-  
   return (
     <NavigationTracker>
-      <UnifiedProjectProvider projectId={id}>
-        {children}
-      </UnifiedProjectProvider>
+      {children}
     </NavigationTracker>
   );
 }
@@ -308,28 +303,29 @@ function App() {
 
   return (
     <Router>
-      <div>
-        <Routes>
-          {/* Auth callback route */}
-          <Route path="/auth/callback" element={<AuthCallback />} />
-          
-          
-          {/* New PRD Editor Demo */}
-          <Route path="/prd-editor" element={<PRDEditorDemo />} />
-          
-          {/* Main routes without navigation */}
-          <Route path="/snack/:projectId" element={<SnackEditor />} />
-          
-          {/* Authenticated routes with sidebar */}
-          <Route path="/" element={
-            isAuthenticated ? (
-              <AuroraBackground showRadialGradient={false}>
-                <AuthenticatedLayout />
-              </AuroraBackground>
-            ) : (
-              <UnauthenticatedLayout />
-            )
-          }>
+      <ProjectProvider> {/* Lifted to app level */}
+        <div>
+          <Routes>
+            {/* Auth callback route */}
+            <Route path="/auth/callback" element={<AuthCallback />} />
+            
+            
+            {/* New PRD Editor Demo */}
+            <Route path="/prd-editor" element={<PRDEditorDemo />} />
+            
+            {/* Main routes without navigation */}
+            <Route path="/snack/:projectId" element={<SnackEditor />} />
+            
+            {/* Authenticated routes with sidebar */}
+            <Route path="/" element={
+              isAuthenticated ? (
+                <AuroraBackground showRadialGradient={false}>
+                  <AuthenticatedLayout />
+                </AuroraBackground>
+              ) : (
+                <UnauthenticatedLayout />
+              )
+            }>
             {isAuthenticated && (
               <>
                 <Route index element={<HomePage />} />
@@ -432,8 +428,9 @@ function App() {
               </div>
             </>
           } />
-        </Routes>
-      </div>
+          </Routes>
+        </div>
+      </ProjectProvider> {/* Close ProjectProvider wrapper */}
     </Router>
   )
 }

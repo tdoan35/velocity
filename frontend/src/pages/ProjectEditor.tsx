@@ -24,7 +24,7 @@ import { PreviewTabsPanel } from '../components/preview/PreviewTabsPanel';
 import { FullStackAIAssistant } from '../components/ai/FullStackAIAssistant';
 import { EnhancedChatInterface } from '@/components/chat/enhanced-chat-interface';
 import { VerticalCollapsiblePanel } from '../components/layout/vertical-collapsible-panel';
-import { useUnifiedProjectContext } from '../contexts/UnifiedProjectContext';
+import { useProjectContext } from '../contexts/ProjectContext';
 import { SecurityDashboard } from '../components/security/SecurityDashboard';
 import { useFileSecurityMonitoring } from '../hooks/useSecurityMonitoring';
 import { PerformanceDashboard } from '../components/performance/PerformanceDashboard';
@@ -43,8 +43,8 @@ function ProjectEditorCore({
   skipInitialization?: boolean;
 }) {
   const { user } = useAuthStore();
-  const { setCurrentProject } = useAppStore();
-  const { security } = useUnifiedProjectContext();
+  // No longer need to manually sync - ProjectContext handles this automatically
+  const { security } = useProjectContext();
   const { activeThreats, isSecurityEnabled } = security;
   const securityMonitoring = useFileSecurityMonitoring();
   const performanceMonitoring = usePerformanceMonitoring(true);
@@ -84,20 +84,7 @@ function ProjectEditorCore({
     }
   }, [projectId, user, initializeProject, isInitialized, skipInitialization]);
 
-  // Set current project in app store when project data is available
-  useEffect(() => {
-    if (projectData && projectId) {
-      setCurrentProject({
-        id: projectId,
-        name: projectData.name || 'Untitled Project',
-        description: projectData.description || '',
-        createdAt: new Date(projectData.created_at || Date.now()),
-        updatedAt: new Date(projectData.updated_at || Date.now()),
-        template: 'react-native',
-        status: 'ready'
-      });
-    }
-  }, [projectData, projectId, setCurrentProject]);
+  // ProjectContext automatically handles currentProject syncing based on route changes
 
   // Redirect if not authenticated (only if enabled)
   if (showAuthRedirect && !user) {

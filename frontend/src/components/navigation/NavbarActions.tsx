@@ -1,7 +1,7 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Edit, Palette } from 'lucide-react'
 import { useAuthStore } from '@/stores/useAuthStore'
-import { useAppStore } from '@/stores/useAppStore'
+import { useCurrentProject } from '@/contexts/ProjectContext'
 import { ThemeToggle } from './ThemeToggle'
 import { NavbarAuth } from './NavbarAuth'
 import { NavbarMenu } from './NavbarMenu'
@@ -17,7 +17,7 @@ export function NavbarActions({ onOpenAuthModal, onLogout, showDemoMenu = false 
   const navigate = useNavigate()
   const location = useLocation()
   const { isAuthenticated } = useAuthStore()
-  const { currentProject } = useAppStore()
+  const { currentProject } = useCurrentProject()
   
   const isProjectPage = location.pathname.startsWith('/project/')
   const isEditorPage = location.pathname.includes('/editor')
