@@ -1,9 +1,10 @@
-import { FullStackPreviewPanel } from './FullStackPreviewPanel';
-import { useProjectEditorStore } from '../../stores/useProjectEditorStore';
-import { useEffect } from 'react';
+import type { FileTree } from '../types/editor';
 
-// Mock data for testing
-const mockFrontendFiles = {
+/**
+ * Simple fallback files for Snack preview when no project files exist
+ * These files are minimal and designed to work immediately in Snack without complex dependencies
+ */
+export const getSnackFallbackFiles = (projectName: string = 'Velocity App'): FileTree => ({
   'frontend/App.tsx': {
     path: 'frontend/App.tsx',
     content: `import React, { useState } from 'react';
@@ -11,26 +12,32 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-nati
 
 export default function App() {
   const [count, setCount] = useState(0);
-  const [message, setMessage] = useState('Welcome to Velocity!');
+  const [message, setMessage] = useState('Welcome to ${projectName}!');
 
   const handlePress = () => {
-    setCount(count + 1);
-    if (count > 0 && count % 5 === 0) {
-      setMessage(\`Great job! You've tapped \${count + 1} times!\`);
-    } else {
-      setMessage('Keep tapping to see what happens!');
+    const newCount = count + 1;
+    setCount(newCount);
+    
+    if (newCount === 1) {
+      setMessage('Great! Tap more to see what happens...');
+    } else if (newCount === 5) {
+      setMessage('You\\'re on fire! 🔥');
+    } else if (newCount === 10) {
+      setMessage('Amazing! You\\'ve tapped 10 times! ⭐');
+    } else if (newCount > 10) {
+      setMessage(\`Incredible! \${newCount} taps and counting! 🚀\`);
     }
   };
 
   const resetCounter = () => {
     setCount(0);
-    setMessage('Welcome to Velocity!');
+    setMessage('Welcome to ${projectName}!');
   };
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>🚀 Velocity Test App</Text>
+        <Text style={styles.title}>🚀 ${projectName}</Text>
         <Text style={styles.subtitle}>Live React Native Preview</Text>
       </View>
 
@@ -56,8 +63,17 @@ export default function App() {
 
         <View style={styles.infoBox}>
           <Text style={styles.infoText}>
-            This is a test of the Velocity preview system. 
-            State updates, styling, and interactions all work in real-time!
+            This is your live preview! Any changes you make to the code will appear here instantly.
+          </Text>
+        </View>
+        
+        <View style={styles.features}>
+          <Text style={styles.featuresTitle}>Ready to build?</Text>
+          <Text style={styles.featuresText}>
+            • Add components and screens
+            • Connect to APIs
+            • Style with custom designs
+            • Deploy to app stores
           </Text>
         </View>
       </View>
@@ -165,6 +181,7 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: '#3b82f6',
     marginHorizontal: 16,
+    marginBottom: 24,
   },
   infoText: {
     fontSize: 14,
@@ -172,81 +189,28 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: 'center',
   },
+  features: {
+    backgroundColor: '#f0fdf4',
+    padding: 20,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#22c55e',
+    maxWidth: 300,
+  },
+  featuresTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#15803d',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  featuresText: {
+    fontSize: 14,
+    color: '#166534',
+    lineHeight: 22,
+  },
 });`,
     type: 'typescript',
     lastModified: new Date(),
   },
-  'frontend/package.json': {
-    path: 'frontend/package.json',
-    content: JSON.stringify({
-      name: 'velocity-test-app',
-      version: '1.0.0',
-      main: 'App.tsx',
-      dependencies: {
-        'expo': '~52.0.0',
-        'react': '18.2.0',
-        'react-native': '0.72.0',
-      },
-    }, null, 2),
-    type: 'json',
-    lastModified: new Date(),
-  },
-};
-
-const mockBackendFiles = {
-  'backend/index.ts': {
-    path: 'backend/index.ts',
-    content: `import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-
-serve(async (req) => {
-  return new Response(JSON.stringify({ message: 'Hello from backend!' }), {
-    headers: { 'Content-Type': 'application/json' },
-  });
-});`,
-    type: 'typescript',
-    lastModified: new Date(),
-  },
-};
-
-export function FullStackPreviewPanelTest() {
-  // Mock the store state
-  useEffect(() => {
-    const store = useProjectEditorStore.getState();
-    
-    // Set up mock data
-    useProjectEditorStore.setState({
-      projectId: 'test-project-123',
-      projectData: {
-        id: 'test-project-123',
-        name: 'Test Project',
-        description: 'A test project for preview panel',
-        user_id: 'test-user',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        prd_sections: [],
-      },
-      frontendFiles: mockFrontendFiles,
-      backendFiles: mockBackendFiles,
-      buildStatus: 'success',
-      isSupabaseConnected: true,
-      deploymentUrl: 'https://snack.expo.dev/@test/velocity-test',
-      isLoading: false,
-      error: null,
-    });
-
-    // Cleanup function
-    return () => {
-      store.reset();
-    };
-  }, []);
-
-  return (
-    <div className="min-h-screen w-full bg-background p-8 pt-16">
-      <div className="w-full max-w-6xl mx-auto border border-border rounded-lg overflow-auto" style={{ height: 'calc(100vh - 8rem)' }}>
-        <FullStackPreviewPanel 
-          projectId="test-project-123" 
-        />
-      </div>
-    </div>
-  );
-}
+});

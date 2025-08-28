@@ -6,6 +6,7 @@ import { cn } from '../../lib/utils';
 interface VerticalCollapsiblePanelProps {
   children: React.ReactNode;
   title?: string;
+  titleComponent?: React.ReactNode;
   isOpen: boolean;
   onToggle: (isOpen: boolean) => void;
   className?: string;
@@ -15,16 +16,17 @@ interface VerticalCollapsiblePanelProps {
 export function VerticalCollapsiblePanel({
   children,
   title = 'Panel',
+  titleComponent,
   isOpen,
   onToggle,
   className,
   defaultHeight = 320,
 }: VerticalCollapsiblePanelProps) {
   return (
-    <div className={cn('flex flex-col bg-card', className)}>
+    <div className={cn('flex flex-col bg-transparent', className)}>
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b">
-        <h3 className="font-medium text-sm">{title}</h3>
+      <div className="flex items-center justify-between p-2">
+        {titleComponent ? titleComponent : <h3 className="font-medium text-sm">{title}</h3>}
         <Button
           variant="ghost"
           size="sm"

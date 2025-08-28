@@ -293,6 +293,511 @@ const styles = StyleSheet.create({
     type: 'json',
     lastModified: new Date(),
   },
+
+  'frontend/lib/supabase.ts': {
+    path: 'frontend/lib/supabase.ts',
+    content: `import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = 'https://your-project.supabase.co';
+const supabaseAnonKey = 'your-anon-key';
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);`,
+    type: 'typescript',
+    lastModified: new Date(),
+  },
+
+  'frontend/screens/CartScreen.tsx': {
+    path: 'frontend/screens/CartScreen.tsx',
+    content: `import React, { useState, useEffect } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { supabase } from '../lib/supabase';
+
+interface CartItem {
+  id: string;
+  product_id: string;
+  quantity: number;
+  product: {
+    name: string;
+    price: number;
+    image_url: string;
+  };
+}
+
+export function CartScreen() {
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchCartItems();
+  }, []);
+
+  const fetchCartItems = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('cart')
+        .select(\`
+          *,
+          product:products(name, price, image_url)
+        \`)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      setCartItems(data || []);
+    } catch (error) {
+      console.error('Error fetching cart items:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateQuantity = async (itemId: string, newQuantity: number) => {
+    if (newQuantity === 0) {
+      removeItem(itemId);
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('cart')
+        .update({ quantity: newQuantity })
+        .eq('id', itemId);
+      
+      if (error) throw error;
+      fetchCartItems();
+    } catch (error) {
+      console.error('Error updating quantity:', error);
+    }
+  };
+
+  const removeItem = async (itemId: string) => {
+    try {
+      const { error } = await supabase
+        .from('cart')
+        .delete()
+        .eq('id', itemId);
+      
+      if (error) throw error;
+      fetchCartItems();
+    } catch (error) {
+      console.error('Error removing item:', error);
+    }
+  };
+
+  const getTotalPrice = () => {
+    return cartItems.reduce((total, item) => 
+      total + (item.product.price * item.quantity), 0
+    );
+  };
+
+  const renderCartItem = ({ item }: { item: CartItem }) => (
+    <View style={styles.cartItem}>
+      <View style={styles.itemInfo}>
+        <Text style={styles.itemName}>{item.product.name}</Text>
+        <Text style={styles.itemPrice}>$\{item.product.price.toFixed(2)}</Text>
+      </View>
+      <View style={styles.quantityControls}>
+        <TouchableOpacity 
+          style={styles.quantityButton}
+          onPress={() => updateQuantity(item.id, item.quantity - 1)}
+        >
+          <Text style={styles.quantityButtonText}>-</Text>
+        </TouchableOpacity>
+        <Text style={styles.quantityText}>{item.quantity}</Text>
+        <TouchableOpacity 
+          style={styles.quantityButton}
+          onPress={() => updateQuantity(item.id, item.quantity + 1)}
+        >
+          <Text style={styles.quantityButtonText}>+</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Loading cart...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      {cartItems.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>Your cart is empty</Text>
+        </View>
+      ) : (
+        <>
+          <FlatList
+            data={cartItems}
+            renderItem={renderCartItem}
+            keyExtractor={(item) => item.id}
+            style={styles.cartList}
+          />
+          <View style={styles.totalContainer}>
+            <Text style={styles.totalText}>Total: $\{getTotalPrice().toFixed(2)}</Text>
+            <TouchableOpacity style={styles.checkoutButton}>
+              <Text style={styles.checkoutText}>Checkout</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#6b7280',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 18,
+    color: '#6b7280',
+  },
+  cartList: {
+    flex: 1,
+    padding: 16,
+  },
+  cartItem: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  itemInfo: {
+    flex: 1,
+  },
+  itemName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1f2937',
+  },
+  itemPrice: {
+    fontSize: 14,
+    color: '#059669',
+    marginTop: 4,
+  },
+  quantityControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  quantityButton: {
+    backgroundColor: '#6366f1',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quantityButtonText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  quantityText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginHorizontal: 16,
+    color: '#1f2937',
+  },
+  totalContainer: {
+    backgroundColor: '#ffffff',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  totalText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1f2937',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  checkoutButton: {
+    backgroundColor: '#059669',
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  checkoutText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+});`,
+    type: 'typescript',
+    lastModified: new Date(),
+  },
+
+  'frontend/screens/ProfileScreen.tsx': {
+    path: 'frontend/screens/ProfileScreen.tsx',
+    content: `import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
+import { supabase } from '../lib/supabase';
+
+interface UserProfile {
+  id: string;
+  email: string;
+  full_name?: string;
+  avatar_url?: string;
+}
+
+export function ProfileScreen() {
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchUserProfile();
+  }, []);
+
+  const fetchUserProfile = async () => {
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      
+      if (error) throw error;
+      
+      if (user) {
+        setUser({
+          id: user.id,
+          email: user.email || '',
+          full_name: user.user_metadata?.full_name,
+          avatar_url: user.user_metadata?.avatar_url,
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      Alert.alert('Error', 'Failed to load profile');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signOut = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      
+      Alert.alert('Success', 'Signed out successfully');
+    } catch (error) {
+      console.error('Error signing out:', error);
+      Alert.alert('Error', 'Failed to sign out');
+    }
+  };
+
+  const handleSignOut = () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign Out', style: 'destructive', onPress: signOut },
+      ]
+    );
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Loading profile...</Text>
+      </View>
+    );
+  }
+
+  if (!user) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.signInContainer}>
+          <Text style={styles.signInText}>Please sign in to view your profile</Text>
+          <TouchableOpacity style={styles.signInButton}>
+            <Text style={styles.signInButtonText}>Sign In</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+      <View style={styles.profileHeader}>
+        <View style={styles.avatarContainer}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>
+              {user.full_name ? user.full_name.charAt(0).toUpperCase() : user.email.charAt(0).toUpperCase()}
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.userName}>{user.full_name || 'User'}</Text>
+        <Text style={styles.userEmail}>{user.email}</Text>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Account</Text>
+        
+        <TouchableOpacity style={styles.menuItem}>
+          <Text style={styles.menuItemText}>Edit Profile</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.menuItem}>
+          <Text style={styles.menuItemText}>Order History</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.menuItem}>
+          <Text style={styles.menuItemText}>Addresses</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.menuItem}>
+          <Text style={styles.menuItemText}>Payment Methods</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Support</Text>
+        
+        <TouchableOpacity style={styles.menuItem}>
+          <Text style={styles.menuItemText}>Help Center</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.menuItem}>
+          <Text style={styles.menuItemText}>Contact Us</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.menuItem}>
+          <Text style={styles.menuItemText}>Terms of Service</Text>
+        </TouchableOpacity>
+      </View>
+
+      <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
+        <Text style={styles.signOutText}>Sign Out</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+  contentContainer: {
+    padding: 16,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#6b7280',
+  },
+  signInContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  signInText: {
+    fontSize: 18,
+    color: '#6b7280',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  signInButton: {
+    backgroundColor: '#6366f1',
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    borderRadius: 8,
+  },
+  signInButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  profileHeader: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  avatarContainer: {
+    marginBottom: 16,
+  },
+  avatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#6366f1',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  userName: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1f2937',
+    marginBottom: 4,
+  },
+  userEmail: {
+    fontSize: 16,
+    color: '#6b7280',
+  },
+  section: {
+    marginBottom: 32,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1f2937',
+    marginBottom: 16,
+  },
+  menuItem: {
+    backgroundColor: '#ffffff',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  menuItemText: {
+    fontSize: 16,
+    color: '#1f2937',
+  },
+  signOutButton: {
+    backgroundColor: '#dc2626',
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  signOutText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});`,
+    type: 'typescript',
+    lastModified: new Date(),
+  },
 };
 
 const mockBackendFiles = {

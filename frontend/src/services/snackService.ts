@@ -1,4 +1,4 @@
-import { Snack, SnackOptions, SnackListenerSubscription, SnackSessionOptions } from 'snack-sdk';
+import { Snack, type SnackOptions, type SnackListenerSubscription } from 'snack-sdk';
 import { supabase } from '../lib/supabase';
 
 // Types
@@ -30,11 +30,11 @@ export interface SnackPreviewOptions {
 
 // Default configuration
 const DEFAULT_CONFIG: SnackServiceConfig = {
-  snackApiUrl: import.meta.env.VITE_SNACK_API_URL || 'https://exp.host',
-  snackagerUrl: import.meta.env.VITE_SNACKAGER_URL || 'https://snackager.expo.io',
-  webPlayerUrl: import.meta.env.VITE_WEB_PLAYER_URL || 'https://snack.expo.dev/embedded',
-  verbose: import.meta.env.DEV,
-  channel: import.meta.env.VITE_SNACK_CHANNEL || 'production',
+  snackApiUrl: (import.meta as any).env.VITE_SNACK_API_URL || 'https://exp.host',
+  snackagerUrl: (import.meta as any).env.VITE_SNACKAGER_URL || 'https://snackager.expo.io',
+  webPlayerUrl: (import.meta as any).env.VITE_WEB_PLAYER_URL || 'https://snack.expo.dev/embedded',
+  verbose: (import.meta as any).env.DEV,
+  channel: (import.meta as any).env.VITE_SNACK_CHANNEL || 'production',
 };
 
 export class SnackService {
@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
     };
 
     // Validate and sanitize the files input
-    let filesToUse = defaultFiles;
+    let filesToUse: Record<string, { type: string; contents: string }> = defaultFiles;
     
     if (options.files && Object.keys(options.files).length > 0) {
       // Validate that all files have the correct structure
@@ -130,13 +130,75 @@ const styles = StyleSheet.create({
       
     console.log('[SnackService] Files to use:', JSON.stringify(filesToUse, null, 2));
 
+    // Smart dependency detection - automatically detect required dependencies from code
+    const detectRequiredDependencies = (files: Record<string, { type: string; contents: string }>): Record<string, string> => {
+      const detected: Record<string, string> = {};
+      
+      for (const [path, file] of Object.entries(files)) {
+        const content = file.contents;
+        
+        // React Navigation dependencies
+        if (content.includes('@react-navigation/native')) {
+          detected['@react-navigation/native'] = '^6.1.7';
+        }
+        if (content.includes('@react-navigation/bottom-tabs')) {
+          detected['@react-navigation/bottom-tabs'] = '^6.5.8';
+        }
+        if (content.includes('@react-navigation/stack')) {
+          detected['@react-navigation/stack'] = '^6.3.16';
+        }
+        if (content.includes('@react-navigation/drawer')) {
+          detected['@react-navigation/drawer'] = '^6.6.2';
+        }
+        
+        // Expo Vector Icons
+        if (content.includes('@expo/vector-icons')) {
+          detected['@expo/vector-icons'] = '^13.0.0';
+        }
+        
+        // React Native elements and common libraries
+        if (content.includes('react-native-elements')) {
+          detected['react-native-elements'] = '^3.4.3';
+        }
+        if (content.includes('react-native-vector-icons')) {
+          detected['react-native-vector-icons'] = '^10.0.0';
+        }
+        
+        // State management
+        if (content.includes('@reduxjs/toolkit')) {
+          detected['@reduxjs/toolkit'] = '^1.9.5';
+          detected['react-redux'] = '^8.1.1';
+        }
+        
+        // Async storage
+        if (content.includes('@react-native-async-storage/async-storage')) {
+          detected['@react-native-async-storage/async-storage'] = '^1.19.0';
+        }
+        
+        // React Native Paper
+        if (content.includes('react-native-paper')) {
+          detected['react-native-paper'] = '^5.8.0';
+        }
+        
+        // Native Base
+        if (content.includes('native-base')) {
+          detected['native-base'] = '^3.4.28';
+        }
+      }
+      
+      console.log('[SnackService] Detected dependencies from code analysis:', detected);
+      return detected;
+    };
+
     // Minimal dependencies for React Native app to function properly
     // Using specific versions that are known to work with Expo SDK 52
-    const defaultDependencies = {
+    const defaultDependencies: Record<string, any> = {
       'expo': '~52.0.0',
       'react': '18.3.1',
-      'react-native': '0.76.2'
     };
+
+    // Detect additional dependencies from the code
+    const detectedDependencies = detectRequiredDependencies(filesToUse);
 
     // Create Snack options - according to official SDK docs
     // Pass webPreviewRef during construction if available
@@ -144,8 +206,8 @@ const styles = StyleSheet.create({
       name: options.name || 'Velocity Preview',
       description: options.description || 'Live preview of your React Native app',
       sdkVersion: '52.0.0',
-      files: filesToUse,
-      dependencies: { ...defaultDependencies, ...(options.dependencies || {}) },
+      files: filesToUse as any,
+      dependencies: { ...defaultDependencies, ...detectedDependencies, ...(options.dependencies || {}) },
       verbose: false,
       // Pass webPreviewRef if provided - this enables web preview functionality
       ...(webPreviewRef && { webPreviewRef }),
@@ -153,6 +215,7 @@ const styles = StyleSheet.create({
 
     console.log('[SnackService] About to create Snack with options:', snackOptions);
     console.log('[SnackService] Files being passed to Snack:', JSON.stringify(snackOptions.files, null, 2));
+    console.log('[SnackService] Final dependencies being used:', snackOptions.dependencies);
     
     let snack;
     try {
@@ -168,13 +231,12 @@ const styles = StyleSheet.create({
 
     // Listen for state changes
     subscriptions.push(
-      snack.addStateListener((state, prevState) => {
+      snack.addStateListener((state) => {
         console.log('[SnackService] State changed:', {
           webPreviewURL: state?.webPreviewURL,
           online: state?.online,
           url: state?.url,
           channel: state?.channel,
-          isOnline: state?.isOnline,
           state: state
         });
         
@@ -204,7 +266,7 @@ const styles = StyleSheet.create({
       console.log('[SnackService] Setting Snack online...');
       
       // Add error listener before going online to catch assertion errors
-      const errorSubscription = snack.addErrorListener?.((errors: any) => {
+      const errorSubscription = (snack as any).addErrorListener?.((errors: any) => {
         console.error('[SnackService] Snack SDK Errors:', errors);
         if (errors && errors.length > 0) {
           errors.forEach((error: any, index: number) => {
@@ -224,7 +286,13 @@ const styles = StyleSheet.create({
         subscriptions.push(errorSubscription);
       }
       
-      await snack.setOnline(true);
+      try {
+        await snack.setOnline(true);
+        console.log('[SnackService] Successfully set Snack online');
+      } catch (onlineError) {
+        console.error('[SnackService] Failed to set Snack online:', onlineError);
+        throw onlineError;
+      }
       
       // Try to request web preview after going online
       console.log('[SnackService] Requesting web preview...');
@@ -252,7 +320,6 @@ const styles = StyleSheet.create({
             online: state?.online,
             url: state?.url,
             channel: state?.channel,
-            isOnline: state?.isOnline,
             state: state
           });
         } catch (error) {
@@ -262,9 +329,9 @@ const styles = StyleSheet.create({
     } catch (error) {
       console.error('[SnackService] Failed to set Snack online:', error);
       console.error('[SnackService] Error details:', {
-        message: error?.message,
-        stack: error?.stack,
-        name: error?.name,
+        message: (error as any)?.message,
+        stack: (error as any)?.stack,
+        name: (error as any)?.name,
         error: error
       });
     }
@@ -387,8 +454,7 @@ const styles = StyleSheet.create({
         webPreviewURL: state?.webPreviewURL,
         online: state?.online,
         url: state?.url,
-        channel: state?.channel,
-        isOnline: state?.isOnline
+        channel: state?.channel
       });
       
       // The Snack SDK should provide webPreviewURL directly in the state
@@ -404,6 +470,14 @@ const styles = StyleSheet.create({
         const webUrl = state.url.includes('/web') ? state.url : `${state.url}/web`;
         console.log('[SnackService] Using URL from state for web preview:', webUrl);
         return webUrl;
+      }
+      
+      // Fallback: try to construct a web preview URL manually if we have a channel
+      const channel = (session.snack as any).getChannel?.();
+      if (channel && state?.online) {
+        const fallbackUrl = `${this.config.webPlayerUrl}/@snack/${channel}`;
+        console.log('[SnackService] Using fallback constructed URL:', fallbackUrl);
+        return fallbackUrl;
       }
       
       console.log('[SnackService] No webPreviewURL available yet, Snack may still be initializing');
@@ -541,7 +615,7 @@ const styles = StyleSheet.create({
     const now = new Date();
     const sessionsToRemove: string[] = [];
 
-    for (const [sessionId, session] of this.sessions) {
+    for (const [sessionId, session] of Array.from(this.sessions.entries())) {
       const inactiveTime = now.getTime() - session.lastActivity.getTime();
       if (inactiveTime > this.SESSION_TIMEOUT) {
         sessionsToRemove.push(sessionId);

@@ -69,7 +69,7 @@ export function EnhancedEditorContainer({ projectId, projectType, onFileSave, on
         language: 'typescript',
         theme: 'vs-dark',
         automaticLayout: true,
-        fontSize: 14,
+        fontSize: 12,
         minimap: { enabled: false },
         scrollBeyondLastLine: false,
         wordWrap: 'on',
@@ -262,18 +262,18 @@ export function EnhancedEditorContainer({ projectId, projectType, onFileSave, on
   }
 
   return (
-    <div className="h-full flex flex-col bg-card">
+    <div className="h-full flex flex-col bg-transparent">
       {/* Tabs */}
       <div className="border-b">
         <div className="flex items-center">
           <div className="flex-1 overflow-x-auto">
-            <Tabs value={activeFile || ''} onValueChange={openFile} className="w-full">
-              <TabsList className="h-10 p-0 bg-transparent">
+            <Tabs value={activeFile || ''} onValueChange={openFile} className="w-full ">
+              <TabsList className="h-8 p-0 bg-transparent">
                 {openTabs.map((filePath) => (
                   <TabsTrigger
                     key={filePath}
                     value={filePath}
-                    className="h-10 px-3 relative group data-[state=active]:bg-accent"
+                    className="h-8 px-3 relative group data-[state=active]:bg-accent"
                   >
                     <span className="text-sm truncate max-w-32">
                       {getFileDisplayName(filePath)}
@@ -294,27 +294,6 @@ export function EnhancedEditorContainer({ projectId, projectType, onFileSave, on
               </TabsList>
             </Tabs>
           </div>
-
-          {/* Editor Actions */}
-          <div className="flex items-center space-x-2 px-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleSaveFile}
-              disabled={!activeFile}
-            >
-              <Save className="h-4 w-4" />
-            </Button>
-            
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleRunCode}
-              disabled={!activeFile}
-            >
-              <Play className="h-4 w-4" />
-            </Button>
-          </div>
         </div>
       </div>
 
@@ -332,22 +311,6 @@ export function EnhancedEditorContainer({ projectId, projectType, onFileSave, on
           ))}
         </Tabs>
       </div>
-
-      {/* Status Bar */}
-      {activeFile && (
-        <div className="border-t px-3 py-2 text-xs text-muted-foreground bg-muted/50">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <span>{getFileDisplayName(activeFile)}</span>
-              <span>{getLanguageFromPath(activeFile)}</span>
-            </div>
-            <div className="flex items-center space-x-4">
-              <span>Ln 1, Col 1</span>
-              <span>UTF-8</span>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -253,9 +253,9 @@ export function FullStackFileExplorer({ projectId, showBackend }: FullStackFileE
   const backendTree = showBackend ? buildFileTree(backendFiles, 'backend/') : {};
 
   return (
-    <div className="h-full flex flex-col bg-card">
+    <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="p-3 border-b">
+      <div className="pl-3 border-b">
         <div className="flex items-center justify-between">
           <h3 className="font-medium text-sm">Explorer</h3>
           <Button
@@ -330,7 +330,7 @@ export function FullStackFileExplorer({ projectId, showBackend }: FullStackFileE
           <Button
             variant="outline"
             size="sm"
-            className="w-full justify-start"
+            className="w-full justify-start bg-transparent"
             onClick={() => handleContextMenu('new-file', 'frontend')}
           >
             <Code className="h-4 w-4 mr-2" />
@@ -342,7 +342,7 @@ export function FullStackFileExplorer({ projectId, showBackend }: FullStackFileE
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full justify-start"
+                className="w-full justify-start bg-transparent"
                 onClick={() => handleContextMenu('new-file', 'backend')}
               >
                 <Server className="h-4 w-4 mr-2" />
@@ -352,7 +352,7 @@ export function FullStackFileExplorer({ projectId, showBackend }: FullStackFileE
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full justify-start"
+                className="w-full justify-start bg-transparent"
                 onClick={() => handleContextMenu('new-file', 'backend')}
               >
                 <Database className="h-4 w-4 mr-2" />

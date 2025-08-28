@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useSnackSession } from '../../hooks/useSnackSession';
 import { SnackWebPlayer } from './SnackWebPlayer';
+import { PreviewHeader } from './PreviewHeader';
 import { QRCode } from '../QRCode';
 import { SharePreviewDialog } from './SharePreviewDialog';
 import { cn } from '../../lib/utils';
@@ -24,6 +25,16 @@ interface SnackPreviewPanelProps {
   files?: Record<string, { content: string; type: string; lastModified: Date; path: string }>;
   className?: string;
   onSessionReady?: (session: any) => void;
+  // For parent header integration
+  onStatusChange?: (status: 'connecting' | 'error' | 'connected' | 'preparing' | 'idle' | 'retrying') => void;
+  onStuckChange?: (isStuck: boolean) => void;
+  onSessionChange?: (hasSession: boolean) => void;
+  onSessionDetailsChange?: (session: any) => void;
+  onQrCodeChange?: (qrCodeUrl: string) => void;
+  // Override internal modal handlers when header handles them
+  externalMobilePreview?: boolean;
+  externalSessionInfo?: boolean;
+  externalSharePreview?: boolean;
 }
 
 export function SnackPreviewPanel({
@@ -32,11 +43,20 @@ export function SnackPreviewPanel({
   projectId,
   files,
   className,
-  onSessionReady
+  onSessionReady,
+  onStatusChange,
+  onStuckChange,
+  onSessionChange,
+  onSessionDetailsChange,
+  onQrCodeChange,
+  externalMobilePreview = false,
+  externalSessionInfo = false,
+  externalSharePreview = false
 }: SnackPreviewPanelProps) {
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [isMobilePreviewOpen, setIsMobilePreviewOpen] = useState(false);
   const [isSessionInfoOpen, setIsSessionInfoOpen] = useState(false);
+  const [isStuck, setIsStuck] = useState(false);
   const { toast } = useToast();
 
   // Convert frontend files to Snack format
@@ -137,6 +157,51 @@ const styles = StyleSheet.create({
     }
   }, [session, onSessionReady]);
 
+  // Notify parent of status changes
+  useEffect(() => {
+    if (onStatusChange) {
+      onStatusChange(getPreviewStatus());
+    }
+  }, [isLoading, isStuck, error, session, webPreviewUrl, onStatusChange]);
+
+  useEffect(() => {
+    if (onStuckChange) {
+      onStuckChange(isStuck);
+    }
+  }, [isStuck, onStuckChange]);
+
+  useEffect(() => {
+    if (onSessionChange) {
+      onSessionChange(!!session);
+    }
+  }, [session, onSessionChange]);
+
+  useEffect(() => {
+    if (onSessionDetailsChange) {
+      onSessionDetailsChange(session);
+    }
+  }, [session, onSessionDetailsChange]);
+
+  useEffect(() => {
+    if (onQrCodeChange) {
+      onQrCodeChange(qrCodeUrl || '');
+    }
+  }, [qrCodeUrl, onQrCodeChange]);
+
+  // Timeout mechanism to detect stuck sessions
+  useEffect(() => {
+    if (isLoading && !session) {
+      const timeout = setTimeout(() => {
+        setIsStuck(true);
+        console.warn('[SnackPreviewPanel] Session appears to be stuck - no session created after 15 seconds');
+      }, 15000);
+
+      return () => clearTimeout(timeout);
+    } else {
+      setIsStuck(false);
+    }
+  }, [isLoading, session]);
+
   // Update files when they change
   useEffect(() => {
     if (session && files && Object.keys(files).length > 0) {
@@ -164,92 +229,102 @@ const styles = StyleSheet.create({
   }, [files, session]);
 
 
-  // Handle refresh
+  // Handle refresh - force new session creation
   const handleRefresh = async () => {
+    setIsStuck(false);
     await destroySession();
-    await createSession();
+    await createSession(); // This will create a new session
   };
 
-  // Status indicator
-  const renderStatus = () => {
-    if (isLoading) {
-      return (
-        <div className="w-2 h-2 rounded-full bg-yellow-500" title="Loading..." />
-      );
-    }
+  // Simple fallback URL for demo purposes
+  const getFallbackPreviewUrl = () => {
+    // Create a simple Snack with basic code for demo
+    const code = encodeURIComponent(`import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 
-    if (error) {
-      return (
-        <div className="w-2 h-2 rounded-full bg-red-500" title="Error" />
-      );
-    }
+export default function App() {
+  const [count, setCount] = React.useState(0);
 
-    if (session) {
-      return (
-        <div className="w-2 h-2 rounded-full bg-green-500" title="Connected" />
-      );
-    }
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Welcome to Velocity!</Text>
+      <Text style={styles.subtitle}>Live React Native Preview</Text>
+      
+      <TouchableOpacity 
+        style={styles.button} 
+        onPress={() => setCount(count + 1)}
+      >
+        <Text style={styles.buttonText}>Count: {count}</Text>
+      </TouchableOpacity>
+      
+      <Text style={styles.info}>
+        Tap the button to see state updates in real-time
+      </Text>
+    </View>
+  );
+}
 
-    return null;
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    padding: 20,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 18,
+    color: '#666',
+    marginBottom: 40,
+    textAlign: 'center',
+  },
+  button: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 40,
+    paddingVertical: 15,
+    borderRadius: 25,
+  },
+  buttonText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  info: {
+    marginTop: 30,
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+  },
+});`);
+    
+    return `https://snack.expo.dev/embedded/@snack/sdk.52-${Date.now()}?code=${code}&platform=web`;
+  };
+
+  // Map session state to unified status
+  const getPreviewStatus = (): 'connecting' | 'error' | 'connected' | 'preparing' | 'idle' | 'retrying' => {
+    if (isLoading && !session) return 'connecting';
+    if (isStuck) return 'retrying';
+    if (error) return 'error';
+    if (session && webPreviewUrl) return 'connected';
+    if (session && !webPreviewUrl) return 'preparing';
+    return 'idle';
   };
 
   return (
     <div className={cn("flex flex-col h-full", className)}>
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b">
-        <div className="flex items-center gap-3">
-          <h3 className="font-semibold">Live Preview</h3>
-          {renderStatus()}
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsMobilePreviewOpen(true)}
-            disabled={!session}
-            title="Mobile preview"
-          >
-            <Smartphone className="w-4 h-4" />
-          </Button>
-          
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsSessionInfoOpen(true)}
-            disabled={!session}
-            title="Session info"
-          >
-            <Info className="w-4 h-4" />
-          </Button>
-          
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsShareDialogOpen(true)}
-            disabled={!session}
-            title="Share preview"
-          >
-            <Share2 className="w-4 h-4" />
-          </Button>
-          
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleRefresh}
-            title="Restart preview"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </Button>
-        </div>
-      </div>
-
       {/* Web preview container - with relative positioning for contained modals */}
       <div className="flex-1 relative">
         <SnackWebPlayer
           snack={snack}
           webPreviewRef={webPreviewRef}
-          webPreviewUrl={webPreviewUrl}
+          webPreviewUrl={isStuck ? getFallbackPreviewUrl() : webPreviewUrl}
           sessionId={sessionId}
           className="h-full"
           onError={(error) => {
@@ -262,7 +337,7 @@ const styles = StyleSheet.create({
         />
 
         {/* Mobile Preview Modal - positioned within container */}
-        {isMobilePreviewOpen && (
+        {isMobilePreviewOpen && !externalMobilePreview && (
           <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-10">
             <Card className="w-full max-w-md mx-4 p-6">
               <div className="flex items-center justify-between mb-4">
@@ -321,7 +396,7 @@ const styles = StyleSheet.create({
         )}
 
         {/* Session Info Modal - positioned within container */}
-        {isSessionInfoOpen && (
+        {isSessionInfoOpen && !externalSessionInfo && (
           <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-10">
             <Card className="w-full max-w-lg mx-4 p-6 max-h-[80%] flex flex-col">
               <div className="flex items-center justify-between mb-4">
@@ -407,7 +482,7 @@ const styles = StyleSheet.create({
       </div>
 
       {/* Share dialog */}
-      {isShareDialogOpen && session && (
+      {isShareDialogOpen && session && !externalSharePreview && (
         <SharePreviewDialog
           open={isShareDialogOpen}
           onOpenChange={setIsShareDialogOpen}

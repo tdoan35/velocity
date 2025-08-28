@@ -98,8 +98,13 @@ export function SnackWebPlayer({
   const [isPreviewHovered, setIsPreviewHovered] = useState(false);
   const [isDeviceDropdownOpen, setIsDeviceDropdownOpen] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
-  const [isResponsiveZoom, setIsResponsiveZoom] = useState(false);
+  const [isResponsiveZoom, setIsResponsiveZoom] = useState(true);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  
+  // Enhanced error handling and retry logic
+  const [retryCount, setRetryCount] = useState(0);
+  const [connectionTimeout, setConnectionTimeout] = useState<number | null>(null);
+  const [lastWebPreviewUrl, setLastWebPreviewUrl] = useState<string | null>(null);
 
   // Zoom levels: 25%, 50%, 75%, 100%, 125%, 150%, 200%
   const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -109,8 +114,8 @@ export function SnackWebPlayer({
   const handleDeviceChange = (device: DevicePreset) => {
     setSelectedDevice(device);
     setIsRotated(false);
-    setZoomLevel(1); // Reset zoom when changing devices
-    // Keep responsive zoom mode active if it was enabled
+    setZoomLevel(1); // Reset manual zoom when changing devices
+    // Keep responsive zoom mode active (it's now the default)
     onDeviceChange?.(device);
   };
 
@@ -167,20 +172,27 @@ export function SnackWebPlayer({
     const deviceWidth = isRotated ? selectedDevice.height : selectedDevice.width;
     const deviceHeight = isRotated ? selectedDevice.width : selectedDevice.height;
     
-    // Add some padding to ensure the device doesn't touch the edges
-    const PADDING = 80; // 40px on each side for controls and spacing
-    const availableWidth = containerSize.width - PADDING;
-    const availableHeight = containerSize.height - PADDING;
+    // Dynamic padding based on container size and controls visibility
+    const CONTROLS_HEIGHT = 60; // Height for top controls
+    const MIN_HORIZONTAL_PADDING = 20; // Reduced minimum horizontal padding
+    const MIN_VERTICAL_PADDING = 20; // Reduced minimum vertical padding
+    
+    // Calculate available space accounting for controls and minimum padding
+    // Use more aggressive space utilization for better scaling
+    const availableWidth = Math.max(containerSize.width - (MIN_HORIZONTAL_PADDING * 2), 200);
+    const availableHeight = Math.max(containerSize.height - CONTROLS_HEIGHT - (MIN_VERTICAL_PADDING * 2), 150);
     
     // Calculate scale factors for both dimensions
     const scaleX = availableWidth / deviceWidth;
     const scaleY = availableHeight / deviceHeight;
     
     // Use the smaller scale factor to ensure the device fits completely
-    const responsiveScale = Math.min(scaleX, scaleY, 2); // Cap at 200% for sanity
+    // Cap at 200% for performance and readability
+    const responsiveScale = Math.min(scaleX, scaleY, 2);
     
-    // Don't go below 0.25 (25%)
-    return Math.max(0.25, responsiveScale);
+    
+    // Don't go below 0.1 (10%) to ensure content remains visible
+    return Math.max(0.1, responsiveScale);
   };
 
   // Get current effective zoom level
@@ -194,10 +206,31 @@ export function SnackWebPlayer({
     return Math.round(effectiveZoom * 100);
   };
 
+  // Handle retry functionality
+  const handleRetry = () => {
+    console.log('[SnackWebPlayer] Retrying connection...');
+    setRetryCount(prev => prev + 1);
+    setError(null);
+    setIsLoading(true);
+    
+    if (iframeRef.current && webPreviewUrl) {
+      // Force reload with cache busting
+      const urlWithCacheBust = webPreviewUrl + (webPreviewUrl.includes('?') ? '&' : '?') + 'retry=' + Date.now();
+      iframeRef.current.src = urlWithCacheBust;
+    }
+  };
+
   // Handle iframe load
   const handleIframeLoad = () => {
+    // Clear any existing timeout
+    if (connectionTimeout) {
+      clearTimeout(connectionTimeout);
+      setConnectionTimeout(null);
+    }
+    
     setIsLoading(false);
     setError(null);
+    setRetryCount(0); // Reset retry count on successful load
     onLoad?.();
 
     console.log('[SnackWebPlayer] Iframe loaded, webPreviewRef current value:', webPreviewRef?.current);
@@ -313,20 +346,85 @@ export function SnackWebPlayer({
 
   // Track container size for responsive zoom
   useEffect(() => {
-    if (!containerRef.current) return;
-
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect;
-        setContainerSize({ width, height });
+    const setupResizeObserver = () => {
+      if (!containerRef.current) {
+        // Retry if container ref isn't ready yet
+        setTimeout(setupResizeObserver, 100);
+        return;
       }
-    });
 
-    resizeObserver.observe(containerRef.current);
-    return () => resizeObserver.disconnect();
+      const updateContainerSize = () => {
+        if (!containerRef.current) return;
+        
+        const rect = containerRef.current.getBoundingClientRect();
+        const newSize = { width: rect.width, height: rect.height };
+        
+        // Only update if size actually changed to avoid unnecessary re-renders
+        setContainerSize(prevSize => {
+          if (prevSize.width !== newSize.width || prevSize.height !== newSize.height) {
+            return newSize;
+          }
+          return prevSize;
+        });
+      };
+
+      const resizeObserver = new ResizeObserver(() => {
+        updateContainerSize();
+      });
+
+      // Initial measurement
+      updateContainerSize();
+
+      // Additional fallback - watch for window resize
+      const handleWindowResize = () => {
+        setTimeout(updateContainerSize, 100); // Small delay to allow DOM to settle
+      };
+
+      resizeObserver.observe(containerRef.current);
+      window.addEventListener('resize', handleWindowResize);
+      
+      return () => {
+        resizeObserver.disconnect();
+        window.removeEventListener('resize', handleWindowResize);
+      };
+    };
+
+    const cleanup = setupResizeObserver();
+    return cleanup;
   }, []);
 
-  // No longer needed - webPreviewUrl is passed as prop
+  // Connection timeout monitoring
+  useEffect(() => {
+    if (!webPreviewUrl || retryCount >= 3) return;
+    
+    // Only set timeout if URL changed (new connection attempt)
+    if (lastWebPreviewUrl !== webPreviewUrl) {
+      console.log('[SnackWebPlayer] Setting connection timeout for new URL:', webPreviewUrl);
+      setLastWebPreviewUrl(webPreviewUrl);
+      setIsLoading(true);
+      
+      // Set a connection timeout
+      const timeout = setTimeout(() => {
+        if (isLoading) { // Only trigger if still loading
+          console.warn('[SnackWebPlayer] Connection timeout after 15s, initiating retry...');
+          const timeoutError = new Error('Connection timeout - preview took too long to load');
+          setError(timeoutError);
+          onError?.(timeoutError);
+          
+          // Auto-retry if we haven't exceeded max retries
+          if (retryCount < 2) {
+            setTimeout(handleRetry, 2000); // Wait 2s before retry
+          }
+        }
+      }, 15000); // 15 second timeout
+      
+      setConnectionTimeout(timeout);
+      
+      return () => {
+        if (timeout) clearTimeout(timeout);
+      };
+    }
+  }, [webPreviewUrl, retryCount, isLoading, lastWebPreviewUrl]);
 
   // Set webPreviewRef on Snack instance when available
   useEffect(() => {
@@ -378,6 +476,11 @@ export function SnackWebPlayer({
         )}
         onMouseEnter={() => setIsPreviewHovered(true)}
         onMouseLeave={() => setIsPreviewHovered(false)}
+        style={{
+          // Ensure the container has explicit dimensions for proper measurement
+          minHeight: isFullscreen ? '100vh' : '400px',
+          position: 'relative'
+        }}
       >
         {/* Device selector dropdown - positioned in top-left corner */}
         <div className={cn(
@@ -573,19 +676,58 @@ export function SnackWebPlayer({
           {/* Error overlay */}
           {error && (
             <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-              <div className="text-center p-4">
+              <div className="text-center p-4 max-w-sm">
                 <AlertCircle className="w-8 h-8 text-destructive mx-auto mb-2" />
-                <p className="text-sm font-medium">Failed to load preview</p>
+                <p className="text-sm font-medium">Preview Connection Failed</p>
                 <p className="text-xs text-muted-foreground mt-1">{error.message}</p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => iframeRef.current?.contentWindow?.location.reload()}
-                  className="mt-4"
-                >
-                  <RotateCw className="w-3 h-3 mr-2" />
-                  Retry
-                </Button>
+                
+                {/* Retry info */}
+                {retryCount > 0 && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Retry attempt: {retryCount}/3
+                  </p>
+                )}
+                
+                <div className="flex gap-2 mt-4 justify-center">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleRetry}
+                    disabled={retryCount >= 3}
+                    className="text-xs"
+                  >
+                    <RotateCw className="w-3 h-3 mr-1" />
+                    {retryCount >= 3 ? 'Max Retries' : 'Retry'}
+                  </Button>
+                  
+                  {retryCount >= 3 && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setRetryCount(0);
+                        setError(null);
+                        if (iframeRef.current && webPreviewUrl) {
+                          iframeRef.current.src = webPreviewUrl;
+                        }
+                      }}
+                      className="text-xs"
+                    >
+                      Reset
+                    </Button>
+                  )}
+                </div>
+                
+                {process.env.NODE_ENV === 'development' && (
+                  <details className="mt-3 text-xs">
+                    <summary className="cursor-pointer">Debug Info</summary>
+                    <div className="mt-2 text-left bg-muted p-2 rounded text-xs">
+                      Session: {sessionId?.substring(0, 12)}...<br/>
+                      Retries: {retryCount}<br/>
+                      URL: {webPreviewUrl?.substring(0, 50)}...
+                    </div>
+                  </details>
+                )}
               </div>
             </div>
           )}

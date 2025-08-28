@@ -46,14 +46,41 @@ export function useSnackSession({
   const { toast } = useToast();
   const isMountedRef = useRef(true);
 
-  // Create session
-  const createSession = useCallback(async (options?: SnackPreviewOptions) => {
+  // Create session with retry mechanism and session reuse
+  const createSession = useCallback(async (options?: SnackPreviewOptions, retryCount = 0, forceNew = false) => {
     if (!isMountedRef.current) return;
 
+    // Check if we can reuse existing session with same ID
+    if (!forceNew && retryCount === 0) {
+      const existingSession = snackService.getSession(sessionId);
+      if (existingSession && !error) {
+        console.log('[useSnackSession] Reusing existing session:', sessionId);
+        setSession(existingSession);
+        
+        // Get current webPreviewUrl from existing session
+        const currentUrl = snackService.getWebPreviewUrl(sessionId);
+        if (currentUrl) {
+          console.log('[useSnackSession] Found existing webPreviewUrl:', currentUrl);
+          setWebPreviewUrl(currentUrl);
+        }
+        setQrCodeUrl(snackService.getQRCodeUrl(sessionId));
+        setIsLoading(false);
+        setError(null);
+        return;
+      }
+    }
+
+    const maxRetries = 3;
+    const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 5000); // Exponential backoff, max 5s
+
     setIsLoading(true);
-    setError(null);
+    if (retryCount === 0) {
+      setError(null); // Only clear error on first attempt
+    }
 
     try {
+      console.log(`[useSnackSession] Creating new session (attempt ${retryCount + 1}/${maxRetries + 1}):`, sessionId);
+      
       // Pass webPreviewRef during creation - this is required for web preview functionality
       const newSession = await snackService.createSession(
         sessionId,
@@ -102,21 +129,54 @@ export function useSnackSession({
               console.log('[useSnackSession] No webPreviewUrl available yet, waiting for state updates...');
             }
           }
-        }, 1500);
+        }, 2000);
+        
+        // Also try again after a longer timeout in case Snack takes longer to initialize
+        setTimeout(() => {
+          if (isMountedRef.current && !webPreviewUrl) {
+            const url = snackService.getWebPreviewUrl(sessionId);
+            if (url) {
+              console.log('[useSnackSession] Got delayed webPreviewUrl from service:', url);
+              setWebPreviewUrl(url);
+            } else {
+              console.warn('[useSnackSession] Still no webPreviewUrl available after 5s - there may be an issue with Snack initialization');
+            }
+          }
+        }, 5000);
+      }
+      
+      // Successfully created session - always set loading to false on success
+      if (isMountedRef.current) {
+        setIsLoading(false);
       }
     } catch (err) {
       const error = err as Error;
+      console.error(`[useSnackSession] Session creation failed (attempt ${retryCount + 1}):`, error);
+      
       if (isMountedRef.current) {
+        // If we haven't exhausted retries, attempt again
+        if (retryCount < maxRetries) {
+          console.log(`[useSnackSession] Retrying in ${retryDelay}ms...`);
+          setTimeout(() => {
+            if (isMountedRef.current) {
+              createSession(options, retryCount + 1, true); // Force new session on retry
+            }
+          }, retryDelay);
+          return; // Don't set error state yet, keep trying
+        }
+        
+        // All retries exhausted
         setError(error);
+        setIsLoading(false);
+        
+        const isNetworkError = error.message.includes('network') || error.message.includes('fetch');
         toast({
           title: 'Failed to create Snack session',
-          description: error.message,
+          description: isNetworkError 
+            ? 'Network connection issue. Please check your internet connection.' 
+            : `Session failed after ${maxRetries + 1} attempts: ${error.message}`,
           variant: 'destructive',
         });
-      }
-    } finally {
-      if (isMountedRef.current) {
-        setIsLoading(false);
       }
     }
   }, [sessionId, userId, projectId, initialOptions, toast]);

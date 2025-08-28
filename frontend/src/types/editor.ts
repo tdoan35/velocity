@@ -13,7 +13,7 @@ export interface ProjectData {
   id: string;
   name: string;
   description?: string;
-  user_id: string;
+  user_id: string | null;
   created_at: string;
   updated_at: string;
   prd_sections: PRDSection[];

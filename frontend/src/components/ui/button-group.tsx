@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useRef, useEffect, useState } from 'react'
 import { Button } from './button'
 import { cn } from '@/lib/utils'
 
@@ -27,11 +27,42 @@ export function ButtonGroup({
   variant = 'default'
 }: ButtonGroupProps) {
   const activeIndex = options.findIndex(option => option.value === value)
-  const buttonWidthPercent = 100 / options.length
+  const containerRef = useRef<HTMLDivElement>(null)
+  const buttonRefs = useRef<(HTMLButtonElement | null)[]>([])
+  const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 })
   
-  // Calculate left and right positions for any number of buttons
-  const leftPercent = activeIndex * buttonWidthPercent
-  const rightPercent = (options.length - activeIndex - 1) * buttonWidthPercent
+  // Update indicator position based on actual button dimensions
+  useEffect(() => {
+    const updateIndicator = () => {
+      if (!containerRef.current || activeIndex === -1) return
+      
+      const activeButton = buttonRefs.current[activeIndex]
+      if (!activeButton) return
+      
+      const containerRect = containerRef.current.getBoundingClientRect()
+      const buttonRect = activeButton.getBoundingClientRect()
+      
+      const left = buttonRect.left - containerRect.left
+      const width = buttonRect.width
+      
+      setIndicatorStyle({ left, width })
+    }
+    
+    updateIndicator()
+    
+    // Update on resize
+    const resizeObserver = new ResizeObserver(updateIndicator)
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current)
+    }
+    
+    return () => resizeObserver.disconnect()
+  }, [activeIndex, options])
+  
+  // Initialize refs array
+  useEffect(() => {
+    buttonRefs.current = buttonRefs.current.slice(0, options.length)
+  }, [options.length])
   
   const sizeClasses = {
     sm: 'h-7 px-3 text-xs',
@@ -40,7 +71,7 @@ export function ButtonGroup({
   }
 
   return (
-    <div className={cn("relative bg-muted rounded-lg p-1 flex gap-1", className)}>
+    <div ref={containerRef} className={cn("relative bg-muted rounded-lg p-1 flex gap-1", className)}>
       {/* Sliding background indicator */}
       <div 
         className={cn(
@@ -48,8 +79,8 @@ export function ButtonGroup({
           variant === 'outline' && "border border-border"
         )}
         style={{
-          left: activeIndex === 0 ? '4px' : `${leftPercent}%`,
-          right: activeIndex === options.length - 1 ? '4px' : `${rightPercent}%`
+          left: `${indicatorStyle.left}px`,
+          width: `${indicatorStyle.width}px`
         }}
       />
       
@@ -57,6 +88,7 @@ export function ButtonGroup({
       {options.map((option, index) => (
         <Button
           key={option.value}
+          ref={(el) => (buttonRefs.current[index] = el)}
           variant="ghost"
           size={size}
           disabled={option.disabled}

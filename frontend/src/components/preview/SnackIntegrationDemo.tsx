@@ -174,6 +174,17 @@ export function SnackIntegrationDemo() {
           <SnackPreviewPanel
             sessionId={sessionId}
             className="h-full"
+            files={Object.fromEntries(
+              Object.entries(files).map(([path, file]) => [
+                path,
+                {
+                  content: file.contents,
+                  type: 'javascript',
+                  lastModified: new Date(),
+                  path: path
+                }
+              ])
+            )}
             onSessionReady={(session) => {
               console.log('Snack session ready:', session);
             }}

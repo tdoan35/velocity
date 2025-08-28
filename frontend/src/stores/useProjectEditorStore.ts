@@ -32,6 +32,7 @@ export interface ProjectEditorState {
   // Actions
   initializeProject: (projectId: string) => Promise<void>;
   generateProjectStructure: () => Promise<void>;
+  ensureMinimumFiles: () => void;
   syncWithSupabase: () => Promise<void>;
   deployProject: () => Promise<void>;
   openFile: (filePath: string) => void;
@@ -69,6 +70,7 @@ export const useProjectEditorStore = create<ProjectEditorState>()(
       ...initialState,
 
       initializeProject: async (projectId: string) => {
+        console.log('[ProjectEditorStore] Initializing project:', projectId);
         set({ isLoading: true, error: null, projectId });
 
         try {
@@ -247,6 +249,19 @@ export const useProjectEditorStore = create<ProjectEditorState>()(
                                   fileKeys.includes('frontend/App.js') ? 'frontend/App.js' :
                                   fileKeys[0] || null;
 
+          console.log('[ProjectEditorStore] Project initialized successfully:', {
+            projectId,
+            projectName: project?.name,
+            hasProjectData: !!project,
+            frontendFileCount: Object.keys(frontendFiles).length,
+            backendFileCount: Object.keys(backendFiles).length,
+            sharedFileCount: Object.keys(sharedFiles).length,
+            isSupabaseConnected: !!supabaseConnection,
+            projectType: supabaseConnection ? 'full-stack' : 'frontend-only',
+            activeFile: defaultActiveFile,
+            frontendFiles: Object.keys(frontendFiles)
+          });
+
           set({
             projectData: project,
             frontendFiles,
@@ -345,6 +360,21 @@ export const useProjectEditorStore = create<ProjectEditorState>()(
         } catch (error: any) {
           set({ buildStatus: 'error', error: error.message });
           throw error;
+        }
+      },
+
+      ensureMinimumFiles: () => {
+        const { frontendFiles, projectData } = get();
+        
+        // Only create files if none exist
+        if (Object.keys(frontendFiles).length === 0) {
+          const defaultFiles = getDefaultFrontendFiles(projectData?.name || 'Velocity App');
+          
+          set({
+            frontendFiles: defaultFiles,
+            activeFile: 'frontend/App.tsx',
+            openTabs: ['frontend/App.tsx']
+          });
         }
       },
 
