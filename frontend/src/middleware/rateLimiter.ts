@@ -24,7 +24,7 @@ interface RateLimitEntry {
 class RateLimiter {
   private limits: Map<string, RateLimitEntry> = new Map();
   private config: Required<RateLimitConfig>;
-  private cleanupInterval: NodeJS.Timeout | null = null;
+  private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(config: RateLimitConfig) {
     this.config = {

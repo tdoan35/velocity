@@ -88,7 +88,8 @@
       "Bash(PORT=5174 npm run dev)",
       "Read(/C:\\c\\Users\\Ty\\Desktop\\velocity/**)",
       "Bash(git log:*)",
-      "mcp__playwright__browser_resize"
+      "mcp__playwright__browser_resize",
+      "WebSearch"
     ],
     "defaultMode": "acceptEdits",
     "additionalDirectories": [

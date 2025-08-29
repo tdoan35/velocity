@@ -11,10 +11,17 @@ export interface SnackServiceConfig {
   sessionSecret?: string;
 }
 
+// Union type for different subscription patterns from Snack SDK
+type SnackSubscription = 
+  | (() => void)  // Function unsubscribe
+  | { unsubscribe(): void }  // Object with unsubscribe method
+  | { remove(): void }  // Object with remove method
+  | SnackListenerSubscription;  // Original SDK type
+
 export interface SnackSession {
   id: string;
   snack: Snack;
-  subscriptions: SnackListenerSubscription[];
+  subscriptions: SnackSubscription[];
   lastActivity: Date;
   projectId?: string;
   userId?: string;
@@ -227,7 +234,7 @@ const styles = StyleSheet.create({
     }
 
     // Set up event listeners
-    const subscriptions: SnackListenerSubscription[] = [];
+    const subscriptions: SnackSubscription[] = [];
 
     // Listen for state changes
     subscriptions.push(
@@ -589,9 +596,9 @@ const styles = StyleSheet.create({
       try {
         if (typeof sub === 'function') {
           sub();
-        } else if (sub && typeof sub.unsubscribe === 'function') {
+        } else if (sub && 'unsubscribe' in sub && typeof sub.unsubscribe === 'function') {
           sub.unsubscribe();
-        } else if (sub && typeof sub.remove === 'function') {
+        } else if (sub && 'remove' in sub && typeof sub.remove === 'function') {
           sub.remove();
         }
       } catch (error) {
