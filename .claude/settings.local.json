@@ -89,7 +89,8 @@
       "Read(/C:\\c\\Users\\Ty\\Desktop\\velocity/**)",
       "Bash(git log:*)",
       "mcp__playwright__browser_resize",
-      "WebSearch"
+      "WebSearch",
+      "Bash(git rm:*)"
     ],
     "defaultMode": "acceptEdits",
     "additionalDirectories": [
