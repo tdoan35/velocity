@@ -2817,6 +2817,47 @@
             "details": "Implement RESTful API controllers for preview session management. Create authentication middleware for secure container access. Develop session pooling for improved performance. Update the Editor component to connect to the new preview system. Implement the PreviewPanel component with real-time status indicators. Create configuration UI for device selection and preview options. Develop error handling and fallback mechanisms for preview failures.\n<info added on 2025-08-29T08:13:10.880Z>\nBefore beginning API and frontend implementation, first read and thoroughly analyze the .docs\\implementation-plans\\real-time-preview-implementation-plan.md document to understand the complete system architecture. Focus specifically on Section 4.1 (Orchestrator Service) for precise API endpoint specifications including request/response formats, authentication requirements, and session management protocols. Review Section 4.3 (Frontend Client) for detailed ProjectEditor integration requirements, component communication patterns, and state management approach. Study Section 6 (Phased Implementation Plan) to follow the correct sequence for frontend integration and deployment phases. All API controllers, authentication middleware, session pooling logic, Editor component updates, PreviewPanel implementation, configuration UI, and error handling must strictly adhere to the architectural patterns, interface contracts, and implementation phases defined in this comprehensive plan.\n</info added on 2025-08-29T08:13:10.880Z>",
             "status": "pending",
             "testStrategy": "Test API endpoints with various request scenarios. Verify authentication and authorization logic. Test frontend components with simulated preview sessions. Validate error handling and user feedback mechanisms. Test responsive design of preview components across device sizes."
+          },
+          {
+            "id": 6,
+            "title": "Set up CI/CD Pipeline and Container Registry",
+            "description": "Implement GitHub Actions workflow for building and pushing Preview Container images to GitHub Container Registry (GHCR)",
+            "details": "- Create GitHub Actions workflow for automated container builds\n- Configure GHCR authentication and image pushing\n- Set up container versioning and tagging strategy\n- Test automated deployment pipeline",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 29
+          },
+          {
+            "id": 7,
+            "title": "Implement Security Hardening and Resource Limiting",
+            "description": "Configure container isolation, resource limits, and Fly.io security measures",
+            "details": "- Configure CPU and memory limits for Fly Machines\n- Implement Fly.io private networking and firewall rules\n- Set up container isolation policies\n- Configure network restrictions (whitelist approach)\n- Test security measures and resource constraints",
+            "status": "pending",
+            "dependencies": [
+              "29.1"
+            ],
+            "parentTaskId": 29
+          },
+          {
+            "id": 8,
+            "title": "Implement Cleanup Automation and Monitoring",
+            "description": "Create automated cleanup mechanisms for orphaned containers and implement system monitoring",
+            "details": "- Implement cron job for orphaned container cleanup\n- Create background worker for expired session management\n- Set up container resource monitoring and alerting\n- Implement session timeout and automatic termination\n- Add logging and observability for container lifecycle events",
+            "status": "pending",
+            "dependencies": [
+              "29.1",
+              "29.4"
+            ],
+            "parentTaskId": 29
+          },
+          {
+            "id": 9,
+            "title": "Set up Project Structure and Organization",
+            "description": "Create the recommended orchestrator/ directory structure from the implementation plan",
+            "details": "- Create orchestrator/ top-level directory\n- Set up orchestrator/src/ for Node.js service code\n- Create orchestrator/preview-container/ for Docker assets\n- Add orchestrator/fly.toml for deployment configuration\n- Organize API routes, services, and container entrypoint logic\n- Update project documentation to reflect new structure",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 29
           }
         ]
       }
