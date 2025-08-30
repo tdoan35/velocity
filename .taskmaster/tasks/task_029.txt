@@ -224,6 +224,17 @@ Implement the ContainerManager class with methods for container lifecycle operat
 First, read and review the complete real-time preview implementation plan located at .docs/implementation-plans/real-time-preview-implementation-plan.md to understand the architectural overview, component specifications, and phased implementation approach. This document contains the definitive specifications for the orchestration service and must be thoroughly understood before proceeding with implementation. After reviewing the plan, focus specifically on Section 4.1 (Orchestrator Service) to understand the exact requirements, interfaces, and design patterns that must be followed for the ContainerManager class implementation. Ensure that the implementation aligns with the overall system architecture, WebSocket communication patterns, and database schema defined in the plan. The container lifecycle management system should be implemented as a component of the larger orchestration service, not as a standalone system.
 </info added on 2025-08-29T08:10:14.147Z>
 
+## 9. Set up Project Structure and Organization [pending]
+### Dependencies: None
+### Description: Create the recommended orchestrator/ directory structure from the implementation plan
+### Details:
+- Create orchestrator/ top-level directory
+- Set up orchestrator/src/ for Node.js service code
+- Create orchestrator/preview-container/ for Docker assets
+- Add orchestrator/fly.toml for deployment configuration
+- Organize API routes, services, and container entrypoint logic
+- Update project documentation to reflect new structure
+
 ## 2. Implement Real-Time WebSocket Communication Layer [pending]
 ### Dependencies: 29.1
 ### Description: Build a bidirectional WebSocket communication system using Supabase Realtime to enable instant code updates between editor and preview environments.
@@ -290,15 +301,4 @@ Before beginning API and frontend implementation, first read and thoroughly anal
 - Set up container resource monitoring and alerting
 - Implement session timeout and automatic termination
 - Add logging and observability for container lifecycle events
-
-## 9. Set up Project Structure and Organization [pending]
-### Dependencies: None
-### Description: Create the recommended orchestrator/ directory structure from the implementation plan
-### Details:
-- Create orchestrator/ top-level directory
-- Set up orchestrator/src/ for Node.js service code
-- Create orchestrator/preview-container/ for Docker assets
-- Add orchestrator/fly.toml for deployment configuration
-- Organize API routes, services, and container entrypoint logic
-- Update project documentation to reflect new structure
 
