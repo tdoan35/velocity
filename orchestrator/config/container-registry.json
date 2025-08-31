@@ -1,0 +1,49 @@
+{
+  "registry": {
+    "host": "ghcr.io",
+    "namespace": "tdoan35/velocity",
+    "imageName": "velocity-preview-container"
+  },
+  "versioning": {
+    "strategy": "semantic+commit",
+    "tagFormats": {
+      "latest": "latest",
+      "branch": "{branch}-{shortSha}",
+      "pullRequest": "pr-{prNumber}",
+      "release": "v{version}"
+    }
+  },
+  "platforms": [
+    "linux/amd64",
+    "linux/arm64"
+  ],
+  "security": {
+    "scanEnabled": true,
+    "scanner": "trivy",
+    "failOnCritical": true,
+    "reportFormat": "sarif"
+  },
+  "build": {
+    "cacheStrategy": "gha",
+    "timeout": "30m",
+    "context": "./orchestrator/preview-container",
+    "dockerfile": "./orchestrator/preview-container/Dockerfile"
+  },
+  "deployment": {
+    "autoUpdate": true,
+    "environments": {
+      "development": {
+        "tag": "main-{shortSha}",
+        "autoPromote": true
+      },
+      "staging": {
+        "tag": "stable",
+        "requiresApproval": true
+      },
+      "production": {
+        "tag": "latest",
+        "requiresApproval": true
+      }
+    }
+  }
+}

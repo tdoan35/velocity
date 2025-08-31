@@ -1,0 +1,30 @@
+## GitHub Actions Container Registry Test
+
+This file is created to test the automated container build and push process.
+
+**Test Timestamp**: 2024-08-31T04:00:00Z
+**Test Purpose**: Verify GitHub Actions workflow for preview container registry
+**Expected Outcome**: Container should be built and pushed to GHCR when this file is committed
+
+### Test Checklist
+- [x] GitHub Actions workflow created
+- [x] GHCR authentication configured (using GITHUB_TOKEN)
+- [x] Container versioning strategy implemented
+- [x] Multi-platform build support (amd64, arm64)
+- [x] Security scanning with Trivy
+- [x] Automated environment variable updates
+- [ ] Workflow execution verification
+- [ ] Container pull test
+- [ ] Security scan results review
+
+### Workflow Triggers
+The workflow should trigger on:
+- Push to main/master branch with changes to preview-container files
+- Pull requests affecting preview-container files
+- Manual workflow dispatch
+
+### Container Tags Expected
+- `ghcr.io/tdoan35/velocity/velocity-preview-container:latest`
+- `ghcr.io/tdoan35/velocity/velocity-preview-container:main-{commit-sha}`
+
+This test file will be removed after successful workflow verification.

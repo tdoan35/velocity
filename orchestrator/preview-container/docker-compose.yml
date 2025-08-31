@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  preview-container:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - PROJECT_ID=docker-test-project
+      - SUPABASE_URL=https://test.supabase.co
+      - SUPABASE_ANON_KEY=test-key-for-local-development
+      - PORT=8080
+      - NODE_ENV=development
+    volumes:
+      # Mount a local test project for development
+      - ./test-project:/app/project:rw
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  # Optional: Local development with hot reloading of entrypoint.js
+  preview-container-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8080"
+    environment:
+      - PROJECT_ID=dev-test-project
+      - SUPABASE_URL=https://test.supabase.co
+      - SUPABASE_ANON_KEY=test-key-for-local-development
+      - PORT=8080
+      - NODE_ENV=development
+    volumes:
+      - .:/app/container-source:ro
+      - ./test-project:/app/project:rw
+    command: ["sh", "-c", "cp /app/container-source/entrypoint.js /app/ && node entrypoint.js"]
+    profiles: ["dev"]
+
+networks:
+  default:
+    name: velocity-preview

@@ -1,0 +1,28 @@
+{
+  "name": "velocity-preview-container",
+  "version": "1.0.0",
+  "description": "Preview container runtime for Velocity real-time development",
+  "main": "entrypoint.js",
+  "scripts": {
+    "start": "node entrypoint.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.38.0",
+    "ws": "^8.14.2",
+    "axios": "^1.5.0",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "chokidar": "^3.5.3",
+    "fs-extra": "^11.1.1",
+    "jszip": "^3.10.1",
+    "detect-port": "^1.5.1",
+    "tree-kill": "^1.2.2",
+    "uuid": "^9.0.1",
+    "dotenv": "^16.3.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "Velocity Team",
+  "license": "MIT"
+}
