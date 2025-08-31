@@ -22,6 +22,9 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.build.outputs.digest }}
 
     steps:
     - name: Checkout repository
@@ -54,6 +57,7 @@ jobs:
           org.opencontainers.image.source=https://github.com/${{ github.repository }}
 
     - name: Build and push Docker image
+      id: build
       uses: docker/build-push-action@v5
       with:
         context: ./orchestrator/preview-container
@@ -77,12 +81,15 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      security-events: write
     
     steps:
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@master
       with:
-        image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest'
+        image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-and-push.outputs.image-digest }}'
         format: 'sarif'
         output: 'trivy-results.sarif'
 
@@ -104,7 +111,7 @@ jobs:
     - name: Update container image reference
       run: |
         # Extract the latest image digest
-        IMAGE_DIGEST="${{ needs.build-and-push.outputs.digest }}"
+        IMAGE_DIGEST="${{ needs.build-and-push.outputs.image-digest }}"
         IMAGE_TAG="main-${{ github.sha }}"
         
         # Update the orchestrator environment file with the new image reference
