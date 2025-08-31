@@ -281,7 +281,7 @@ module.exports = {
   server: {
     enhanceMiddleware: (middleware) => {
       return (req, res, next) => {
-        // Add CORS headers for Appetize.io
+        // Add CORS headers for container preview
         res.setHeader('Access-Control-Allow-Origin', '*')
         return middleware(req, res, next)
       }

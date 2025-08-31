@@ -5,13 +5,12 @@
 The following Edge Functions have been successfully deployed to the Velocity Supabase project (ozjipxxukgrvjxlefslq):
 
 ### Preview System Functions ✅
-1. **appetize-api** - Core Appetize.io integration for device simulation
-2. **preview-sessions** - Session management and pooling system
-3. **preview-optimizer** - Performance optimization for preview system
-4. **preview-diagnostics** - Error handling and diagnostic tools
-5. **preview-sharing** - Public preview link generation and sharing
-6. **hot-reload-sync** - WebSocket-based hot reload functionality
-7. **session-pool** - Session pool management for instant preview access
+1. **preview-optimizer** - Performance optimization for preview system  
+2. **preview-diagnostics** - Error handling and diagnostic tools (updated for container system)
+3. **preview-sharing** - Public preview link generation and sharing
+4. **build-preview** - Container-based preview build system
+
+**Note**: Legacy Appetize.io functions have been removed and replaced with Fly.io container orchestration system.
 
 ### Other Deployed Functions ✅
 - **code-enhance** - Code enhancement functionality
@@ -35,7 +34,8 @@ https://supabase.com/dashboard/project/ozjipxxukgrvjxlefslq/functions
 ## Environment Variables Required
 
 Make sure the following environment variables are set in your Supabase project:
-- `APPETIZE_API_KEY` - Required for real device preview functionality
+- `ORCHESTRATOR_URL` - Required for container preview functionality
+- `ORCHESTRATOR_ADMIN_TOKEN` - Required for orchestrator service authentication
 - `SUPABASE_URL` - Automatically set by Supabase
 - `SUPABASE_SERVICE_ROLE_KEY` - Automatically set by Supabase
 - `SUPABASE_ANON_KEY` - Automatically set by Supabase
@@ -56,6 +56,6 @@ https://ozjipxxukgrvjxlefslq.supabase.co/functions/v1/{function-name}
 
 Example:
 ```
-https://ozjipxxukgrvjxlefslq.supabase.co/functions/v1/appetize-api
+https://your-orchestrator-app.fly.dev (Container orchestration service)
 https://ozjipxxukgrvjxlefslq.supabase.co/functions/v1/preview-sessions/allocate
 ```

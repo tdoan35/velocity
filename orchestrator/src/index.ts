@@ -8,9 +8,15 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import { apiRoutes } from './api/routes';
 import { handleAuthError } from './middleware/auth';
+import { SchedulerService } from './services/scheduler';
+import { setSchedulerService } from './api/monitoring-controller';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
+
+// Initialize scheduler service
+const schedulerService = new SchedulerService();
+setSchedulerService(schedulerService);
 
 // Security middleware
 app.use(helmet({
@@ -91,11 +97,13 @@ app.use((error: Error, req: express.Request, res: express.Response, next: expres
 // Graceful shutdown handling
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully...');
+  schedulerService.stopJobs();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down gracefully...');
+  schedulerService.stopJobs();
   process.exit(0);
 });
 
@@ -111,6 +119,10 @@ app.listen(PORT, () => {
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔐 Authentication: ${process.env.SUPABASE_URL ? 'Enabled' : 'Disabled'}`);
   console.log(`🛩️  Fly.io Integration: ${process.env.FLY_API_TOKEN ? 'Enabled' : 'Disabled'}`);
+  
+  // Start scheduled jobs
+  schedulerService.startJobs();
+  console.log(`⏰ Scheduled jobs started for cleanup and monitoring`);
 });
 
 export { app };

@@ -22,7 +22,8 @@ import {
   Smartphone,
   Monitor,
   Edit3,
-  Layers3
+  Layers3,
+  Container
 } from 'lucide-react'
 
 const navItems = [
@@ -35,6 +36,7 @@ const navItems = [
   { path: '/demo/chat', label: 'AI Chat', icon: MessageSquare },
   { path: '/demo/optimistic', label: 'Optimistic UI', icon: Zap },
   { path: '/demo/preview', label: 'Mobile Preview', icon: Smartphone },
+  { path: '/demo/container-preview', label: 'Container Preview', icon: Container },
 ]
 
 // Component test demos

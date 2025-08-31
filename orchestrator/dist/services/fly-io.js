@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FlyIOService = void 0;
 const axios_1 = __importDefault(require("axios"));
+const container_security_1 = require("../config/container-security");
 class FlyIOService {
     constructor(apiToken, appName) {
         this.appName = appName;
@@ -20,49 +21,69 @@ class FlyIOService {
     /**
      * Create a new Fly machine for preview container
      */
-    async createMachine(projectId) {
-        const machineConfig = {
+    async createMachine(projectId, tierName = 'free', customConfig) {
+        // Get the appropriate container tier configuration
+        const tier = (0, container_security_1.getContainerTier)(tierName);
+        console.log(`Creating machine with tier: ${tier.name} (${tierName})`);
+        const baseConfig = {
             image: 'ghcr.io/velocity/preview-container:latest',
             env: {
                 PROJECT_ID: projectId,
                 SUPABASE_URL: process.env.SUPABASE_URL,
                 SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
                 NODE_ENV: 'production',
+                CONTAINER_TIER: tierName,
+                // Security environment variables
+                SECURITY_ENABLED: 'true',
+                MAX_CPU_USAGE: tier.security.monitoring.resourceAlerts.cpuThreshold.toString(),
+                MAX_MEMORY_USAGE: tier.security.monitoring.resourceAlerts.memoryThreshold.toString(),
             },
             guest: {
-                cpu_kind: 'shared',
-                cpus: 1,
-                memory_mb: 512,
+                cpu_kind: tier.resources.cpu.kind,
+                cpus: tier.resources.cpu.cpus,
+                memory_mb: tier.resources.memory.mb,
             },
             services: [
                 {
-                    ports: [
-                        {
-                            port: 80,
-                            handlers: ['http'],
-                        },
-                        {
-                            port: 443,
-                            handlers: ['tls', 'http'],
-                        },
-                    ],
+                    ports: tier.security.network.allowedPorts.map(port => ({
+                        port,
+                        handlers: port === 443 ? ['tls', 'http'] : ['http'],
+                    })),
                     protocol: 'tcp',
                     internal_port: 8080,
+                    concurrency: {
+                        type: 'requests',
+                        hard_limit: tier.resources.cpu.cpus * 50,
+                        soft_limit: tier.resources.cpu.cpus * 25,
+                    },
                 },
             ],
             auto_destroy: true,
             restart: {
                 policy: 'no',
+                max_retries: 0,
             },
             metadata: {
                 'velocity-project-id': projectId,
                 'velocity-service': 'preview-container',
+                'velocity-tier': tierName,
+                'velocity-max-duration': (tier.maxDurationHours * 60 * 60 * 1000).toString(),
+                'created-at': new Date().toISOString(),
+            },
+            // Add kill signal handling for graceful shutdown
+            init: {
+                cmd: ['node', 'server.js'],
+                tty: false,
             },
         };
+        // Merge with any custom configuration
+        const mergedConfig = { ...baseConfig, ...customConfig };
+        // Apply security hardening
+        const secureConfig = (0, container_security_1.applySecurityHardening)(mergedConfig, tier.security);
         const createRequest = {
             name: `preview-${projectId}-${Date.now()}`,
-            config: machineConfig,
-            region: 'dfw', // Dallas region for better latency
+            config: secureConfig,
+            region: this.selectRegion(tier.security.network.blockedRegions),
         };
         try {
             const response = await this.client.post(`/apps/${this.appName}/machines`, createRequest);
@@ -181,6 +202,147 @@ class FlyIOService {
         catch (error) {
             console.error(`Failed to stop machine ${machineId}:`, error);
             throw new Error(`Failed to stop machine: ${error}`);
+        }
+    }
+    /**
+     * Select appropriate region based on security policy
+     */
+    selectRegion(blockedRegions = []) {
+        const preferredRegions = ['dfw', 'iad', 'lax', 'sjc']; // US regions
+        for (const region of preferredRegions) {
+            if (!blockedRegions.includes(region)) {
+                return region;
+            }
+        }
+        // Fallback to Dallas if all preferred regions are blocked
+        return 'dfw';
+    }
+    /**
+     * Get resource usage metrics for a machine
+     */
+    async getMachineMetrics(machineId) {
+        try {
+            const machine = await this.getMachine(machineId);
+            if (!machine) {
+                return null;
+            }
+            // Fly.io doesn't directly expose metrics through the API
+            // This would need to be implemented via machine stats endpoint or monitoring service
+            // For now, returning mock data structure
+            return {
+                cpu: 0,
+                memory: 0,
+                disk: 0,
+                network: { in: 0, out: 0 },
+                uptime: Math.floor((Date.now() - new Date(machine.created_at).getTime()) / 1000),
+            };
+        }
+        catch (error) {
+            console.error(`Failed to get metrics for machine ${machineId}:`, error);
+            return null;
+        }
+    }
+    /**
+     * Monitor machine resource usage and enforce limits
+     */
+    async monitorMachine(machineId) {
+        try {
+            const machine = await this.getMachine(machineId);
+            if (!machine) {
+                return {
+                    status: 'critical',
+                    alerts: ['Machine not found'],
+                    actions: ['Remove from monitoring'],
+                };
+            }
+            const tierName = machine.metadata?.['velocity-tier'] || 'free';
+            const tier = (0, container_security_1.getContainerTier)(tierName);
+            const alerts = [];
+            const actions = [];
+            let status = 'ok';
+            // Check machine age against tier limits
+            const createdAt = new Date(machine.created_at).getTime();
+            const maxAge = tier.maxDurationHours * 60 * 60 * 1000;
+            const age = Date.now() - createdAt;
+            if (age > maxAge) {
+                status = 'critical';
+                alerts.push(`Machine exceeded max duration: ${Math.floor(age / (60 * 60 * 1000))}h / ${tier.maxDurationHours}h`);
+                actions.push('Auto-destroy machine');
+            }
+            else if (age > maxAge * 0.8) {
+                status = 'warning';
+                alerts.push(`Machine approaching max duration: ${Math.floor(age / (60 * 60 * 1000))}h / ${tier.maxDurationHours}h`);
+                actions.push('Notify user of impending shutdown');
+            }
+            // Check machine state
+            if (machine.state === 'failed') {
+                status = 'critical';
+                alerts.push('Machine is in failed state');
+                actions.push('Restart or replace machine');
+            }
+            else if (machine.state === 'stopping' || machine.state === 'stopped') {
+                alerts.push('Machine is stopping/stopped');
+                actions.push('Check for manual intervention needed');
+            }
+            // Check health checks
+            if (machine.checks) {
+                const failedChecks = machine.checks.filter(check => check.status !== 'passing');
+                if (failedChecks.length > 0) {
+                    if (failedChecks.some(check => check.status === 'critical')) {
+                        status = 'critical';
+                    }
+                    else if (status === 'ok') {
+                        status = 'warning';
+                    }
+                    failedChecks.forEach(check => {
+                        alerts.push(`Health check failed: ${check.name} - ${check.output}`);
+                    });
+                    actions.push('Investigate health check failures');
+                }
+            }
+            return { status, alerts, actions };
+        }
+        catch (error) {
+            console.error(`Failed to monitor machine ${machineId}:`, error);
+            return {
+                status: 'critical',
+                alerts: [`Monitoring error: ${error instanceof Error ? error.message : 'Unknown error'}`],
+                actions: ['Check monitoring system'],
+            };
+        }
+    }
+    /**
+     * Apply resource limit enforcement to a running machine
+     */
+    async enforceResourceLimits(machineId) {
+        try {
+            const machine = await this.getMachine(machineId);
+            if (!machine) {
+                return false;
+            }
+            const tierName = machine.metadata?.['velocity-tier'] || 'free';
+            const tier = (0, container_security_1.getContainerTier)(tierName);
+            // Check if current machine config matches tier limits
+            const currentConfig = machine.config;
+            const expectedConfig = {
+                cpu_kind: tier.resources.cpu.kind,
+                cpus: tier.resources.cpu.cpus,
+                memory_mb: tier.resources.memory.mb,
+            };
+            const needsUpdate = (currentConfig.guest?.cpu_kind !== expectedConfig.cpu_kind ||
+                currentConfig.guest?.cpus !== expectedConfig.cpus ||
+                currentConfig.guest?.memory_mb !== expectedConfig.memory_mb);
+            if (needsUpdate) {
+                console.log(`Machine ${machineId} config does not match tier ${tierName}, enforcement needed`);
+                // In a real implementation, you would update the machine config
+                // For now, we log the discrepancy
+                return false;
+            }
+            return true;
+        }
+        catch (error) {
+            console.error(`Failed to enforce resource limits for machine ${machineId}:`, error);
+            return false;
         }
     }
     /**

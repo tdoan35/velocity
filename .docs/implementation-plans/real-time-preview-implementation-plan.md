@@ -1,7 +1,8 @@
 # Implementation Plan: Real-Time Preview Architecture
 
 **Date:** August 28, 2025
-**Status:** Approved
+**Status:** Phase 2 Complete (Real-Time Integration)
+**Last Updated:** August 31, 2025
 
 ## 1. Overview & Goals
 
@@ -228,25 +229,74 @@ The existing `preview_sessions` table needs to be modified to support the contai
 
 ### Phase 1: Backend Foundation (2-3 weeks)
 
-*   [ ] **Task 1.1:** Execute database migration to update the existing `preview_sessions` table for container-based approach.
-*   [ ] **Task 1.2:** Finalize and implement the `Orchestrator Service` API with updated endpoints.
-*   [ ] **Task 1.3:** Implement the service's logic for starting/stopping Fly Machines using the `fly-machines` SDK.
-*   [ ] **Task 1.4:** Create the `preview-container/` directory structure in the repository root with `Dockerfile`, `package.json`, and `entrypoint.js`.
-*   [ ] **Task 1.5:** Implement the `entrypoint.js` script, including initial file sync and the dev server process.
+*   [x] **Task 1.1:** Execute database migration to update the existing `preview_sessions` table for container-based approach.
+*   [x] **Task 1.2:** Finalize and implement the `Orchestrator Service` API with updated endpoints.
+*   [x] **Task 1.3:** Implement the service's logic for starting/stopping Fly Machines using the `fly-machines` SDK.
+*   [x] **Task 1.4:** Create the `preview-container/` directory structure in the repository root with `Dockerfile`, `package.json`, and `entrypoint.js`.
+*   [x] **Task 1.5:** Implement the `entrypoint.js` script, including initial file sync and the dev server process.
+*   [x] **Task 1.4 (Container Structure):** Create complete preview container Docker image with entrypoint logic and project type detection.
 *   [ ] **Task 1.6:** Update any existing code/services that reference the old `preview_sessions` table schema.
 *   [ ] **Task 1.7:** Manually test the Orchestrator by calling its API and verifying that Fly Machines are created and destroyed.
 
 ### Phase 2: Real-Time Integration (1-2 weeks)
 
-*   [ ] **Task 2.1:** Implement the WebSocket listening logic in the `entrypoint.js` script to handle `file:update` events.
-*   [ ] **Task 2.2:** Refactor the frontend `ProjectEditor` to broadcast `file:update` events on code changes.
-*   [ ] **Task 2.3:** Establish the Supabase Realtime channel connection on both the frontend and in the container.
+*   [x] **Task 2.1:** Implement the WebSocket listening logic in the `entrypoint.js` script to handle `file:update` events.
+*   [x] **Task 2.2:** Refactor the frontend `ProjectEditor` to broadcast `file:update` events on code changes.
+*   [x] **Task 2.3:** Establish the Supabase Realtime channel connection on both the frontend and in the container.
 *   [ ] **Task 2.4:** End-to-end test: ensure a code change in the editor is reflected in the running Fly Machine's file system.
+
+#### Phase 2 Implementation Details (Completed August 31, 2025)
+
+**Task 2.1 - WebSocket Listening in Containers:**
+- Enhanced `orchestrator/preview-container/entrypoint.js` with comprehensive WebSocket client
+- Implemented connection retry logic with exponential backoff (max 5 attempts, 30s max delay)
+- Added bulk file update handling for efficient multi-file operations
+- Integrated health monitoring with detailed connection status reporting
+- Added rebuild detection for configuration files (package.json, tsconfig.json, etc.)
+- Proper cleanup of reconnection timers in graceful shutdown
+
+**Task 2.2 - Frontend Code Broadcasting:**
+- Created `frontend/src/hooks/usePreviewRealtime.ts` hook for real-time connection management
+- Integrated broadcasting into `EnhancedEditorContainer.tsx` with debounced change detection (1s delay)
+- Implemented immediate broadcasting on manual save (Ctrl+S)
+- Added visual connection status indicator with colored icons (WiFi states)
+- Channel format: `realtime:project:${projectId}` as specified
+- Message format follows implementation plan with timestamp and file metadata
+
+**Task 2.3 - Supabase Realtime Channel Connection:**
+- Both frontend and container establish connection to project-specific channels
+- Implemented robust error handling with user feedback via toast notifications
+- Auto-reconnection with exponential backoff strategy
+- Connection state management: `disconnected`, `connecting`, `connected`, `error`
+- Proper channel cleanup on component unmount and project changes
 
 ### Phase 3: Frontend & Deployment (2 weeks)
 
-*   [ ] **Task 3.1:** Implement the full session lifecycle on the frontend (`creating`, `active`, `ended`).
-*   [ ] **Task 3.2:** Update the `iframe` to correctly display the `containerUrl`.
+*   [x] **Task 3.1:** Implement the full session lifecycle on the frontend (`creating`, `active`, `ended`).
+
+#### Phase 3 Implementation Details (Completed August 31, 2025)
+
+**Task 3.1 - Session Lifecycle Frontend Integration:**
+- Created comprehensive `usePreviewSession` hook for session management with full lifecycle support
+- Implemented session states: `idle`, `starting`, `running`, `error`, `stopping` 
+- Added device selection UI with Mobile, Tablet, Desktop options and appropriate icons
+- Integrated session controls into `EnhancedEditorContainer` with start/stop buttons
+- Added real-time status polling with automatic container readiness detection
+- Implemented status badge with color-coded indicators and error tooltips
+- Added refresh button for manual status updates and comprehensive error handling
+- Session cleanup on component unmount to prevent resource leaks
+- Enhanced toast notifications with retry actions and detailed error messaging
+*   [x] **Task 3.2:** Update the `iframe` to correctly display the `containerUrl`.
+
+**Task 3.2 - Preview Iframe Integration:**
+- Created comprehensive `ContainerPreviewPanel` component replacing Snack-based preview system
+- Implemented responsive iframe sizing with dynamic scaling for mobile, tablet, and desktop viewports
+- Added comprehensive security headers: sandbox permissions, CORS policies, and referrer policies
+- Implemented device selection UI with Mobile/Tablet/Desktop options and landscape rotation
+- Added loading states with timeout handling (30s timeout with user feedback)
+- Comprehensive error fallbacks with retry mechanisms and specific error messages
+- Integration with session lifecycle management from subtask 29.9
+- Enhanced user experience with external link buttons and refresh functionality
 *   [ ] **Task 3.3:** Deploy the Orchestrator service to Fly.io as a persistent app.
 *   [ ] **Task 3.4:** Create a GitHub Actions workflow to automatically build and push the Preview Container image to GitHub Container Registry (GHCR).
 *   [ ] **Task 3.5:** Remove Appetize.io integration from frontend components and services.

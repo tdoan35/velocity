@@ -86,15 +86,22 @@
       "Bash(claude --version)",
       "Bash(git checkout:*)",
       "Bash(PORT=5174 npm run dev)",
-      "Read(/C:\\c\\Users\\Ty\\Desktop\\velocity/**)",
+      "Read(/C:\\Users\\Ty\\Desktop\\velocity/**)",
       "Bash(git log:*)",
       "mcp__playwright__browser_resize",
       "WebSearch",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(where deno)",
+      "Bash(deno:*)",
+      "Bash(echo $CLAUDE_CODE_SSE_PORT)",
+      "Bash(echo $ENABLE_IDE_INTEGRATION)",
+      "Read(C:\\Users\\Ty\\.claude\\ide/**)",
+      "Bash(echo $SHELL)",
+      "Bash(source ~/.bashrc)"
     ],
     "defaultMode": "acceptEdits",
     "additionalDirectories": [
-      "C:\\c\\Users\\Ty\\Desktop\\velocity"
+      "C:\\Users\\Ty\\Desktop\\velocity"
     ]
   },
   "enableAllProjectMcpServers": true,

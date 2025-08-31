@@ -20,7 +20,8 @@
     "ws": "^8.14.2",
     "uuid": "^9.0.1",
     "dotenv": "^16.3.1",
-    "axios": "^1.5.0"
+    "axios": "^1.5.0",
+    "node-cron": "^3.0.3"
   },
   "devDependencies": {
     "nodemon": "^3.0.1",
@@ -32,6 +33,7 @@
     "@types/node": "^20.10.0",
     "@types/jest": "^29.5.8",
     "@types/supertest": "^2.0.16",
+    "@types/node-cron": "^3.0.11",
     "typescript": "^5.3.0",
     "ts-node": "^10.9.1",
     "ts-jest": "^29.1.1",

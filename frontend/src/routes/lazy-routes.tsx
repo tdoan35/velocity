@@ -34,6 +34,10 @@ export const PreviewDemo = lazy(() =>
   import('@/components/preview-demo').then(m => ({ default: m.PreviewDemo }))
 )
 
+export const ContainerPreviewDemo = lazy(() => 
+  import('@/components/container-preview-demo').then(m => ({ default: m.ContainerPreviewDemo }))
+)
+
 // Loading fallback component
 export function PageLoader() {
   return (

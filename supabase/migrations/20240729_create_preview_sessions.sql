@@ -1,4 +1,4 @@
--- Create preview_sessions table for tracking Appetize.io sessions
+-- Create preview_sessions table for tracking container preview sessions
 CREATE TABLE IF NOT EXISTS preview_sessions (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,

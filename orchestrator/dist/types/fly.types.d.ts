@@ -39,9 +39,24 @@ export interface FlyMachineConfig {
         entrypoint?: string[];
         cmd?: string[];
         tty?: boolean;
+        cap_drop?: string[];
+        no_new_privileges?: boolean;
+        read_only?: boolean;
+        seccomp_profile?: string;
     };
     mounts?: FlyMount[];
     processes?: Record<string, FlyProcess>;
+    checks?: Array<{
+        grace_period?: string;
+        interval?: string;
+        method?: string;
+        path?: string;
+        port?: number;
+        protocol?: string;
+        timeout?: string;
+        type?: string;
+        script?: string;
+    }>;
 }
 export interface FlyService {
     protocol: 'tcp' | 'udp';

@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Frontend**: React Native, Expo, Monaco Editor, Tailwind CSS  
 - **Backend**: Supabase (PostgreSQL + pgvector), Edge Functions
 - **AI**: Claude AI (Anthropic), vector similarity search
-- **Mobile**: Appetize.io for previews, EAS Build for compilation
+- **Mobile**: Fly.io containers for previews, EAS Build for compilation
 - **Deployment**: App Store Connect, Google Play Console
 - **Version Control**: GitHub synchronization
 
@@ -79,7 +79,7 @@ Based on the PRD analysis:
 - **Real-time collaboration** via Supabase Realtime
 - **AI-driven code generation** with Claude integration
 - **Browser-based IDE** using Monaco Editor
-- **Mobile preview** via Appetize.io integration
+- **Mobile preview** via Fly.io container integration
 - **CI/CD pipeline** through EAS Build and app store deployment
 
 When implementing, focus on the AI-powered code generation workflow as the core differentiator, with seamless mobile preview and deployment as key user experience elements.

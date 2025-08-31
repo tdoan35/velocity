@@ -18,6 +18,7 @@ import {
   ChatInterfaceDemo,
   OptimisticUIDemo,
   PreviewDemo,
+  ContainerPreviewDemo,
 } from './routes/lazy-routes'
 import { SnackProjects } from './pages/SnackProjects'
 import { SnackEditor } from './pages/SnackEditor'
@@ -410,6 +411,11 @@ function App() {
                   <Route path="preview" element={
                     <LazyBoundary>
                       <PreviewDemo />
+                    </LazyBoundary>
+                  } />
+                  <Route path="container-preview" element={
+                    <LazyBoundary>
+                      <ContainerPreviewDemo />
                     </LazyBoundary>
                   } />
                   <Route path="preview-test" element={

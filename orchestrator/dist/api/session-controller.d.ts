@@ -38,5 +38,25 @@ export declare class SessionController {
      * List all active machines (admin only)
      */
     listMachines: (req: AuthenticatedRequest, res: Response) => Promise<void>;
+    /**
+     * GET /sessions/:sessionId/metrics
+     * Get detailed resource metrics for a session
+     */
+    getSessionMetrics: (req: AuthenticatedRequest, res: Response) => Promise<void>;
+    /**
+     * POST /sessions/:sessionId/enforce-limits
+     * Enforce resource limits on a specific session
+     */
+    enforceSessionLimits: (req: AuthenticatedRequest, res: Response) => Promise<void>;
+    /**
+     * GET /monitoring/status
+     * Get monitoring status for all user sessions
+     */
+    getMonitoringStatus: (req: AuthenticatedRequest, res: Response) => Promise<void>;
+    /**
+     * POST /monitoring/run
+     * Run monitoring job (admin endpoint)
+     */
+    runMonitoringJob: (req: AuthenticatedRequest, res: Response) => Promise<void>;
 }
 //# sourceMappingURL=session-controller.d.ts.map

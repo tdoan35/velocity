@@ -13,9 +13,14 @@ const helmet_1 = __importDefault(require("helmet"));
 const morgan_1 = __importDefault(require("morgan"));
 const routes_1 = require("./api/routes");
 const auth_1 = require("./middleware/auth");
+const scheduler_1 = require("./services/scheduler");
+const monitoring_controller_1 = require("./api/monitoring-controller");
 const app = (0, express_1.default)();
 exports.app = app;
 const PORT = process.env.PORT || 8080;
+// Initialize scheduler service
+const schedulerService = new scheduler_1.SchedulerService();
+(0, monitoring_controller_1.setSchedulerService)(schedulerService);
 // Security middleware
 app.use((0, helmet_1.default)({
     contentSecurityPolicy: {
@@ -85,10 +90,12 @@ app.use((error, req, res, next) => {
 // Graceful shutdown handling
 process.on('SIGTERM', () => {
     console.log('SIGTERM received, shutting down gracefully...');
+    schedulerService.stopJobs();
     process.exit(0);
 });
 process.on('SIGINT', () => {
     console.log('SIGINT received, shutting down gracefully...');
+    schedulerService.stopJobs();
     process.exit(0);
 });
 // Unhandled promise rejection handler
@@ -102,5 +109,8 @@ app.listen(PORT, () => {
     console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`🔐 Authentication: ${process.env.SUPABASE_URL ? 'Enabled' : 'Disabled'}`);
     console.log(`🛩️  Fly.io Integration: ${process.env.FLY_API_TOKEN ? 'Enabled' : 'Disabled'}`);
+    // Start scheduled jobs
+    schedulerService.startJobs();
+    console.log(`⏰ Scheduled jobs started for cleanup and monitoring`);
 });
 //# sourceMappingURL=index.js.map

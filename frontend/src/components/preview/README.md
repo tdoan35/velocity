@@ -16,8 +16,8 @@ The main preview component that displays the device frame and controls.
 - Session management
 - Real-time metrics display
 
-### useAppetizePreview Hook
-React hook for managing preview sessions.
+### usePreviewSession Hook  
+React hook for managing container preview sessions.
 
 **Capabilities:**
 - Session lifecycle management

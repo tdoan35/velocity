@@ -309,24 +309,24 @@ async function performHealthCheck(
       error: dbError?.message
     }
 
-    // Check Appetize API
-    const appetizeStart = Date.now()
+    // Check Container Orchestrator (Fly.io)
+    const orchestratorStart = Date.now()
     try {
-      const appetizeResponse = await fetch('https://api.appetize.io/v1/status', {
+      const orchestratorResponse = await fetch(`${Deno.env.get('ORCHESTRATOR_URL')}/health`, {
         headers: {
-          'Authorization': `Bearer ${Deno.env.get('APPETIZE_API_KEY')}`
+          'Authorization': `Bearer ${Deno.env.get('ORCHESTRATOR_ADMIN_TOKEN')}`
         }
       })
       
-      health.checks.appetize = {
-        status: appetizeResponse.ok ? 'healthy' : 'unhealthy',
-        responseTime: Date.now() - appetizeStart,
-        statusCode: appetizeResponse.status
+      health.checks.orchestrator = {
+        status: orchestratorResponse.ok ? 'healthy' : 'unhealthy',
+        responseTime: Date.now() - orchestratorStart,
+        statusCode: orchestratorResponse.status
       }
     } catch (error) {
-      health.checks.appetize = {
+      health.checks.orchestrator = {
         status: 'unhealthy',
-        responseTime: Date.now() - appetizeStart,
+        responseTime: Date.now() - orchestratorStart,
         error: error.message
       }
     }

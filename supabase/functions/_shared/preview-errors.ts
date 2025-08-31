@@ -35,7 +35,7 @@ export enum PreviewErrorCode {
   RATE_LIMIT_EXCEEDED = 'PREV_5004',
   
   // Integration errors (6xxx)
-  APPETIZE_API_ERROR = 'PREV_6001',
+  CONTAINER_API_ERROR = 'PREV_6001',
   SUPABASE_CONNECTION_ERROR = 'PREV_6002',
   AUTHENTICATION_FAILED = 'PREV_6003',
   PERMISSION_DENIED = 'PREV_6004',
@@ -168,7 +168,7 @@ export class PreviewErrorHandler {
     }],
     
     // Integration errors
-    [PreviewErrorCode.APPETIZE_API_ERROR, {
+    [PreviewErrorCode.CONTAINER_API_ERROR, {
       severity: 'critical',
       userMessage: 'Preview service is temporarily unavailable',
       recoverySteps: [

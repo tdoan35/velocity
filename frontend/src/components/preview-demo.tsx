@@ -208,7 +208,7 @@ export function PreviewDemo() {
                 <h4 className="font-semibold mb-2">React Components</h4>
                 <ul className="text-sm text-muted-foreground space-y-1">
                   <li>• MobilePreview</li>
-                  <li>• useAppetizePreview</li>
+                  <li>• usePreviewSession</li>
                 </ul>
               </div>
             </div>
