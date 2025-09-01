@@ -151,12 +151,85 @@ The preview container is not running a proper Vite development server. Instead, 
 2. **Port Mapping**: Development server may not be properly exposed
 3. **Build vs Dev**: Container might be serving a build instead of dev server
 
-## Status
+## Status: 🎯 **CRITICAL ARCHITECTURE ISSUE IDENTIFIED** - Wrong URL Pattern
 
-- **Severity**: High - Blocks preview functionality
-- **Impact**: Container accessible but not serving development server
-- **Root Cause**: Container configuration issue, not DNS resolution
-- **Next Step**: Fix container entrypoint to serve Vite dev server
+### **BREAKTHROUGH ANALYSIS (2025-09-01):**
+
+**The entire diagnosis was based on a fundamental architectural misunderstanding. The real issue is much simpler:**
+
+#### 🚨 **The Actual Root Cause:**
+**All preview sessions are using the same shared app URL instead of individual machine URLs.**
+
+#### **Evidence of Correct Architecture:**
+✅ **Individual Machines Working**: Machine `e7847eeeaed648` health check returns perfect HTML with Vite scripts:
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script type="module" src="/@vite/client"></script>
+  <script type="module" src="/src/main.jsx"></script>
+```
+
+✅ **Multiple Machines Created**: 4+ individual machines with unique IDs  
+✅ **Vite Dev Server**: Running correctly on each machine  
+✅ **Container Functionality**: All containers working independently  
+
+#### ❌ **The Bug in fly-io.ts:105**:
+```typescript
+return {
+  machine,
+  url: `https://${this.appName}.fly.dev`, // ← WRONG: Same URL for all machines
+};
+```
+
+**RESULT**: Every preview session gets `https://velocity-preview-containers.fly.dev` instead of their specific machine URL.
+
+#### **What Should Happen:**
+Each machine should have its own accessible URL pattern. Based on Fly.io documentation:
+
+**Option 1**: Individual Machine Access  
+- Pattern: `https://<machine-id>.velocity-preview-containers.fly.dev`  
+- Each machine gets unique external access
+
+**Option 2**: Internal Routing with fly-replay  
+- Use shared URL but route internally to specific machines
+- Router examines session/project ID and uses `fly-replay` headers
+
+#### **🎯 RECOMMENDED SOLUTION: Option 2 - Internal Routing**
+
+Based on Fly.io best practices from "Connecting to User Machines" and "Per-User Dev Environments" documentation:
+
+**Why Option 2 is Better:**
+- ✅ **Simpler Infrastructure**: One wildcard SSL certificate vs individual machine certificates
+- ✅ **Fly.io Best Practice**: Recommended pattern in official blueprints
+- ✅ **Resource Efficient**: Shared app with intelligent routing
+- ✅ **Automatic Lifecycle**: Fly Proxy handles machine start/stop/routing
+- ✅ **Clean URLs**: `https://velocity-preview-containers.fly.dev/session/<session-id>`
+
+**Implementation Plan:**
+1. **Keep shared app URL**: `https://velocity-preview-containers.fly.dev`
+2. **Add routing middleware**: Extract session/project ID from request path or headers
+3. **Session-to-machine mapping**: Database lookup to find which machine serves each session
+4. **Use fly-replay headers**: `fly-replay: instance=<machine-id>` to route internally
+5. **URL structure**: `/session/<session-id>` or `/project/<project-id>`
+
+**Example Routing Logic:**
+```typescript
+// In orchestrator - router examines request
+const sessionId = extractSessionFromPath(req.path); // /session/abc123
+const machineId = await getMachineForSession(sessionId);
+res.setHeader('fly-replay', `instance=${machineId}`);
+```
+
+#### **The Fix:**
+1. Update `fly-io.ts` to generate session-based URLs instead of shared app URL
+2. Implement routing middleware to map sessions to machines using `fly-replay` headers
+3. Update frontend to use session-specific URLs
+
+- **Severity**: CRITICAL - Complete architectural misunderstanding  
+- **Impact**: All users accessing same shared endpoint instead of individual containers
+- **Root Cause**: URL generation bug, NOT Vite proxy issues  
+- **Solution**: Implement proper individual machine URL patterns
 
 ## Related Documentation
 

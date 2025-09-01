@@ -66,6 +66,8 @@ export interface FlyService {
     auto_stop_machines?: boolean;
     auto_start_machines?: boolean;
     min_machines_running?: number;
+    autostop?: boolean | string;
+    autostart?: boolean;
     concurrency?: {
         type: 'connections' | 'requests';
         hard_limit: number;

@@ -26,20 +26,53 @@ class FlyIOService {
         // Get the appropriate container tier configuration
         const tier = (0, container_security_1.getContainerTier)(tierName);
         console.log(`Creating machine with tier: ${tier.name} (${tierName})`);
-        // EXACT match to working curl command - minimal config
+        // Machine config with HTTP service for external access
         const createRequest = {
             name: `preview-${projectId}-${Date.now()}`,
             region: 'ord',
             config: {
                 image: 'ghcr.io/tdoan35/velocity/velocity-preview-container:latest',
                 env: {
-                    NODE_ENV: 'production'
+                    NODE_ENV: 'development',
+                    PROJECT_ID: projectId,
+                    SUPABASE_URL: process.env.SUPABASE_URL,
+                    SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY
                 },
                 guest: {
                     cpu_kind: 'shared',
                     cpus: 1,
-                    memory_mb: 256
-                }
+                    memory_mb: 512
+                },
+                services: [
+                    {
+                        protocol: 'tcp',
+                        internal_port: 8080,
+                        autostop: false,
+                        autostart: true,
+                        ports: [
+                            {
+                                port: 80,
+                                handlers: ['http'],
+                                force_https: true
+                            },
+                            {
+                                port: 443,
+                                handlers: ['http', 'tls']
+                            }
+                        ]
+                    }
+                ],
+                checks: [
+                    {
+                        type: 'http',
+                        port: 8080,
+                        method: 'GET',
+                        path: '/health',
+                        grace_period: '5s',
+                        interval: '10s',
+                        timeout: '2s'
+                    }
+                ]
             }
         };
         try {
@@ -55,7 +88,7 @@ class FlyIOService {
             await this.waitForMachineReady(machine.id);
             return {
                 machine,
-                url: `https://${machine.name}.fly.dev`,
+                url: `https://${this.appName}.fly.dev`,
             };
         }
         catch (error) {
@@ -137,20 +170,51 @@ class FlyIOService {
      */
     async waitForMachineReady(machineId, timeout = 60000) {
         const startTime = Date.now();
+        console.log(`⏳ Waiting for machine ${machineId} to be ready (timeout: ${timeout}ms)`);
+        let checkCount = 0;
         while (Date.now() - startTime < timeout) {
+            checkCount++;
+            const elapsed = Date.now() - startTime;
+            console.log(`🔄 Check #${checkCount} for machine ${machineId} (elapsed: ${elapsed}ms)`);
             const machine = await this.getMachine(machineId);
             if (!machine) {
+                console.error(`❌ Machine ${machineId} not found on check #${checkCount}`);
                 throw new Error(`Machine ${machineId} not found`);
             }
-            if (machine.state === 'started' && machine.checks?.every(check => check.status === 'passing')) {
+            console.log(`📊 Machine ${machineId} status - State: ${machine.state}, Checks: ${machine.checks?.length || 0}`);
+            // Log detailed check status
+            if (machine.checks && machine.checks.length > 0) {
+                machine.checks.forEach((check, index) => {
+                    console.log(`  🏥 Check ${index + 1}: name="${check.name}", status="${check.status}", output="${check.output}"`);
+                });
+            }
+            else {
+                console.log(`  ⚠️ No health checks found for machine ${machineId}`);
+            }
+            // Machine is ready if:
+            // 1. State is 'started', AND
+            // 2. Either no health checks configured, OR all health checks are passing
+            const hasHealthChecks = machine.checks && machine.checks.length > 0;
+            const allChecksPass = hasHealthChecks ? machine.checks.every(check => check.status === 'passing') : true;
+            if (machine.state === 'started' && allChecksPass) {
+                if (hasHealthChecks) {
+                    console.log(`✅ Machine ${machineId} is ready! All ${machine.checks.length} health checks passing (${elapsed}ms elapsed)`);
+                }
+                else {
+                    console.log(`✅ Machine ${machineId} is ready! No health checks configured, machine started successfully (${elapsed}ms elapsed)`);
+                }
                 return;
             }
             if (machine.state === 'failed' || machine.state === 'stopped') {
+                console.error(`❌ Machine ${machineId} failed to start: ${machine.state}`);
                 throw new Error(`Machine ${machineId} failed to start: ${machine.state}`);
             }
+            console.log(`⏸️ Machine ${machineId} not ready yet, waiting 2s before next check...`);
             // Wait 2 seconds before checking again
             await new Promise(resolve => setTimeout(resolve, 2000));
         }
+        const finalElapsed = Date.now() - startTime;
+        console.error(`⏰ TIMEOUT: Machine ${machineId} did not become ready within ${timeout}ms (actual: ${finalElapsed}ms, checks: ${checkCount})`);
         throw new Error(`Machine ${machineId} did not become ready within ${timeout}ms`);
     }
     /**

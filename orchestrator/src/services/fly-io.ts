@@ -41,7 +41,7 @@ export class FlyIOService {
     const tier = getContainerTier(tierName);
     console.log(`Creating machine with tier: ${tier.name} (${tierName})`);
 
-    // EXACT match to working curl command - minimal config
+    // Machine config with HTTP service for external access
     const createRequest: CreateMachineRequest = {
       name: `preview-${projectId}-${Date.now()}`,
       region: 'ord',
@@ -57,6 +57,27 @@ export class FlyIOService {
           cpu_kind: 'shared',
           cpus: 1,
           memory_mb: 512
+        },
+        services: [
+          {
+            protocol: 'tcp',
+            internal_port: 8080,
+            ports: [
+              { port: 80, handlers: ['http'] },
+              { port: 443, handlers: ['http', 'tls'] }
+            ]
+          }
+        ],
+        checks: {
+          'http-get': {
+            type: 'http',
+            port: 8080,
+            method: 'GET',
+            path: '/',
+            grace_period: '5s',
+            interval: '10s',
+            timeout: '2s'
+          }
         }
       }
     };
@@ -81,7 +102,7 @@ export class FlyIOService {
 
       return {
         machine,
-        url: `https://${machine.name}.fly.dev`,
+        url: `https://${this.appName}.fly.dev`,
       };
     } catch (error) {
       console.error('❌ Failed to create Fly machine:', error);
