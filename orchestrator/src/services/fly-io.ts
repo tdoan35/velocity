@@ -175,26 +175,49 @@ export class FlyIOService {
     timeout: number = 60000
   ): Promise<void> {
     const startTime = Date.now();
+    console.log(`⏳ Waiting for machine ${machineId} to be ready (timeout: ${timeout}ms)`);
     
+    let checkCount = 0;
     while (Date.now() - startTime < timeout) {
+      checkCount++;
+      const elapsed = Date.now() - startTime;
+      console.log(`🔄 Check #${checkCount} for machine ${machineId} (elapsed: ${elapsed}ms)`);
+      
       const machine = await this.getMachine(machineId);
       
       if (!machine) {
+        console.error(`❌ Machine ${machineId} not found on check #${checkCount}`);
         throw new Error(`Machine ${machineId} not found`);
       }
 
+      console.log(`📊 Machine ${machineId} status - State: ${machine.state}, Checks: ${machine.checks?.length || 0}`);
+      
+      // Log detailed check status
+      if (machine.checks && machine.checks.length > 0) {
+        machine.checks.forEach((check, index) => {
+          console.log(`  🏥 Check ${index + 1}: name="${check.name}", status="${check.status}", output="${check.output}"`);
+        });
+      } else {
+        console.log(`  ⚠️ No health checks found for machine ${machineId}`);
+      }
+
       if (machine.state === 'started' && machine.checks?.every(check => check.status === 'passing')) {
+        console.log(`✅ Machine ${machineId} is ready! (${elapsed}ms elapsed)`);
         return;
       }
 
       if (machine.state === 'failed' || machine.state === 'stopped') {
+        console.error(`❌ Machine ${machineId} failed to start: ${machine.state}`);
         throw new Error(`Machine ${machineId} failed to start: ${machine.state}`);
       }
 
+      console.log(`⏸️ Machine ${machineId} not ready yet, waiting 2s before next check...`);
       // Wait 2 seconds before checking again
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
 
+    const finalElapsed = Date.now() - startTime;
+    console.error(`⏰ TIMEOUT: Machine ${machineId} did not become ready within ${timeout}ms (actual: ${finalElapsed}ms, checks: ${checkCount})`);
     throw new Error(`Machine ${machineId} did not become ready within ${timeout}ms`);
   }
 
