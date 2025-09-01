@@ -2,6 +2,8 @@
 
 This directory contains the Docker image definition for Velocity's ephemeral preview containers that run on Fly.io.
 
+<!-- Trigger rebuild to fix missing detect-project-type.js module - 2025-09-01 -->
+
 ## Container Registry
 
 The preview container is automatically built and pushed to GitHub Container Registry (GHCR) via GitHub Actions.
