@@ -21,7 +21,12 @@ export class ContainerManager {
     );
     
     const flyApiToken = process.env.FLY_API_TOKEN!;
-    const flyAppName = process.env.FLY_APP_NAME || 'velocity-preview-containers';
+    // Temporarily hardcode the correct app name to test
+    const flyAppName = 'velocity-preview-containers';
+    
+    console.log(`🔧 ContainerManager initialized with:`);
+    console.log(`   FLY_APP_NAME (env): "${process.env.FLY_APP_NAME}"`);
+    console.log(`   flyAppName (final): "${flyAppName}"`);
 
     if (!flyApiToken) {
       throw new Error('FLY_API_TOKEN environment variable is required');

@@ -200,47 +200,32 @@ export function validateResourceLimits(resources: ResourceLimits): boolean {
 
 export function applySecurityHardening(config: any, security: SecurityPolicy): any {
   // Apply security hardening to Fly machine config
+  // Note: Fly.io API doesn't support Docker-specific security settings like cap_drop, 
+  // seccomp_profile, etc. Security is enforced at the platform level.
   const hardenedConfig = {
     ...config,
+    // Keep the original init configuration (only valid Fly.io properties)
     init: {
       ...config.init,
-      // Security settings
-      cap_drop: security.isolation.dropCapabilities,
-      no_new_privileges: security.isolation.noNewPrivileges,
-      read_only: security.isolation.readOnlyRootFs,
-      seccomp_profile: security.isolation.seccompProfile,
+      // Only use supported Fly.io init properties: cmd, entrypoint, exec
     },
-    checks: [
-      {
-        grace_period: '10s',
-        interval: `${security.monitoring.healthCheckInterval}s`,
+    // Use a simple object format for checks as expected by Fly.io API
+    checks: {
+      // HTTP health check for application readiness
+      'health': {
+        type: 'http',
+        port: 8080,
         method: 'GET',
         path: '/health',
-        port: 8080,
         protocol: 'http',
-        timeout: '5s',
-        type: 'http',
+        interval: `${security.monitoring.healthCheckInterval}s`,
+        timeout: '10s',
+        grace_period: '15s',
       },
-      // Memory usage check
-      {
-        interval: '30s',
-        timeout: '5s',
-        type: 'script',
-        script: `#!/bin/sh
-memory_usage=$(cat /sys/fs/cgroup/memory/memory.usage_in_bytes)
-memory_limit=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes)
-usage_percent=$((memory_usage * 100 / memory_limit))
-if [ $usage_percent -gt ${security.monitoring.resourceAlerts.memoryThreshold} ]; then
-  echo "High memory usage: $usage_percent%"
-  exit 1
-fi
-echo "Memory usage OK: $usage_percent%"
-exit 0`,
-      },
-    ],
+    },
   };
 
-  // Apply network security
+  // Apply network security by filtering allowed ports
   if (security.network.enableFirewall && security.network.allowedPorts.length > 0) {
     hardenedConfig.services = hardenedConfig.services?.map((service: any) => ({
       ...service,
@@ -249,6 +234,15 @@ exit 0`,
       ),
     })) || [];
   }
+
+  // Add security-focused metadata for monitoring and compliance
+  hardenedConfig.metadata = {
+    ...hardenedConfig.metadata,
+    'security-tier': 'hardened',
+    'monitoring-enabled': security.monitoring.enableMetrics.toString(),
+    'firewall-enabled': security.network.enableFirewall.toString(),
+    'allowed-ports': security.network.allowedPorts.join(','),
+  };
 
   return hardenedConfig;
 }

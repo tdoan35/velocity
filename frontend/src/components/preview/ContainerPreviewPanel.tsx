@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { usePreviewSession, type PreviewStatus } from '../../hooks/usePreviewSession';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
@@ -13,12 +13,9 @@ import {
   ExternalLink,
   Power,
   PowerOff,
-  Wifi,
-  WifiOff,
   RotateCw
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
 
 interface ContainerPreviewPanelProps {
   projectId: string;
@@ -80,6 +77,12 @@ export function ContainerPreviewPanel({
     projectId,
     onError: (error) => {
       console.error('[ContainerPreviewPanel] Session error:', error);
+      console.error('[ContainerPreviewPanel] Error details:', {
+        message: error.message,
+        stack: error.stack,
+        projectId,
+        orchestratorUrl: import.meta.env.VITE_ORCHESTRATOR_URL
+      });
       setIframeError(error.message);
     },
     onStatusChange: (status, session) => {

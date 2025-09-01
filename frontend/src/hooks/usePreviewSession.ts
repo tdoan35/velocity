@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import { supabase } from '../lib/supabase';
 
 export interface PreviewSession {
   sessionId: string;
@@ -31,10 +31,12 @@ export function usePreviewSession({
   const [session, setSession] = useState<PreviewSession | null>(null);
   const [status, setStatus] = useState<PreviewStatus>('idle');
   const [isLoading, setIsLoading] = useState(false);
-  const supabase = useSupabaseClient();
 
   // Get orchestrator service URL from environment
-  const orchestratorUrl = process.env.NEXT_PUBLIC_ORCHESTRATOR_URL || 'http://localhost:3001';
+  const orchestratorUrl = import.meta.env.VITE_ORCHESTRATOR_URL || 'http://localhost:8080';
+  
+  // Remove trailing slash from orchestrator URL
+  const cleanOrchestratorUrl = orchestratorUrl.replace(/\/$/, '');
 
   const updateStatus = useCallback((newStatus: PreviewStatus, newSession?: PreviewSession) => {
     setStatus(newStatus);
@@ -46,24 +48,77 @@ export function usePreviewSession({
     endpoint: string, 
     options: RequestInit = {}
   ): Promise<Response> => {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized');
+    }
+    
     const { data: { session: authSession } } = await supabase.auth.getSession();
+    
+    console.log('[usePreviewSession] Auth session check:', {
+      hasSession: !!authSession,
+      hasAccessToken: !!authSession?.access_token,
+      userEmail: authSession?.user?.email,
+      tokenLength: authSession?.access_token?.length
+    });
     
     if (!authSession?.access_token) {
       throw new Error('User not authenticated');
     }
 
-    const response = await fetch(`${orchestratorUrl}${endpoint}`, {
+    const requestUrl = `${cleanOrchestratorUrl}/api${endpoint}`;
+    const requestOptions = {
       ...options,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${authSession.access_token}`,
         ...options.headers,
       },
+    };
+    
+    console.log('[usePreviewSession] Making request:', {
+      url: requestUrl,
+      method: options.method || 'GET',
+      hasAuth: !!authSession.access_token,
+      body: options.body
     });
+    
+    const response = await fetch(requestUrl, requestOptions);
 
+    console.log('[usePreviewSession] Response status:', response.status, response.statusText);
+    
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Network error' }));
-      throw new Error(errorData.error || `HTTP ${response.status}`);
+      const responseText = await response.text();
+      console.log('[usePreviewSession] Raw error response:', responseText);
+      
+      let errorData;
+      try {
+        errorData = JSON.parse(responseText);
+      } catch {
+        errorData = { 
+          error: `Network error - HTTP ${response.status}`,
+          message: response.statusText,
+          rawResponse: responseText
+        };
+      }
+      
+      console.log('[usePreviewSession] Error response:', errorData);
+      
+      // Provide more specific error messages
+      let errorMessage = errorData.error || `HTTP ${response.status}`;
+      if (response.status === 401) {
+        errorMessage = `Authentication failed: ${errorData.error || 'Invalid token'}. Please try signing out and back in.`;
+      } else if (response.status === 404) {
+        errorMessage = 'Orchestrator service endpoint not found. Please check the configuration.';
+      } else if (response.status >= 500) {
+        // Check for specific database/validation errors in 500 responses
+        if (errorData.error && errorData.error.includes('invalid input syntax for type uuid')) {
+          errorMessage = 'Invalid project ID format. Project ID must be a valid UUID.';
+        } else {
+          errorMessage = `Server error: ${errorData.error || 'Orchestrator service is currently unavailable. Please try again later.'}`;
+        }
+      }
+      
+      throw new Error(errorMessage);
     }
 
     return response;
@@ -79,10 +134,20 @@ export function usePreviewSession({
     updateStatus('starting');
 
     try {
+      // Get current user ID for the request
+      const { data: { session: authSession } } = await supabase.auth.getSession();
+      const userId = authSession?.user?.id;
+      
+      if (!userId) {
+        throw new Error('User not authenticated');
+      }
+
       const response = await makeAuthenticatedRequest('/sessions/start', {
         method: 'POST',
         body: JSON.stringify({ 
           projectId,
+          userId,
+          tier: 'free',
           deviceType: deviceType || 'mobile',
           options: {} 
         }),

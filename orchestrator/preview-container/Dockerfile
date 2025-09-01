@@ -32,16 +32,9 @@ COPY package.json ./
 # Install container-specific dependencies
 RUN npm install
 
-# Debug: List build context files before copying
-COPY . /tmp/debug/
-RUN echo "=== Build context contents ===" && ls -la /tmp/debug/ && rm -rf /tmp/debug/
-
 # Copy the entrypoint script and supporting modules
 COPY entrypoint.js ./
 COPY detect-project-type.js ./
-
-# Debug: List files to verify they were copied
-RUN ls -la /app/ && echo "=== Files after copy ===" && find /app -name "*.js" -type f
 
 # Create project directory where user code will be synced
 RUN mkdir -p /app/project

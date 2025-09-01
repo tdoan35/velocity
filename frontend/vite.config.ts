@@ -104,7 +104,7 @@ export default defineConfig(({ mode }) => {
           "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
           "img-src 'self' data: https://cdn.jsdelivr.net",
           "font-src 'self' https://cdn.jsdelivr.net",
-          "connect-src 'self' ws: wss: https://exp.host https://snackager.expo.io https://cdn.jsdelivr.net https://ozjipxxukgrvjxlefslq.supabase.co",
+          "connect-src 'self' ws: wss: https://exp.host https://snackager.expo.io https://cdn.jsdelivr.net https://ozjipxxukgrvjxlefslq.supabase.co https://velocity-orchestrator.fly.dev",
           "worker-src 'self' blob:",
           "frame-src 'self' https://snack.expo.dev https://*.expo.dev https://snack-web-player.s3.us-west-1.amazonaws.com",
           "child-src 'self' https://snack.expo.dev https://*.expo.dev https://snack-web-player.s3.us-west-1.amazonaws.com",

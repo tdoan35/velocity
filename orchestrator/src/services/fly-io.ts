@@ -18,6 +18,7 @@ export class FlyIOService {
 
   constructor(apiToken: string, appName: string) {
     this.appName = appName;
+    console.log(`🛩️  FlyIOService initialized with app name: "${appName}"`);
     this.client = axios.create({
       baseURL: 'https://api.machines.dev/v1',
       headers: {
@@ -40,71 +41,31 @@ export class FlyIOService {
     const tier = getContainerTier(tierName);
     console.log(`Creating machine with tier: ${tier.name} (${tierName})`);
 
-    const baseConfig: FlyMachineConfig = {
-      image: process.env.PREVIEW_CONTAINER_IMAGE || 'ghcr.io/tdoan35/velocity/velocity-preview-container:latest',
-      env: {
-        PROJECT_ID: projectId,
-        SUPABASE_URL: process.env.SUPABASE_URL!,
-        SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY!,
-        NODE_ENV: 'production',
-        CONTAINER_TIER: tierName,
-        // Security environment variables
-        SECURITY_ENABLED: 'true',
-        MAX_CPU_USAGE: tier.security.monitoring.resourceAlerts.cpuThreshold.toString(),
-        MAX_MEMORY_USAGE: tier.security.monitoring.resourceAlerts.memoryThreshold.toString(),
-      },
-      guest: {
-        cpu_kind: tier.resources.cpu.kind,
-        cpus: tier.resources.cpu.cpus,
-        memory_mb: tier.resources.memory.mb,
-      },
-      services: [
-        {
-          ports: tier.security.network.allowedPorts.map(port => ({
-            port,
-            handlers: port === 443 ? ['tls', 'http'] : ['http'],
-          })),
-          protocol: 'tcp',
-          internal_port: 8080,
-          concurrency: {
-            type: 'requests' as const,
-            hard_limit: tier.resources.cpu.cpus * 50,
-            soft_limit: tier.resources.cpu.cpus * 25,
-          },
-        },
-      ],
-      auto_destroy: true,
-      restart: {
-        policy: 'no',
-        max_retries: 0,
-      },
-      metadata: {
-        'velocity-project-id': projectId,
-        'velocity-service': 'preview-container',
-        'velocity-tier': tierName,
-        'velocity-max-duration': (tier.maxDurationHours * 60 * 60 * 1000).toString(),
-        'created-at': new Date().toISOString(),
-      },
-      // Add kill signal handling for graceful shutdown
-      init: {
-        cmd: ['node', 'entrypoint.js'],
-        tty: false,
-      },
-    };
-
-    // Merge with any custom configuration
-    const mergedConfig = { ...baseConfig, ...customConfig };
-
-    // Apply security hardening
-    const secureConfig = applySecurityHardening(mergedConfig, tier.security);
-
+    // EXACT match to working curl command - minimal config
     const createRequest: CreateMachineRequest = {
       name: `preview-${projectId}-${Date.now()}`,
-      config: secureConfig,
-      region: this.selectRegion(tier.security.network.blockedRegions),
+      region: 'ord',
+      config: {
+        image: 'ghcr.io/tdoan35/velocity/velocity-preview-container:latest',
+        env: {
+          NODE_ENV: 'production'
+        },
+        guest: {
+          cpu_kind: 'shared',
+          cpus: 1,
+          memory_mb: 256
+        }
+      }
     };
 
     try {
+      console.log('🚀 Creating machine with config:', JSON.stringify(createRequest, null, 2));
+      console.log('🔑 Using app name:', this.appName);
+      console.log('🔑 Request URL:', `/apps/${this.appName}/machines`);
+      console.log('🔑 Full URL:', `${this.client.defaults.baseURL}/apps/${this.appName}/machines`);
+      console.log('🔑 Request headers:', JSON.stringify(this.client.defaults.headers, null, 2));
+      console.log('🔑 Request body:', JSON.stringify(createRequest, null, 2));
+      
       const response = await this.client.post(
         `/apps/${this.appName}/machines`,
         createRequest
@@ -120,7 +81,17 @@ export class FlyIOService {
         url: `https://${machine.name}.fly.dev`,
       };
     } catch (error) {
-      console.error('Failed to create Fly machine:', error);
+      console.error('❌ Failed to create Fly machine:', error);
+      if (axios.isAxiosError(error)) {
+        console.error('❌ Response status:', error.response?.status);
+        console.error('❌ Response data:', error.response?.data);
+        console.error('❌ Request config:', {
+          url: error.config?.url,
+          method: error.config?.method,
+          headers: error.config?.headers,
+          data: error.config?.data
+        });
+      }
       throw new Error(`Failed to create preview container: ${error}`);
     }
   }

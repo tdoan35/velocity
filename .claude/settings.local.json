@@ -97,7 +97,9 @@
       "Bash(echo $ENABLE_IDE_INTEGRATION)",
       "Read(C:\\Users\\Ty\\.claude\\ide/**)",
       "Bash(echo $SHELL)",
-      "Bash(source ~/.bashrc)"
+      "Bash(source ~/.bashrc)",
+      "Bash(fly logs:*)",
+      "Bash(timeout 10 fly logs)"
     ],
     "defaultMode": "acceptEdits",
     "additionalDirectories": [

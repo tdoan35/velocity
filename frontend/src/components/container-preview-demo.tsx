@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ContainerPreviewPanel } from './preview/ContainerPreviewPanel';
+import { AuthChecker } from './AuthChecker';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -19,7 +20,7 @@ import {
 import type { PreviewStatus } from '../hooks/usePreviewSession';
 
 export function ContainerPreviewDemo() {
-  const [projectId, setProjectId] = useState('demo-project-123');
+  const [projectId, setProjectId] = useState('550e8400-e29b-41d4-a716-446655440000');
   const [currentStatus, setCurrentStatus] = useState<PreviewStatus>('idle');
   const [hasSession, setHasSession] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
@@ -95,7 +96,8 @@ export function ContainerPreviewDemo() {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-6">
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 h-[calc(100vh-8rem)]">
+        <AuthChecker requireAuth={true}>
+          <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 h-[calc(100vh-8rem)]">
           {/* Control Panel */}
           <div className="xl:col-span-1">
             <Card className="h-full">
@@ -219,6 +221,7 @@ export function ContainerPreviewDemo() {
                     </div>
                   </div>
                 </div>
+
               </CardContent>
             </Card>
           </div>
@@ -248,7 +251,8 @@ export function ContainerPreviewDemo() {
               </CardContent>
             </Card>
           </div>
-        </div>
+          </div>
+        </AuthChecker>
       </div>
     </div>
   );
