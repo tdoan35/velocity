@@ -30,10 +30,10 @@ async function detectProjectType(projectDir) {
       type: 'unknown',
       framework: 'unknown',
       devServer: 'static',
-      port: 3000,
+      port: 8080,
       commands: {
         install: 'npm install',
-        dev: 'python3 -m http.server 3000',
+        dev: 'python3 -m http.server 8080',
         build: null,
       }
     };
@@ -46,7 +46,7 @@ async function detectProjectType(projectDir) {
       projectType.devServer = 'expo';
       projectType.commands = {
         install: 'npm install',
-        dev: 'npx expo start --web --port 3000',
+        dev: 'npx expo start --web --port 8080',
         build: 'npx expo build:web',
       };
     }
@@ -123,7 +123,7 @@ async function detectProjectType(projectDir) {
       projectType.devServer = 'static';
       projectType.commands = {
         install: null,
-        dev: 'python3 -m http.server 3000',
+        dev: 'python3 -m http.server 8080',
         build: null,
       };
     }
@@ -137,10 +137,10 @@ async function detectProjectType(projectDir) {
       type: 'unknown',
       framework: 'unknown',
       devServer: 'static',
-      port: 3000,
+      port: 8080,
       commands: {
         install: null,
-        dev: 'python3 -m http.server 3000',
+        dev: 'python3 -m http.server 8080',
         build: null,
       }
     };
@@ -150,14 +150,14 @@ async function detectProjectType(projectDir) {
 /**
  * Get development server command based on project type
  */
-function getDevCommand(projectType) {
+function getDevCommand(projectType, port = 8080) {
   const commands = {
-    'vite': 'npx vite --host 0.0.0.0 --port 3000',
-    'expo': 'npx expo start --web --port 3000 --host 0.0.0.0',
-    'webpack': 'HOST=0.0.0.0 PORT=3000 npm start',
-    'next': 'npm run dev -- --hostname 0.0.0.0 --port 3000',
+    'vite': `npx vite --host 0.0.0.0 --port ${port} --strictPort`,
+    'expo': `npx expo start --web --port ${port} --host 0.0.0.0`,
+    'webpack': `HOST=0.0.0.0 PORT=${port} npm start`,
+    'next': `npm run dev -- --hostname 0.0.0.0 --port ${port}`,
     'custom': projectType.commands.dev || 'npm start',
-    'static': 'python3 -m http.server 3000',
+    'static': `python3 -m http.server ${port}`,
   };
 
   return commands[projectType.devServer] || commands.static;

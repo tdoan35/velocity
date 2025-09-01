@@ -156,8 +156,8 @@ async function createDefaultProject() {
     version: "1.0.0",
     private: true,
     scripts: {
-      start: "vite --host 0.0.0.0 --port 3000",
-      dev: "vite --host 0.0.0.0 --port 3000",
+      start: "vite --host 0.0.0.0 --port 8080",
+      dev: "vite --host 0.0.0.0 --port 8080 --strictPort",
       build: "vite build",
       preview: "vite preview"
     },
@@ -230,9 +230,12 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: '0.0.0.0',
-    port: 3000,
+    port: 8080,
+    strictPort: true,
+    cors: true,
     hmr: {
-      port: 3000,
+      port: 8080,
+      host: '0.0.0.0'
     },
   },
 })`;
@@ -277,12 +280,12 @@ async function startDevServer() {
       });
     }
 
-    // Find available port for dev server
-    devServerPort = await detectPort(projectType.port || 3000);
+    // Find available port for dev server (prefer 8080 to match container configuration)
+    devServerPort = await detectPort(8080);
     console.log(`🔍 Using port ${devServerPort} for development server`);
 
     // Get the appropriate dev command
-    const devCommand = getDevCommand(projectType);
+    const devCommand = getDevCommand(projectType, devServerPort);
     console.log(`🛠️ Starting development server: ${devCommand}`);
 
     // Parse command
