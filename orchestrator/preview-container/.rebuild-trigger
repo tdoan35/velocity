@@ -1,1 +1,1 @@
-# Trigger rebuild - reverted to reasonable timeouts: Docker HEALTHCHECK start-period=30s retries=3, Fly.io waitForMachineReady timeout=60s
+# Trigger rebuild - fix health check HTTP status codes: return 200 only when ready, 503 when starting, with detailed logging

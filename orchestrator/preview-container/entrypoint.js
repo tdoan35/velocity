@@ -580,7 +580,9 @@ function startHealthServer() {
 
   // Health check endpoint - MUST be registered FIRST
   app.get('/health', (req, res) => {
-    res.json({
+    console.log(`🏥 Health check requested - Status: ${healthStatus}, Initialized: ${isInitialized}`);
+    
+    const healthResponse = {
       status: healthStatus,
       timestamp: new Date().toISOString(),
       projectId: PROJECT_ID,
@@ -593,7 +595,22 @@ function startHealthServer() {
         maxRetryAttempts: maxRetryAttempts,
         hasReconnectTimer: !!reconnectTimer
       }
-    });
+    };
+
+    // Return appropriate HTTP status code based on health status
+    if (healthStatus === 'ready') {
+      console.log('✅ Health check: returning 200 OK');
+      res.status(200).json(healthResponse);
+    } else if (healthStatus === 'starting') {
+      console.log('⏳ Health check: returning 503 Service Unavailable (still starting)');
+      res.status(503).json(healthResponse);
+    } else if (healthStatus === 'error') {
+      console.log('❌ Health check: returning 500 Internal Server Error');
+      res.status(500).json(healthResponse);
+    } else {
+      console.log('⚠️ Health check: returning 503 Service Unavailable (unknown status)');
+      res.status(503).json(healthResponse);
+    }
   });
 
   // Proxy to development server - catch-all for non-health requests  
