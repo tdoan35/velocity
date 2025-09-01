@@ -41,7 +41,7 @@ export class FlyIOService {
     console.log(`Creating machine with tier: ${tier.name} (${tierName})`);
 
     const baseConfig: FlyMachineConfig = {
-      image: 'ghcr.io/velocity/preview-container:latest',
+      image: process.env.PREVIEW_CONTAINER_IMAGE || 'ghcr.io/tdoan35/velocity/velocity-preview-container:latest',
       env: {
         PROJECT_ID: projectId,
         SUPABASE_URL: process.env.SUPABASE_URL!,
@@ -87,7 +87,7 @@ export class FlyIOService {
       },
       // Add kill signal handling for graceful shutdown
       init: {
-        cmd: ['node', 'server.js'],
+        cmd: ['node', 'entrypoint.js'],
         tty: false,
       },
     };
