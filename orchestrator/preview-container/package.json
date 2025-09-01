@@ -1,7 +1,7 @@
 {
   "name": "velocity-preview-container",
   "version": "1.0.0",
-  "description": "Preview container runtime for Velocity real-time development",
+  "description": "Preview container runtime for Velocity real-time development - build trigger",
   "main": "entrypoint.js",
   "scripts": {
     "start": "node entrypoint.js"
