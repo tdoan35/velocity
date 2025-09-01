@@ -205,11 +205,11 @@ export class FlyIOService {
       // 1. State is 'started', AND
       // 2. Either no health checks configured, OR all health checks are passing
       const hasHealthChecks = machine.checks && machine.checks.length > 0;
-      const allChecksPass = hasHealthChecks ? machine.checks.every(check => check.status === 'passing') : true;
+      const allChecksPass = hasHealthChecks ? machine.checks!.every(check => check.status === 'passing') : true;
       
       if (machine.state === 'started' && allChecksPass) {
         if (hasHealthChecks) {
-          console.log(`✅ Machine ${machineId} is ready! All ${machine.checks.length} health checks passing (${elapsed}ms elapsed)`);
+          console.log(`✅ Machine ${machineId} is ready! All ${machine.checks!.length} health checks passing (${elapsed}ms elapsed)`);
         } else {
           console.log(`✅ Machine ${machineId} is ready! No health checks configured, machine started successfully (${elapsed}ms elapsed)`);
         }
