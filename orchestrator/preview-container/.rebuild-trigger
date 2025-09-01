@@ -1,1 +1,1 @@
-# Trigger rebuild - increased health check timeouts: Docker HEALTHCHECK start-period=90s retries=5, Fly.io waitForMachineReady timeout=300s
+# Trigger rebuild - reverted to reasonable timeouts: Docker HEALTHCHECK start-period=30s retries=3, Fly.io waitForMachineReady timeout=60s

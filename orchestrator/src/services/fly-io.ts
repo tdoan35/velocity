@@ -172,7 +172,7 @@ export class FlyIOService {
    */
   private async waitForMachineReady(
     machineId: string, 
-    timeout: number = 300000
+    timeout: number = 60000
   ): Promise<void> {
     const startTime = Date.now();
     

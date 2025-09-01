@@ -52,7 +52,7 @@ RUN chown -R node:node /app
 USER node
 
 # Health check to verify container is ready
-HEALTHCHECK --interval=30s --timeout=20s --start-period=90s --retries=5 \
+HEALTHCHECK --interval=15s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
 # Start the entrypoint script
