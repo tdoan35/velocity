@@ -616,6 +616,48 @@ function startHealthServer() {
     }
   });
 
+  // Session routing middleware - MUST be registered SECOND
+  app.use('/session/:sessionId', async (req, res, next) => {
+    const { sessionId } = req.params;
+    console.log(`🎯 Session routing request for: ${sessionId}, My Project ID: ${PROJECT_ID}`);
+    
+    try {
+      // Query Supabase to find which machine should serve this session
+      const { data: session, error } = await supabase
+        .from('preview_sessions')
+        .select('container_id, project_id')
+        .eq('id', sessionId)
+        .single();
+
+      if (error || !session) {
+        console.log(`❌ Session ${sessionId} not found in database`);
+        return res.status(404).json({ error: 'Session not found' });
+      }
+
+      console.log(`📋 Session ${sessionId} should be served by machine: ${session.container_id}`);
+      console.log(`🤖 Current machine ID: ${process.env.FLY_MACHINE_ID || 'unknown'}`);
+
+      // Check if this is the correct machine for this session
+      const currentMachineId = process.env.FLY_MACHINE_ID;
+      if (currentMachineId === session.container_id) {
+        console.log(`✅ This is the correct machine for session ${sessionId}`);
+        // This is the right machine, continue to proxy logic
+        return next();
+      } else {
+        console.log(`🔀 Redirecting session ${sessionId} to correct machine: ${session.container_id}`);
+        // Use fly-replay header to redirect to the correct machine
+        res.setHeader('fly-replay', `instance=${session.container_id}`);
+        return res.status(307).json({ 
+          message: 'Redirecting to correct machine',
+          targetMachine: session.container_id
+        });
+      }
+    } catch (error) {
+      console.error(`❌ Error routing session ${sessionId}:`, error);
+      return res.status(500).json({ error: 'Internal routing error' });
+    }
+  });
+
   // Proxy to development server - catch-all for non-health requests  
   app.use('*', async (req, res, next) => {
     // Explicitly skip health endpoint - should never reach here due to route order
@@ -631,7 +673,17 @@ function startHealthServer() {
     }
 
     try {
-      const targetUrl = `http://localhost:${devServerPort}${req.url}`;
+      // Handle session routing: strip /session/{sessionId} prefix
+      let targetPath = req.url;
+      const sessionMatch = req.url.match(/^\/session\/[^\/]+(\/.*)?$/);
+      if (sessionMatch) {
+        targetPath = sessionMatch[1] || '/';
+        console.log(`🎯 Stripping session prefix: ${req.url} → ${targetPath}`);
+      }
+
+      const targetUrl = `http://localhost:${devServerPort}${targetPath}`;
+      console.log(`🔗 Proxying to: ${targetUrl}`);
+
       const response = await axios({
         method: req.method,
         url: targetUrl,

@@ -88,7 +88,8 @@ export class ContainerManager {
       const { machine, url: containerUrl } = await this.flyService.createMachine(
         request.projectId, 
         tier, 
-        request.customConfig
+        request.customConfig,
+        sessionId
       );
       
       // Update container ID with actual machine ID

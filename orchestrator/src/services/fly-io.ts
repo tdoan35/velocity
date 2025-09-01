@@ -35,7 +35,8 @@ export class FlyIOService {
   async createMachine(
     projectId: string, 
     tierName: string = 'free',
-    customConfig?: Partial<FlyMachineConfig>
+    customConfig?: Partial<FlyMachineConfig>,
+    sessionId?: string
   ): Promise<CreateMachineResponse> {
     // Get the appropriate container tier configuration
     const tier = getContainerTier(tierName);
@@ -102,7 +103,7 @@ export class FlyIOService {
 
       return {
         machine,
-        url: `https://${this.appName}.fly.dev`,
+        url: `https://${this.appName}.fly.dev/session/${sessionId || projectId}`,
       };
     } catch (error) {
       console.error('❌ Failed to create Fly machine:', error);
