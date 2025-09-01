@@ -1,1 +1,1 @@
-# Trigger rebuild - fix Express routing order: app.get before app.use with explicit path ordering
+# Trigger rebuild -  moved the health check server startup to the very beginning of the container's initialization process in orchestrator/preview-container/entrypoint.js.

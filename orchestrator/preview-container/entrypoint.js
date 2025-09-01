@@ -48,6 +48,9 @@ const PROJECT_DIR = '/app/project';
  */
 async function initialize() {
   try {
+    // Start health check server immediately
+    startHealthServer();
+
     console.log(`🚀 Velocity Preview Container starting for project: ${PROJECT_ID}`);
     console.log(`📊 Environment: ${NODE_ENV}`);
     
@@ -75,9 +78,6 @@ async function initialize() {
     // Connect to real-time updates (non-blocking)
     console.log('⚡ Connecting to real-time updates...');
     connectToRealtime(); // Don't await - let it connect in background
-
-    // Start health check server
-    startHealthServer();
 
     isInitialized = true;
     healthStatus = 'ready';
