@@ -1,1 +1,1 @@
-# Trigger rebuild - fix syntax error: missing async keyword in proxy middleware
+# Trigger rebuild - fix Express routing order: app.get before app.use with explicit path ordering

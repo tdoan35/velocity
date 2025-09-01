@@ -578,7 +578,7 @@ function startHealthServer() {
   app.use(cors());
   app.use(express.json());
 
-  // Health check endpoint - MUST be before proxy middleware
+  // Health check endpoint - MUST be registered FIRST
   app.get('/health', (req, res) => {
     res.json({
       status: healthStatus,
@@ -596,10 +596,10 @@ function startHealthServer() {
     });
   });
 
-  // Proxy to development server - catch-all AFTER health endpoint
-  app.use('/', async (req, res, next) => {
-    // Skip proxy for health endpoint
-    if (req.path === '/health') {
+  // Proxy to development server - catch-all for non-health requests  
+  app.use('*', async (req, res, next) => {
+    // Explicitly skip health endpoint - should never reach here due to route order
+    if (req.baseUrl === '/health' || req.path === '/health') {
       return next();
     }
     
