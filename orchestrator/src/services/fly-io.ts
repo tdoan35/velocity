@@ -48,12 +48,15 @@ export class FlyIOService {
       config: {
         image: 'ghcr.io/tdoan35/velocity/velocity-preview-container:latest',
         env: {
-          NODE_ENV: 'production'
+          NODE_ENV: 'development',
+          PROJECT_ID: projectId,
+          SUPABASE_URL: process.env.SUPABASE_URL!,
+          SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY!
         },
         guest: {
           cpu_kind: 'shared',
           cpus: 1,
-          memory_mb: 256
+          memory_mb: 512
         }
       }
     };

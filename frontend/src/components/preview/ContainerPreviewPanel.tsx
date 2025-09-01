@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
-import { usePreviewSession, type PreviewStatus } from '../../hooks/usePreviewSession';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { usePreviewSession } from '../../hooks/usePreviewSession';
+import type { PreviewStatus } from '../../hooks/usePreviewSession';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -71,7 +72,7 @@ export function ContainerPreviewPanel({
   const [iframeLoading, setIframeLoading] = useState(false);
   const [iframeError, setIframeError] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const loadingTimeoutRef = useRef<number | null>(null);
 
   const previewSession = usePreviewSession({
     projectId,
@@ -116,7 +117,7 @@ export function ContainerPreviewPanel({
   const currentDevice = DEVICE_CONFIGS.find(d => d.id === selectedDevice) || DEVICE_CONFIGS[0];
 
   // Calculate responsive dimensions with enhanced scaling logic
-  const getResponsiveDimensions = () => {
+  const getResponsiveDimensions = useCallback(() => {
     const baseWidth = isLandscape ? currentDevice.height : currentDevice.width;
     const baseHeight = isLandscape ? currentDevice.width : currentDevice.height;
     
@@ -156,7 +157,7 @@ export function ContainerPreviewPanel({
       scale,
       isMobileViewport
     };
-  };
+  }, [selectedDevice, isLandscape, currentDevice.height, currentDevice.width]);
 
   const [dimensions, setDimensions] = useState(getResponsiveDimensions());
 
@@ -168,12 +169,12 @@ export function ContainerPreviewPanel({
 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [selectedDevice, isLandscape]);
+  }, [getResponsiveDimensions]);
 
   // Update dimensions when device or orientation changes
   useEffect(() => {
     setDimensions(getResponsiveDimensions());
-  }, [selectedDevice, isLandscape]);
+  }, [getResponsiveDimensions]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -479,7 +480,6 @@ export function ContainerPreviewPanel({
                 sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-downloads allow-pointer-lock"
                 allow="accelerometer; autoplay; camera; encrypted-media; geolocation; gyroscope; microphone; midi; payment; usb; web-share; fullscreen"
                 referrerPolicy="strict-origin-when-cross-origin"
-                credentialless
                 loading="eager"
               />
             </div>
