@@ -597,7 +597,7 @@ function startHealthServer() {
   });
 
   // Proxy to development server - catch-all AFTER health endpoint
-  app.use('/', (req, res, next) => {
+  app.use('/', async (req, res, next) => {
     // Skip proxy for health endpoint
     if (req.path === '/health') {
       return next();

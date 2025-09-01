@@ -1,1 +1,1 @@
-# Trigger rebuild - fix health endpoint routing issue with proxy middleware
+# Trigger rebuild - fix syntax error: missing async keyword in proxy middleware
