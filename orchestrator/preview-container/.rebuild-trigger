@@ -1,1 +1,1 @@
-# Trigger rebuild -  moved the health check server startup to the very beginning of the container's initialization process in orchestrator/preview-container/entrypoint.js.
+# Trigger rebuild - increased health check timeouts: Docker HEALTHCHECK start-period=90s retries=5, Fly.io waitForMachineReady timeout=300s
