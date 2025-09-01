@@ -72,9 +72,9 @@ async function initialize() {
     console.log('🛠️ Starting development server...');
     await startDevServer();
 
-    // Connect to real-time updates
+    // Connect to real-time updates (non-blocking)
     console.log('⚡ Connecting to real-time updates...');
-    await connectToRealtime();
+    connectToRealtime(); // Don't await - let it connect in background
 
     // Start health check server
     startHealthServer();
