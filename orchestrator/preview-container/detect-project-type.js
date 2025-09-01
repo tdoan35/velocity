@@ -30,10 +30,10 @@ async function detectProjectType(projectDir) {
       type: 'unknown',
       framework: 'unknown',
       devServer: 'static',
-      port: 8080,
+      port: 3001,
       commands: {
         install: 'npm install',
-        dev: 'python3 -m http.server 8080',
+        dev: 'python3 -m http.server 3001',
         build: null,
       }
     };
@@ -46,7 +46,7 @@ async function detectProjectType(projectDir) {
       projectType.devServer = 'expo';
       projectType.commands = {
         install: 'npm install',
-        dev: 'npx expo start --web --port 8080',
+        dev: 'npx expo start --web --port 3001',
         build: 'npx expo build:web',
       };
     }
@@ -123,7 +123,7 @@ async function detectProjectType(projectDir) {
       projectType.devServer = 'static';
       projectType.commands = {
         install: null,
-        dev: 'python3 -m http.server 8080',
+        dev: 'python3 -m http.server 3001',
         build: null,
       };
     }
@@ -137,10 +137,10 @@ async function detectProjectType(projectDir) {
       type: 'unknown',
       framework: 'unknown',
       devServer: 'static',
-      port: 8080,
+      port: 3001,
       commands: {
         install: null,
-        dev: 'python3 -m http.server 8080',
+        dev: 'python3 -m http.server 3001',
         build: null,
       }
     };
@@ -150,7 +150,7 @@ async function detectProjectType(projectDir) {
 /**
  * Get development server command based on project type
  */
-function getDevCommand(projectType, port = 8080) {
+function getDevCommand(projectType, port = 3001) {
   const commands = {
     'vite': `npx vite --host 0.0.0.0 --port ${port} --strictPort`,
     'expo': `npx expo start --web --port ${port} --host 0.0.0.0`,
