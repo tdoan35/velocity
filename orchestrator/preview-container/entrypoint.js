@@ -578,7 +578,7 @@ function startHealthServer() {
   app.use(cors());
   app.use(express.json());
 
-  // Health check endpoint
+  // Health check endpoint - MUST be before proxy middleware
   app.get('/health', (req, res) => {
     res.json({
       status: healthStatus,
@@ -596,8 +596,14 @@ function startHealthServer() {
     });
   });
 
-  // Proxy to development server
-  app.use('/', async (req, res) => {
+  // Proxy to development server - catch-all AFTER health endpoint
+  app.use('/', (req, res, next) => {
+    // Skip proxy for health endpoint
+    if (req.path === '/health') {
+      return next();
+    }
+    
+    // Proxy logic - handle directly in middleware
     if (!devServerProcess || !devServerPort) {
       return res.status(503).json({
         error: 'Development server not ready'

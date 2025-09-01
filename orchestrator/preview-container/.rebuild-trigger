@@ -1,1 +1,1 @@
-# Trigger rebuild - fix health check blocking on realtime connection
+# Trigger rebuild - fix health endpoint routing issue with proxy middleware
