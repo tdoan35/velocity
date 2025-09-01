@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y \
     g++ \
     ca-certificates \
     curl \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # Install global development dependencies
