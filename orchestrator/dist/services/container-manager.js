@@ -59,7 +59,7 @@ class ContainerManager {
                 throw new Error(`Database error: ${dbError.message}`);
             }
             // Provision container using Fly.io Machines API with security hardening
-            const { machine, url: containerUrl } = await this.flyService.createMachine(request.projectId, tier, request.customConfig);
+            const { machine, url: containerUrl } = await this.flyService.createMachine(request.projectId, tier, request.customConfig, sessionId);
             // Update container ID with actual machine ID
             const actualContainerId = machine.id;
             // Update session with container URL and active status

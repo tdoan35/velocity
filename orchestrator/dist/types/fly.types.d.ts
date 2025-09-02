@@ -46,16 +46,18 @@ export interface FlyMachineConfig {
     };
     mounts?: FlyMount[];
     processes?: Record<string, FlyProcess>;
-    checks?: Array<{
-        grace_period?: string;
+    checks?: Record<string, {
+        type: 'tcp' | 'http';
+        port?: number;
         interval?: string;
+        timeout?: string;
+        grace_period?: string;
         method?: string;
         path?: string;
-        port?: number;
-        protocol?: string;
-        timeout?: string;
-        type?: string;
-        script?: string;
+        protocol?: 'http' | 'https';
+        tls_server_name?: string;
+        tls_skip_verify?: boolean;
+        headers?: Record<string, string[]>;
     }>;
 }
 export interface FlyService {

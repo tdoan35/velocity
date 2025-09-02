@@ -22,7 +22,7 @@ class FlyIOService {
     /**
      * Create a new Fly machine for preview container
      */
-    async createMachine(projectId, tierName = 'free', customConfig) {
+    async createMachine(projectId, tierName = 'free', customConfig, sessionId) {
         // Get the appropriate container tier configuration
         const tier = (0, container_security_1.getContainerTier)(tierName);
         console.log(`Creating machine with tier: ${tier.name} (${tierName})`);
@@ -47,32 +47,23 @@ class FlyIOService {
                     {
                         protocol: 'tcp',
                         internal_port: 8080,
-                        autostop: false,
-                        autostart: true,
                         ports: [
-                            {
-                                port: 80,
-                                handlers: ['http'],
-                                force_https: true
-                            },
-                            {
-                                port: 443,
-                                handlers: ['http', 'tls']
-                            }
+                            { port: 80, handlers: ['http'] },
+                            { port: 443, handlers: ['http', 'tls'] }
                         ]
                     }
                 ],
-                checks: [
-                    {
+                checks: {
+                    'http-get': {
                         type: 'http',
                         port: 8080,
                         method: 'GET',
-                        path: '/health',
+                        path: '/',
                         grace_period: '5s',
                         interval: '10s',
                         timeout: '2s'
                     }
-                ]
+                }
             }
         };
         try {
@@ -88,7 +79,7 @@ class FlyIOService {
             await this.waitForMachineReady(machine.id);
             return {
                 machine,
-                url: `https://${this.appName}.fly.dev`,
+                url: `https://${this.appName}.fly.dev/session/${sessionId || projectId}`,
             };
         }
         catch (error) {
