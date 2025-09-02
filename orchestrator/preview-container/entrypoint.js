@@ -48,6 +48,9 @@ const PROJECT_DIR = '/app/project';
  */
 async function initialize() {
   try {
+    // Add a delay to allow the database to commit the session
+    await new Promise(resolve => setTimeout(resolve, 5000));
+
     // Start health check server immediately
     startHealthServer();
 
