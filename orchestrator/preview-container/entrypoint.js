@@ -622,15 +622,38 @@ function startHealthServer() {
     console.log(`🎯 Session routing request for: ${sessionId}, My Project ID: ${PROJECT_ID}`);
     
     try {
-      // Query Supabase to find which machine should serve this session
-      const { data: session, error } = await supabase
-        .from('preview_sessions')
-        .select('container_id, project_id')
-        .eq('id', sessionId)
-        .single();
+      let session, error;
+      const maxRetries = 5;
+      let attempt = 0;
+
+      while (attempt < maxRetries) {
+        const { data, error: dbError } = await supabase
+          .from('preview_sessions')
+          .select('container_id, project_id')
+          .eq('id', sessionId)
+          .single();
+
+        if (dbError && dbError.code !== 'PGRST116') { // PGRST116: 'Not a single row was returned'
+          // For other errors, break and handle them
+          error = dbError;
+          break;
+        }
+
+        if (data) {
+          session = data;
+          break;
+        }
+
+        attempt++;
+        if (attempt < maxRetries) {
+          const delay = Math.pow(2, attempt) * 100; // Exponential backoff
+          console.log(`Session not found, attempt ${attempt}. Retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
 
       if (error || !session) {
-        console.log(`❌ Session ${sessionId} not found in database`);
+        console.log(`❌ Session ${sessionId} not found in database after ${maxRetries} attempts`);
         return res.status(404).json({ error: 'Session not found' });
       }
 
