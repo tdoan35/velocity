@@ -99,7 +99,8 @@
       "Bash(echo $SHELL)",
       "Bash(source ~/.bashrc)",
       "Bash(fly logs:*)",
-      "Bash(timeout 10 fly logs)"
+      "Bash(timeout 10 fly logs)",
+      "Bash(timeout 10 fly logs -a velocity-preview-containers)"
     ],
     "defaultMode": "acceptEdits",
     "additionalDirectories": [
