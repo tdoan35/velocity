@@ -582,9 +582,46 @@ function startHealthServer() {
   app.use(express.json());
 
   // Health check endpoint - MUST be registered FIRST
-  app.get('/health', (req, res) => {
+  app.get('/health', async (req, res) => {
     console.log(`🏥 Health check requested - Status: ${healthStatus}, Initialized: ${isInitialized}`);
     
+    const healthChecks = {
+      database: false,
+      devServer: false,
+      machineId: process.env.FLY_MACHINE_ID || 'unknown'
+    };
+
+    try {
+      // Check database connectivity
+      if (supabase) {
+        const { data, error } = await supabase.from('preview_sessions').select('id').limit(1);
+        healthChecks.database = !error && data !== null;
+        if (error) {
+          console.log(`❌ Health check: database error - ${error.message}`);
+        }
+      }
+
+      // Check development server
+      if (devServerPort) {
+        try {
+          const devServerHealth = await axios.get(`http://localhost:${devServerPort}/`, { 
+            timeout: 2000,
+            validateStatus: () => true
+          }).then(r => r.status < 500).catch(() => false);
+          healthChecks.devServer = devServerHealth;
+          if (!devServerHealth) {
+            console.log(`❌ Health check: dev server not responding on port ${devServerPort}`);
+          }
+        } catch (error) {
+          console.log(`❌ Health check: dev server check failed - ${error.message}`);
+          healthChecks.devServer = false;
+        }
+      }
+      
+    } catch (error) {
+      console.error(`❌ Health check error:`, error);
+    }
+
     const healthResponse = {
       status: healthStatus,
       timestamp: new Date().toISOString(),
@@ -592,6 +629,7 @@ function startHealthServer() {
       devServerPort: devServerPort,
       isInitialized: isInitialized,
       uptime: process.uptime(),
+      checks: healthChecks,
       websocket: {
         connected: realtimeChannel ? realtimeChannel.state === 'joined' : false,
         retryCount: connectionRetryCount,
@@ -622,31 +660,66 @@ function startHealthServer() {
     console.log(`🎯 Session routing request for: ${sessionId}, My Project ID: ${PROJECT_ID}`);
     
     try {
+      // Add connection health check before session lookup
+      console.log(`🔍 Performing database health check before session lookup...`);
+      const { data: healthCheck, error: healthError } = await supabase
+        .from('preview_sessions')
+        .select('id')
+        .limit(1);
+        
+      if (healthError) {
+        console.error(`❌ Database health check failed:`, healthError);
+        return res.status(503).json({ 
+          error: 'Database connection failed',
+          sessionId,
+          timestamp: new Date().toISOString(),
+          details: healthError.message || 'Database connection error'
+        });
+      }
+      
+      if (!healthCheck) {
+        console.error(`❌ Database health check returned no data`);
+        return res.status(503).json({ 
+          error: 'Database connection failed',
+          sessionId,
+          timestamp: new Date().toISOString(),
+          details: 'Database connection returned no data'
+        });
+      }
+      
+      console.log(`✅ Database health check passed`);
+      
+      // Session lookup with explicit error handling
       let session, error;
       const maxRetries = 5;
       let attempt = 0;
 
       while (attempt < maxRetries) {
+        console.log(`🔄 Session lookup attempt ${attempt + 1}/${maxRetries} for session: ${sessionId}`);
+        
         const { data, error: dbError } = await supabase
           .from('preview_sessions')
-          .select('container_id, project_id')
+          .select('container_id, project_id, status')
           .eq('id', sessionId)
+          .eq('status', 'active') // Only active sessions
           .single();
 
         if (dbError && dbError.code !== 'PGRST116') { // PGRST116: 'Not a single row was returned'
           // For other errors, break and handle them
+          console.error(`❌ Database error during session lookup:`, dbError);
           error = dbError;
           break;
         }
 
         if (data) {
+          console.log(`✅ Found session ${sessionId} with status: ${data.status}`);
           session = data;
           break;
         }
 
         attempt++;
         if (attempt < maxRetries) {
-          const delay = Math.pow(2, attempt) * 100; // Exponential backoff
+          const delay = Math.pow(2, attempt) * 100; // Exponential backoff: 200ms, 400ms, 800ms, 1600ms
           console.log(`Session not found, attempt ${attempt}. Retrying in ${delay}ms...`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
@@ -654,7 +727,14 @@ function startHealthServer() {
 
       if (error || !session) {
         console.log(`❌ Session ${sessionId} not found in database after ${maxRetries} attempts`);
-        return res.status(404).json({ error: 'Session not found' });
+        return res.status(404).json({ 
+          error: 'Session not found',
+          sessionId,
+          timestamp: new Date().toISOString(),
+          details: error?.message || 'Session does not exist or is not active',
+          attempts: maxRetries,
+          databaseConnected: true // We know DB is connected because health check passed
+        });
       }
 
       console.log(`📋 Session ${sessionId} should be served by machine: ${session.container_id}`);
@@ -672,12 +752,19 @@ function startHealthServer() {
         res.setHeader('fly-replay', `instance=${session.container_id}`);
         return res.status(307).json({ 
           message: 'Redirecting to correct machine',
-          targetMachine: session.container_id
+          targetMachine: session.container_id,
+          sessionId,
+          timestamp: new Date().toISOString()
         });
       }
     } catch (error) {
-      console.error(`❌ Error routing session ${sessionId}:`, error);
-      return res.status(500).json({ error: 'Internal routing error' });
+      console.error(`💥 Session routing error for ${sessionId}:`, error);
+      return res.status(500).json({ 
+        error: 'Session routing failed',
+        sessionId,
+        timestamp: new Date().toISOString(),
+        details: error.message 
+      });
     }
   });
 
