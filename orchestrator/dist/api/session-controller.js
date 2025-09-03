@@ -422,6 +422,104 @@ class SessionController {
                 });
             }
         };
+        /**
+         * GET /sessions/statistics
+         * Get overall session statistics and metrics (admin endpoint)
+         * Phase 3.2: Session statistics endpoint
+         */
+        this.getSessionStatistics = async (req, res) => {
+            try {
+                const statistics = await this.containerManager.getSessionStatistics();
+                res.status(200).json({
+                    success: true,
+                    data: {
+                        totalActiveSessions: statistics.totalActiveSessions,
+                        totalExpiredSessions: statistics.totalExpiredSessions,
+                        sessionsByStatus: statistics.sessionsByStatus,
+                        oldestActiveSession: statistics.oldestActiveSession,
+                        newestActiveSession: statistics.newestActiveSession,
+                        averageSessionDuration: statistics.averageSessionDuration,
+                        timestamp: new Date().toISOString()
+                    }
+                });
+            }
+            catch (error) {
+                console.error('Failed to get session statistics:', error);
+                res.status(500).json({
+                    success: false,
+                    error: error instanceof Error ? error.message : 'Internal server error'
+                });
+            }
+        };
+        /**
+         * POST /sessions/:sessionId/terminate
+         * Force terminate a specific session (admin endpoint)
+         * Phase 3.2: Force termination endpoint
+         */
+        this.forceTerminateSession = async (req, res) => {
+            try {
+                const { sessionId } = req.params;
+                if (!sessionId) {
+                    res.status(400).json({
+                        success: false,
+                        error: 'Session ID is required'
+                    });
+                    return;
+                }
+                await this.containerManager.forceTerminateSession(sessionId);
+                res.status(200).json({
+                    success: true,
+                    message: `Session ${sessionId} terminated successfully`
+                });
+            }
+            catch (error) {
+                console.error('Failed to force terminate session:', error);
+                res.status(500).json({
+                    success: false,
+                    error: error instanceof Error ? error.message : 'Internal server error'
+                });
+            }
+        };
+        /**
+         * POST /sessions/cleanup/comprehensive
+         * Run comprehensive cleanup job (admin endpoint)
+         * Phase 3.2: Comprehensive cleanup endpoint
+         */
+        this.runComprehensiveCleanup = async (req, res) => {
+            try {
+                const results = await this.containerManager.runComprehensiveCleanup();
+                res.status(200).json({
+                    success: true,
+                    data: {
+                        sessionCleanup: {
+                            totalExpired: results.sessionCleanup.totalExpired,
+                            successfulCleanups: results.sessionCleanup.successfulCleanups,
+                            failedCleanups: results.sessionCleanup.failedCleanups,
+                            errors: results.sessionCleanup.errors
+                        },
+                        containerCleanup: {
+                            totalOrphaned: results.containerCleanup.totalOrphaned,
+                            successfulCleanups: results.containerCleanup.successfulCleanups,
+                            errors: results.containerCleanup.errors
+                        },
+                        metrics: {
+                            totalActiveSessions: results.metrics.totalActiveSessions,
+                            totalExpiredSessions: results.metrics.totalExpiredSessions,
+                            averageSessionDuration: results.metrics.averageSessionDuration
+                        },
+                        timestamp: new Date().toISOString()
+                    },
+                    message: 'Comprehensive cleanup completed successfully'
+                });
+            }
+            catch (error) {
+                console.error('Failed to run comprehensive cleanup:', error);
+                res.status(500).json({
+                    success: false,
+                    error: error instanceof Error ? error.message : 'Internal server error'
+                });
+            }
+        };
         this.containerManager = new container_manager_1.ContainerManager();
     }
 }

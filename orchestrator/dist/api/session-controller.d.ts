@@ -58,5 +58,23 @@ export declare class SessionController {
      * Run monitoring job (admin endpoint)
      */
     runMonitoringJob: (req: AuthenticatedRequest, res: Response) => Promise<void>;
+    /**
+     * GET /sessions/statistics
+     * Get overall session statistics and metrics (admin endpoint)
+     * Phase 3.2: Session statistics endpoint
+     */
+    getSessionStatistics: (req: AuthenticatedRequest, res: Response) => Promise<void>;
+    /**
+     * POST /sessions/:sessionId/terminate
+     * Force terminate a specific session (admin endpoint)
+     * Phase 3.2: Force termination endpoint
+     */
+    forceTerminateSession: (req: AuthenticatedRequest, res: Response) => Promise<void>;
+    /**
+     * POST /sessions/cleanup/comprehensive
+     * Run comprehensive cleanup job (admin endpoint)
+     * Phase 3.2: Comprehensive cleanup endpoint
+     */
+    runComprehensiveCleanup: (req: AuthenticatedRequest, res: Response) => Promise<void>;
 }
 //# sourceMappingURL=session-controller.d.ts.map

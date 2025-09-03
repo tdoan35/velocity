@@ -64,4 +64,26 @@ export interface ApiResponse<T = any> {
     error?: string;
     message?: string;
 }
+export interface ProjectFile {
+    id: string;
+    project_id: string;
+    file_path: string;
+    content: string;
+    file_type: 'javascript' | 'typescript' | 'css' | 'html' | 'json' | 'markdown' | 'text';
+    size: number;
+    version: number;
+    is_directory: boolean;
+    created_at: string;
+    updated_at: string;
+}
+export interface Project {
+    id: string;
+    name: string;
+    description?: string;
+    template_type?: string;
+    status: 'active' | 'inactive' | 'archived';
+    owner_id: string;
+    created_at: string;
+    updated_at: string;
+}
 //# sourceMappingURL=index.d.ts.map

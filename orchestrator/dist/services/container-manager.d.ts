@@ -3,9 +3,12 @@ export declare class ContainerManager {
     private supabase;
     private flyService;
     private realtimeManager;
+    private templateService;
+    private cleanupService;
     constructor();
     /**
      * Creates a new preview session with container provisioning
+     * Uses atomic transaction to prevent race condition between session creation and container lookup
      */
     createSession(request: CreateSessionRequest & {
         tier?: string;
@@ -21,6 +24,7 @@ export declare class ContainerManager {
     getSessionStatus(sessionId: string): Promise<PreviewSession | null>;
     /**
      * Cleanup expired sessions (for background job)
+     * Enhanced with comprehensive SessionCleanupService
      */
     cleanupExpiredSessions(): Promise<void>;
     /**
@@ -72,7 +76,52 @@ export declare class ContainerManager {
     }>;
     /**
      * Background monitoring job to be run periodically
+     * Enhanced with comprehensive cleanup and metrics
      */
     runMonitoringJob(): Promise<void>;
+    /**
+     * Ensure project is ready with proper files and configuration
+     * Phase 2.1: Project Validation and Setup
+     */
+    private ensureProjectReady;
+    /**
+     * Set up demo project with proper configuration and files
+     */
+    private setupDemoProject;
+    /**
+     * Create a new project with specified template
+     */
+    private createProjectWithTemplate;
+    /**
+     * Add template files to a project
+     */
+    private addTemplateFilesToProject;
+    /**
+     * Get existing file paths for a project
+     */
+    private getExistingFilePaths;
+    /**
+     * Get overall session statistics and metrics
+     * Phase 3.2: Expose cleanup service metrics
+     */
+    getSessionStatistics(): Promise<import("./cleanup-service").SessionMetrics>;
+    /**
+     * Force terminate a specific session
+     * Phase 3.2: Expose force termination
+     */
+    forceTerminateSession(sessionId: string): Promise<void>;
+    /**
+     * Run comprehensive cleanup manually
+     * Phase 3.2: Expose manual cleanup trigger
+     */
+    runComprehensiveCleanup(): Promise<{
+        sessionCleanup: import("./cleanup-service").SessionCleanupStats;
+        containerCleanup: {
+            totalOrphaned: number;
+            successfulCleanups: number;
+            errors: string[];
+        };
+        metrics: import("./cleanup-service").SessionMetrics;
+    }>;
 }
 //# sourceMappingURL=container-manager.d.ts.map

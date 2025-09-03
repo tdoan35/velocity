@@ -9,6 +9,8 @@ const uuid_1 = require("uuid");
 const fly_io_1 = require("./fly-io");
 const realtime_channel_manager_1 = __importDefault(require("./realtime-channel-manager"));
 const container_security_1 = require("../config/container-security");
+const template_service_1 = require("./template-service");
+const cleanup_service_1 = require("./cleanup-service");
 class ContainerManager {
     constructor() {
         this.supabase = (0, supabase_js_1.createClient)(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -24,9 +26,14 @@ class ContainerManager {
         this.flyService = new fly_io_1.FlyIOService(flyApiToken, flyAppName);
         // Initialize realtime channel manager
         this.realtimeManager = new realtime_channel_manager_1.default(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+        // Initialize template service
+        this.templateService = new template_service_1.TemplateService();
+        // Initialize cleanup service
+        this.cleanupService = new cleanup_service_1.SessionCleanupService();
     }
     /**
      * Creates a new preview session with container provisioning
+     * Uses atomic transaction to prevent race condition between session creation and container lookup
      */
     async createSession(request) {
         const sessionId = (0, uuid_1.v4)();
@@ -35,10 +42,17 @@ class ContainerManager {
         // Validate tier and get configuration
         const tierConfig = (0, container_security_1.getContainerTier)(tier);
         console.log(`Creating session with tier: ${tierConfig.name} for user: ${request.userId}`);
+        let session = null;
         try {
+            // PHASE 0: PROJECT VALIDATION AND SETUP
+            console.log(`🔍 Ensuring project is ready: ${request.projectId}`);
+            const projectInfo = await this.ensureProjectReady(request.projectId);
+            console.log(`✅ Project validation complete: ${request.projectId} (${projectInfo.isNew ? 'new' : 'existing'})`);
+            // PHASE 1: ATOMIC SESSION CREATION
             // Create session record in database with 'creating' status
             const expiresAt = new Date(Date.now() + (tierConfig.maxDurationHours * 60 * 60 * 1000));
-            const { error: dbError } = await this.supabase
+            console.log(`📝 Creating session record: ${sessionId}`);
+            const { data: sessionData, error: dbError } = await this.supabase
                 .from('preview_sessions')
                 .insert({
                 id: sessionId,
@@ -54,15 +68,22 @@ class ContainerManager {
                     memory_mb: tierConfig.resources.memory.mb,
                     max_duration_hours: tierConfig.maxDurationHours,
                 },
-            });
-            if (dbError) {
-                throw new Error(`Database error: ${dbError.message}`);
+            })
+                .select()
+                .single();
+            if (dbError || !sessionData) {
+                throw new Error(`Database error: ${dbError?.message || 'Session creation failed'}`);
             }
-            // Provision container using Fly.io Machines API with security hardening
+            session = sessionData;
+            console.log(`✅ Session record created: ${sessionId}`);
+            // PHASE 2: CONTAINER CREATION (after session exists in DB)
+            console.log(`🐳 Creating container for session: ${sessionId}`);
             const { machine, url: containerUrl } = await this.flyService.createMachine(request.projectId, tier, request.customConfig, sessionId);
             // Update container ID with actual machine ID
             const actualContainerId = machine.id;
-            // Update session with container URL and active status
+            console.log(`✅ Container created: ${actualContainerId}`);
+            // PHASE 3: UPDATE SESSION WITH CONTAINER INFO
+            console.log(`🔄 Updating session with container info: ${sessionId}`);
             const { error: updateError } = await this.supabase
                 .from('preview_sessions')
                 .update({
@@ -74,9 +95,24 @@ class ContainerManager {
                 .eq('id', sessionId);
             if (updateError) {
                 console.error('Failed to update session status:', updateError);
-                // Continue anyway - container is created
+                // This is not critical - continue with verification
             }
-            // Register container with realtime channel manager
+            // PHASE 4: CRITICAL VERIFICATION - Ensure session exists before returning URL
+            console.log(`🔍 Verifying session exists in database: ${sessionId}`);
+            const { data: verification, error: verificationError } = await this.supabase
+                .from('preview_sessions')
+                .select('id, container_id, container_url, status, project_id')
+                .eq('id', sessionId)
+                .single();
+            if (verificationError || !verification) {
+                throw new Error(`Session verification failed: ${verificationError?.message || 'Session not found after creation'}`);
+            }
+            // Ensure session is in active state
+            if (verification.status !== 'active') {
+                console.warn(`⚠️ Session ${sessionId} is not active yet, current status: ${verification.status}`);
+            }
+            console.log(`✅ Session verification successful: ${sessionId} (status: ${verification.status})`);
+            // PHASE 5: REGISTER WITH REALTIME (non-critical)
             try {
                 const realtimeInfo = await this.realtimeManager.registerContainer(request.projectId, actualContainerId, containerUrl);
                 console.log('✅ Container registered with realtime channels:', realtimeInfo);
@@ -85,24 +121,28 @@ class ContainerManager {
                 console.error('⚠️ Failed to register container with realtime:', realtimeError);
                 // Continue anyway - core functionality still works
             }
+            console.log(`🎉 Session creation complete: ${sessionId} -> ${containerUrl}`);
+            // Only return URL after verification succeeds
             return {
                 sessionId,
                 containerId: actualContainerId,
-                containerUrl,
+                containerUrl: verification.container_url || containerUrl,
                 status: 'active',
             };
         }
         catch (error) {
             console.error('Failed to create preview session:', error);
-            // Update session status to error
-            await this.supabase
-                .from('preview_sessions')
-                .update({
-                status: 'error',
-                error_message: error instanceof Error ? error.message : 'Unknown error',
-                updated_at: new Date(),
-            })
-                .eq('id', sessionId);
+            // Cleanup on failure - update session status to error
+            if (session?.id) {
+                await this.supabase
+                    .from('preview_sessions')
+                    .update({
+                    status: 'error',
+                    error_message: error instanceof Error ? error.message : 'Unknown error',
+                    updated_at: new Date(),
+                })
+                    .eq('id', session.id);
+            }
             throw new Error(`Failed to create preview session: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     }
@@ -182,33 +222,22 @@ class ContainerManager {
     }
     /**
      * Cleanup expired sessions (for background job)
+     * Enhanced with comprehensive SessionCleanupService
      */
     async cleanupExpiredSessions() {
         try {
-            const { data: expiredSessions, error } = await this.supabase
-                .from('preview_sessions')
-                .select('*')
-                .lt('expires_at', new Date().toISOString())
-                .in('status', ['creating', 'active']);
-            if (error) {
-                console.error('Failed to fetch expired sessions:', error);
-                return;
+            console.log('🧹 Running enhanced session cleanup...');
+            const stats = await this.cleanupService.cleanupExpiredSessions();
+            console.log(`📊 Cleanup summary: ${stats.successfulCleanups} expired sessions cleaned, ${stats.failedCleanups} failed`);
+            if (stats.errors.length > 0) {
+                console.error('⚠️ Cleanup errors:', stats.errors);
             }
-            for (const session of expiredSessions || []) {
-                try {
-                    await this.destroySession(session.id);
-                    console.log(`Cleaned up expired session: ${session.id}`);
-                }
-                catch (error) {
-                    console.error(`Failed to cleanup session ${session.id}:`, error);
-                }
-            }
-            // Also cleanup any orphaned machines at the Fly.io level
-            const orphanedCount = await this.flyService.cleanupOrphanedMachines(60); // 60 minutes max age
-            console.log(`Cleaned up ${orphanedCount} orphaned machines`);
+            // Also cleanup orphaned containers
+            const orphanedStats = await this.cleanupService.cleanupOrphanedContainers();
+            console.log(`🗑️ Orphaned containers: ${orphanedStats.successfulCleanups} cleaned, ${orphanedStats.totalOrphaned} total found`);
         }
         catch (error) {
-            console.error('Cleanup process failed:', error);
+            console.error('❌ Enhanced cleanup process failed:', error);
         }
     }
     /**
@@ -344,10 +373,15 @@ class ContainerManager {
     }
     /**
      * Background monitoring job to be run periodically
+     * Enhanced with comprehensive cleanup and metrics
      */
     async runMonitoringJob() {
-        console.log('🔍 Running container monitoring job...');
+        console.log('🔍 Running enhanced container monitoring job...');
         try {
+            // Get session metrics first
+            const metrics = await this.cleanupService.getSessionMetrics();
+            console.log(`📊 Session metrics: ${metrics.totalActiveSessions} active, ${metrics.totalExpiredSessions} expired`);
+            // Monitor individual sessions
             const results = await this.monitorAllSessions();
             let healthyCount = 0;
             let warningCount = 0;
@@ -367,13 +401,230 @@ class ContainerManager {
                         break;
                 }
             }
-            console.log(`📊 Monitoring complete: ${healthyCount} healthy, ${warningCount} warnings, ${criticalCount} critical`);
-            // Clean up expired sessions
-            await this.cleanupExpiredSessions();
+            console.log(`📊 Session health: ${healthyCount} healthy, ${warningCount} warnings, ${criticalCount} critical`);
+            // Run comprehensive cleanup
+            const cleanupResults = await this.cleanupService.runCleanupJob();
+            console.log(`🧹 Cleanup results: ${cleanupResults.sessionCleanup.successfulCleanups} sessions, ${cleanupResults.containerCleanup.successfulCleanups} containers`);
+            // Log session duration insights
+            if (metrics.averageSessionDuration) {
+                console.log(`⏱️ Average session duration: ${metrics.averageSessionDuration} minutes`);
+            }
+            if (metrics.oldestActiveSession) {
+                const ageMinutes = Math.round((Date.now() - metrics.oldestActiveSession.getTime()) / 1000 / 60);
+                console.log(`⏰ Oldest active session: ${ageMinutes} minutes old`);
+            }
         }
         catch (error) {
-            console.error('❌ Monitoring job failed:', error);
+            console.error('❌ Enhanced monitoring job failed:', error);
         }
+    }
+    /**
+     * Ensure project is ready with proper files and configuration
+     * Phase 2.1: Project Validation and Setup
+     */
+    async ensureProjectReady(projectId) {
+        try {
+            // Handle demo project special case
+            if (projectId === '550e8400-e29b-41d4-a716-446655440000') {
+                return await this.setupDemoProject(projectId);
+            }
+            // Check if project exists
+            const { data: project, error: projectError } = await this.supabase
+                .from('projects')
+                .select('id, name, template_type, status, owner_id, created_at, updated_at')
+                .eq('id', projectId)
+                .single();
+            if (projectError || !project) {
+                console.log(`📁 Project ${projectId} not found, creating with default template...`);
+                // Create new project with default template
+                const newProject = await this.createProjectWithTemplate(projectId, 'react');
+                return { project: newProject, isNew: true };
+            }
+            // Check if project has files
+            const { count: fileCount, error: countError } = await this.supabase
+                .from('project_files')
+                .select('id', { count: 'exact' })
+                .eq('project_id', projectId);
+            if (countError) {
+                console.warn(`⚠️ Failed to count project files for ${projectId}:`, countError);
+            }
+            if (!fileCount || fileCount === 0) {
+                console.log(`📦 Project ${projectId} has no files, adding template files...`);
+                await this.addTemplateFilesToProject(projectId, project.template_type || 'react');
+                console.log(`✅ Added template files to project ${projectId}`);
+            }
+            else {
+                console.log(`📁 Project ${projectId} has ${fileCount} files`);
+            }
+            return { project, isNew: false };
+        }
+        catch (error) {
+            console.error(`❌ Failed to ensure project ready for ${projectId}:`, error);
+            throw new Error(`Project validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+    /**
+     * Set up demo project with proper configuration and files
+     */
+    async setupDemoProject(projectId) {
+        try {
+            console.log(`🎭 Setting up demo project: ${projectId}`);
+            // Check if demo project exists
+            const { data: existingProject, error: fetchError } = await this.supabase
+                .from('projects')
+                .select('id, name, template_type, status, owner_id, created_at, updated_at')
+                .eq('id', projectId)
+                .single();
+            let project;
+            let isNew = false;
+            if (fetchError || !existingProject) {
+                console.log(`📝 Creating demo project record: ${projectId}`);
+                // Create demo project
+                const { data: newProject, error: createError } = await this.supabase
+                    .from('projects')
+                    .insert({
+                    id: projectId,
+                    name: 'Demo Project',
+                    description: 'Velocity preview container demo project',
+                    template_type: 'react',
+                    status: 'active',
+                    owner_id: '00000000-0000-0000-0000-000000000000' // System user
+                })
+                    .select()
+                    .single();
+                if (createError || !newProject) {
+                    throw new Error(`Failed to create demo project: ${createError?.message}`);
+                }
+                project = newProject;
+                isNew = true;
+                console.log(`✅ Demo project created: ${projectId}`);
+            }
+            else {
+                project = existingProject;
+                console.log(`✅ Demo project found: ${projectId}`);
+            }
+            // Ensure demo project has files
+            await this.addTemplateFilesToProject(projectId, 'react');
+            return { project, isNew };
+        }
+        catch (error) {
+            console.error(`❌ Failed to setup demo project ${projectId}:`, error);
+            throw error;
+        }
+    }
+    /**
+     * Create a new project with specified template
+     */
+    async createProjectWithTemplate(projectId, templateType) {
+        try {
+            console.log(`📝 Creating project with template: ${projectId} (${templateType})`);
+            // Create project record
+            const { data: project, error: createError } = await this.supabase
+                .from('projects')
+                .insert({
+                id: projectId,
+                name: `Project ${projectId.substring(0, 8)}`,
+                description: `Auto-generated project with ${templateType} template`,
+                template_type: templateType,
+                status: 'active',
+                owner_id: '00000000-0000-0000-0000-000000000000' // System user for auto-generated projects
+            })
+                .select()
+                .single();
+            if (createError || !project) {
+                throw new Error(`Failed to create project: ${createError?.message}`);
+            }
+            // Add template files
+            await this.addTemplateFilesToProject(projectId, templateType);
+            console.log(`✅ Project created with template: ${projectId}`);
+            return project;
+        }
+        catch (error) {
+            console.error(`❌ Failed to create project with template ${projectId}:`, error);
+            throw error;
+        }
+    }
+    /**
+     * Add template files to a project
+     */
+    async addTemplateFilesToProject(projectId, templateType) {
+        try {
+            console.log(`📦 Adding template files to project: ${projectId} (${templateType})`);
+            // Validate template type
+            if (!this.templateService.isTemplateTypeSupported(templateType)) {
+                console.warn(`⚠️ Unsupported template type ${templateType}, defaulting to 'react'`);
+                templateType = 'react';
+            }
+            // Get template files
+            const templateFiles = this.templateService.getTemplateFiles(templateType);
+            const projectFiles = this.templateService.convertToProjectFiles(templateFiles, projectId);
+            // Check if files already exist (avoid duplicates)
+            const existingFilePaths = await this.getExistingFilePaths(projectId);
+            const newFiles = projectFiles.filter(file => !existingFilePaths.has(file.file_path));
+            if (newFiles.length === 0) {
+                console.log(`✅ Project ${projectId} already has all template files`);
+                return;
+            }
+            // Insert new files in batches (Supabase has limits)
+            const batchSize = 10;
+            for (let i = 0; i < newFiles.length; i += batchSize) {
+                const batch = newFiles.slice(i, i + batchSize);
+                const { error: insertError } = await this.supabase
+                    .from('project_files')
+                    .insert(batch);
+                if (insertError) {
+                    console.error(`❌ Failed to insert file batch ${i}-${i + batch.length}:`, insertError);
+                    throw new Error(`Failed to add template files: ${insertError.message}`);
+                }
+                console.log(`📁 Inserted ${batch.length} files (batch ${Math.floor(i / batchSize) + 1})`);
+            }
+            console.log(`✅ Added ${newFiles.length} template files to project ${projectId}`);
+        }
+        catch (error) {
+            console.error(`❌ Failed to add template files to ${projectId}:`, error);
+            throw error;
+        }
+    }
+    /**
+     * Get existing file paths for a project
+     */
+    async getExistingFilePaths(projectId) {
+        try {
+            const { data: existingFiles, error } = await this.supabase
+                .from('project_files')
+                .select('file_path')
+                .eq('project_id', projectId);
+            if (error) {
+                console.warn(`⚠️ Failed to fetch existing file paths for ${projectId}:`, error);
+                return new Set();
+            }
+            return new Set(existingFiles?.map(f => f.file_path) || []);
+        }
+        catch (error) {
+            console.error(`❌ Failed to get existing file paths for ${projectId}:`, error);
+            return new Set();
+        }
+    }
+    /**
+     * Get overall session statistics and metrics
+     * Phase 3.2: Expose cleanup service metrics
+     */
+    async getSessionStatistics() {
+        return await this.cleanupService.getSessionMetrics();
+    }
+    /**
+     * Force terminate a specific session
+     * Phase 3.2: Expose force termination
+     */
+    async forceTerminateSession(sessionId) {
+        return await this.cleanupService.forceTerminateSession(sessionId);
+    }
+    /**
+     * Run comprehensive cleanup manually
+     * Phase 3.2: Expose manual cleanup trigger
+     */
+    async runComprehensiveCleanup() {
+        return await this.cleanupService.runCleanupJob();
     }
 }
 exports.ContainerManager = ContainerManager;

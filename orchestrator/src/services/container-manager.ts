@@ -4,6 +4,7 @@ import { FlyIOService } from './fly-io';
 import RealtimeChannelManager from './realtime-channel-manager';
 import { getContainerTier } from '../config/container-security';
 import { TemplateService } from './template-service';
+import { SessionCleanupService } from './cleanup-service';
 import type { 
   ContainerSession, 
   CreateSessionRequest, 
@@ -17,6 +18,7 @@ export class ContainerManager {
   private flyService: FlyIOService;
   private realtimeManager: RealtimeChannelManager;
   private templateService: TemplateService;
+  private cleanupService: SessionCleanupService;
 
   constructor() {
     this.supabase = createClient(
@@ -46,6 +48,9 @@ export class ContainerManager {
 
     // Initialize template service
     this.templateService = new TemplateService();
+
+    // Initialize cleanup service
+    this.cleanupService = new SessionCleanupService();
   }
 
   /**
@@ -282,35 +287,25 @@ export class ContainerManager {
 
   /**
    * Cleanup expired sessions (for background job)
+   * Enhanced with comprehensive SessionCleanupService
    */
   async cleanupExpiredSessions(): Promise<void> {
     try {
-      const { data: expiredSessions, error } = await this.supabase
-        .from('preview_sessions')
-        .select('*')
-        .lt('expires_at', new Date().toISOString())
-        .in('status', ['creating', 'active']);
-
-      if (error) {
-        console.error('Failed to fetch expired sessions:', error);
-        return;
+      console.log('🧹 Running enhanced session cleanup...');
+      const stats = await this.cleanupService.cleanupExpiredSessions();
+      
+      console.log(`📊 Cleanup summary: ${stats.successfulCleanups} expired sessions cleaned, ${stats.failedCleanups} failed`);
+      
+      if (stats.errors.length > 0) {
+        console.error('⚠️ Cleanup errors:', stats.errors);
       }
 
-      for (const session of expiredSessions || []) {
-        try {
-          await this.destroySession(session.id);
-          console.log(`Cleaned up expired session: ${session.id}`);
-        } catch (error) {
-          console.error(`Failed to cleanup session ${session.id}:`, error);
-        }
-      }
-
-      // Also cleanup any orphaned machines at the Fly.io level
-      const orphanedCount = await this.flyService.cleanupOrphanedMachines(60); // 60 minutes max age
-      console.log(`Cleaned up ${orphanedCount} orphaned machines`);
+      // Also cleanup orphaned containers
+      const orphanedStats = await this.cleanupService.cleanupOrphanedContainers();
+      console.log(`🗑️ Orphaned containers: ${orphanedStats.successfulCleanups} cleaned, ${orphanedStats.totalOrphaned} total found`);
 
     } catch (error) {
-      console.error('Cleanup process failed:', error);
+      console.error('❌ Enhanced cleanup process failed:', error);
     }
   }
 
@@ -487,11 +482,17 @@ export class ContainerManager {
 
   /**
    * Background monitoring job to be run periodically
+   * Enhanced with comprehensive cleanup and metrics
    */
   async runMonitoringJob(): Promise<void> {
-    console.log('🔍 Running container monitoring job...');
+    console.log('🔍 Running enhanced container monitoring job...');
     
     try {
+      // Get session metrics first
+      const metrics = await this.cleanupService.getSessionMetrics();
+      console.log(`📊 Session metrics: ${metrics.totalActiveSessions} active, ${metrics.totalExpiredSessions} expired`);
+
+      // Monitor individual sessions
       const results = await this.monitorAllSessions();
       
       let healthyCount = 0;
@@ -514,13 +515,24 @@ export class ContainerManager {
         }
       }
 
-      console.log(`📊 Monitoring complete: ${healthyCount} healthy, ${warningCount} warnings, ${criticalCount} critical`);
+      console.log(`📊 Session health: ${healthyCount} healthy, ${warningCount} warnings, ${criticalCount} critical`);
 
-      // Clean up expired sessions
-      await this.cleanupExpiredSessions();
+      // Run comprehensive cleanup
+      const cleanupResults = await this.cleanupService.runCleanupJob();
+      console.log(`🧹 Cleanup results: ${cleanupResults.sessionCleanup.successfulCleanups} sessions, ${cleanupResults.containerCleanup.successfulCleanups} containers`);
+
+      // Log session duration insights
+      if (metrics.averageSessionDuration) {
+        console.log(`⏱️ Average session duration: ${metrics.averageSessionDuration} minutes`);
+      }
+
+      if (metrics.oldestActiveSession) {
+        const ageMinutes = Math.round((Date.now() - metrics.oldestActiveSession.getTime()) / 1000 / 60);
+        console.log(`⏰ Oldest active session: ${ageMinutes} minutes old`);
+      }
 
     } catch (error) {
-      console.error('❌ Monitoring job failed:', error);
+      console.error('❌ Enhanced monitoring job failed:', error);
     }
   }
 
@@ -741,5 +753,29 @@ export class ContainerManager {
       console.error(`❌ Failed to get existing file paths for ${projectId}:`, error);
       return new Set();
     }
+  }
+
+  /**
+   * Get overall session statistics and metrics
+   * Phase 3.2: Expose cleanup service metrics
+   */
+  async getSessionStatistics() {
+    return await this.cleanupService.getSessionMetrics();
+  }
+
+  /**
+   * Force terminate a specific session
+   * Phase 3.2: Expose force termination
+   */
+  async forceTerminateSession(sessionId: string) {
+    return await this.cleanupService.forceTerminateSession(sessionId);
+  }
+
+  /**
+   * Run comprehensive cleanup manually
+   * Phase 3.2: Expose manual cleanup trigger
+   */
+  async runComprehensiveCleanup() {
+    return await this.cleanupService.runCleanupJob();
   }
 }

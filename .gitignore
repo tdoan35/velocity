@@ -28,3 +28,4 @@ node_modules/
 # MCPs
 .mcp.json
 settings.json
+.playwright-mcp

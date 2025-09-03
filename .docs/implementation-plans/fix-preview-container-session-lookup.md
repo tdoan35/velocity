@@ -652,36 +652,101 @@ app.get('/health', async (req, res) => {
 
 **Result**: ✅ **Enhanced health monitoring implemented** - Health endpoint now provides comprehensive system diagnostics including database connectivity, development server status, and detailed container information.
 
-#### 3.2 Session Cleanup and Monitoring
+#### 3.2 Session Cleanup and Monitoring ✅ **COMPLETED** (2025-09-03)
 **File**: `orchestrator/src/services/cleanup-service.ts`
 
+**Status**: ✅ **IMPLEMENTED AND INTEGRATED**
+
+**Implementation Notes**:
+- **Comprehensive Cleanup Service**: Created full-featured SessionCleanupService with expired session cleanup, orphaned container detection, and detailed metrics
+- **Enhanced Container Manager**: Integrated cleanup service into ContainerManager for session statistics and comprehensive cleanup operations
+- **New API Endpoints**: Added three new endpoints for enhanced monitoring and management
+- **Database Integration**: Full Supabase integration with transaction-safe operations
+
+**Features Implemented**:
+
+1. **SessionCleanupService** (372 lines):
 ```typescript
 export class SessionCleanupService {
-  async cleanupExpiredSessions() {
-    const expiredSessions = await supabase
-      .from('preview_sessions')
-      .select('id, container_id')
-      .lt('expires_at', new Date().toISOString())
-      .eq('status', 'active');
-      
-    for (const session of expiredSessions.data || []) {
-      await this.terminateSession(session);
-    }
-  }
+  // Core cleanup functionality
+  async cleanupExpiredSessions(): Promise<SessionCleanupStats>
+  async terminateSession(session: { id, container_id?, project_id? }): Promise<void>
+  async forceTerminateSession(sessionId: string): Promise<void>
   
-  async terminateSession(session: { id: string, container_id?: string }) {
-    // Update session status
-    await supabase.from('preview_sessions')
-      .update({ status: 'ended', ended_at: new Date().toISOString() })
-      .eq('id', session.id);
-      
-    // Terminate container if exists
-    if (session.container_id) {
-      await this.flyService.destroyMachine(session.container_id);
-    }
-  }
+  // Monitoring and metrics
+  async getSessionMetrics(): Promise<SessionMetrics>
+  
+  // Orphaned container management
+  async cleanupOrphanedContainers(): Promise<CleanupStats>
+  
+  // Comprehensive operations
+  async runCleanupJob(): Promise<ComprehensiveCleanupResult>
 }
 ```
+
+2. **Enhanced ContainerManager Integration**:
+```typescript
+// New methods added to ContainerManager
+async getSessionStatistics(): Promise<SessionMetrics>
+async forceTerminateSession(sessionId: string): Promise<void> 
+async runComprehensiveCleanup(): Promise<ComprehensiveCleanupResult>
+
+// Integration with cleanup service
+constructor() {
+  this.cleanupService = new SessionCleanupService();
+  // ... existing initialization
+}
+```
+
+3. **New API Endpoints** (`orchestrator/src/api/routes.ts`):
+```typescript
+// Enhanced cleanup and monitoring routes
+router.get('/sessions/statistics', sessionController.getSessionStatistics.bind(sessionController));
+router.post('/sessions/:sessionId/terminate', sessionController.forceTerminateSession.bind(sessionController));
+router.post('/sessions/cleanup/comprehensive', sessionController.runComprehensiveCleanup.bind(sessionController));
+```
+
+4. **Session Controller Enhancements** (`orchestrator/src/api/session-controller.ts`):
+```typescript
+// New methods for Phase 3.2
+async getSessionStatistics(req, res): Promise<void> // Lines 486-510
+async forceTerminateSession(req, res): Promise<void> // Lines 517-543  
+async runComprehensiveCleanup(req, res): Promise<void> // Lines 550-585
+```
+
+**Key Capabilities**:
+
+- **Expired Session Cleanup**: Automatically identifies and cleans up sessions past their expiration date
+- **Orphaned Container Detection**: Finds containers in Fly.io that no longer have corresponding database sessions
+- **Force Termination**: Manual session termination for admin operations
+- **Comprehensive Metrics**: Detailed statistics on session usage, duration, and status distribution  
+- **Batch Operations**: Efficient cleanup of multiple sessions and containers
+- **Error Handling**: Robust error tracking and reporting for cleanup operations
+- **Logging**: Extensive console logging with emoji indicators for easy monitoring
+
+**Monitoring Features**:
+```typescript
+interface SessionMetrics {
+  totalActiveSessions: number;
+  totalExpiredSessions: number;
+  sessionsByStatus: Record<string, number>;
+  oldestActiveSession?: Date;
+  newestActiveSession?: Date;
+  averageSessionDuration?: number;
+}
+```
+
+**Cleanup Statistics**:
+```typescript
+interface SessionCleanupStats {
+  totalExpired: number;
+  successfulCleanups: number;
+  failedCleanups: number;
+  errors: string[];
+}
+```
+
+**Result**: ✅ **Complete monitoring and cleanup system implemented** - The system now has comprehensive session lifecycle management, orphaned resource detection, detailed metrics, and both automated and manual cleanup capabilities. This provides the monitoring foundation needed for a production-ready container orchestration system.
 
 ---
 

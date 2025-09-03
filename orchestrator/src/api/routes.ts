@@ -31,6 +31,11 @@ router.get('/monitoring/status', sessionController.getMonitoringStatus.bind(sess
 router.post('/sessions/cleanup', sessionController.cleanupSessions.bind(sessionController));
 router.post('/monitoring/run', sessionController.runMonitoringJob.bind(sessionController));
 
+// Phase 3.2: Enhanced cleanup and monitoring routes
+router.get('/sessions/statistics', sessionController.getSessionStatistics.bind(sessionController));
+router.post('/sessions/:sessionId/terminate', sessionController.forceTerminateSession.bind(sessionController));
+router.post('/sessions/cleanup/comprehensive', sessionController.runComprehensiveCleanup.bind(sessionController));
+
 // Monitoring endpoints
 router.get('/monitoring/health', MonitoringController.getHealthSummary);
 router.get('/monitoring/metrics', MonitoringController.getMetrics);
