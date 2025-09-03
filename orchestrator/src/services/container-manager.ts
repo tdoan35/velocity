@@ -607,6 +607,9 @@ export class ContainerManager {
       if (fetchError || !existingProject) {
         console.log(`📝 Creating demo project record: ${projectId}`);
         
+        // Use a valid user ID for demo project ownership
+        const demoOwnerId = '2037d35a-af6b-4b28-a6c1-bcaf78e7ec36'; // Known valid user
+        
         // Create demo project
         const { data: newProject, error: createError } = await this.supabase
           .from('projects')
@@ -616,7 +619,7 @@ export class ContainerManager {
             description: 'Velocity preview container demo project',
             template_type: 'react',
             status: 'active',
-            owner_id: '00000000-0000-0000-0000-000000000000' // System user
+            owner_id: demoOwnerId
           })
           .select()
           .single();
