@@ -793,9 +793,8 @@ button:hover {
             file_path: file.file_path,
             content: file.content,
             file_type: file.file_type,
-            size: file.content.length,
+            size_bytes: file.content.length,
             version: 1,
-            is_directory: false,
         }));
     }
     /**

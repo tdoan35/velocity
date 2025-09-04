@@ -81,9 +81,11 @@ export interface ProjectFile {
   file_path: string;
   content: string;
   file_type: 'javascript' | 'typescript' | 'css' | 'html' | 'json' | 'markdown' | 'text';
-  size: number;
+  size_bytes: number;
   version: number;
-  is_directory: boolean;
+  parent_version_id?: string;
+  checksum?: string;
+  metadata?: Record<string, any>;
   created_at: string;
   updated_at: string;
 }
