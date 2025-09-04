@@ -764,7 +764,81 @@ function startHealthServer() {
     }
   });
 
-  // Session routing middleware - MUST be registered SECOND
+  // Diagnostic endpoint for debugging Vite server issues
+  app.get('/debug/status', (req, res) => {
+    const fs = require('fs');
+    const path = require('path');
+    
+    res.json({
+      timestamp: new Date().toISOString(),
+      projectId: PROJECT_ID,
+      projectDir: PROJECT_DIR,
+      devServerStatus: {
+        process: !!devServerProcess,
+        port: devServerPort,
+        pid: devServerProcess?.pid,
+        connected: devServerProcess?.connected,
+        killed: devServerProcess?.killed,
+        exitCode: devServerProcess?.exitCode
+      },
+      filesExist: {
+        packageJson: fs.existsSync(path.join(PROJECT_DIR, 'package.json')),
+        viteConfig: fs.existsSync(path.join(PROJECT_DIR, 'vite.config.js')),
+        indexHtml: fs.existsSync(path.join(PROJECT_DIR, 'index.html')),
+        mainJsx: fs.existsSync(path.join(PROJECT_DIR, 'src/main.jsx')),
+        nodeModules: fs.existsSync(path.join(PROJECT_DIR, 'node_modules')),
+        viteModule: fs.existsSync(path.join(PROJECT_DIR, 'node_modules/vite'))
+      },
+      environment: {
+        NODE_ENV: process.env.NODE_ENV,
+        PORT: process.env.PORT,
+        PROJECT_ID: process.env.PROJECT_ID
+      }
+    });
+  });
+
+  // Diagnostic endpoint for testing proxy paths
+  app.get('/debug/test-proxy', async (req, res) => {
+    const axios = require('axios');
+    const results = {};
+    
+    // Test direct Vite access
+    try {
+      const viteResponse = await axios.get(`http://localhost:${devServerPort || 3001}/@vite/client`, {
+        timeout: 2000
+      });
+      results.viteDirect = {
+        status: viteResponse.status,
+        contentType: viteResponse.headers['content-type'],
+        success: true
+      };
+    } catch (error) {
+      results.viteDirect = {
+        error: error.message,
+        success: false
+      };
+    }
+    
+    // Test Express health
+    try {
+      const healthResponse = await axios.get(`http://localhost:8080/health`, {
+        timeout: 2000
+      });
+      results.expressHealth = {
+        status: healthResponse.status,
+        success: true
+      };
+    } catch (error) {
+      results.expressHealth = {
+        error: error.message,
+        success: false
+      };
+    }
+    
+    res.json(results);
+  });
+
+  // Session routing middleware - MUST be registered AFTER diagnostic endpoints
   app.use('/session/:sessionId', async (req, res, next) => {
     const { sessionId } = req.params;
     console.log(`🎯 Session routing request for: ${sessionId}, My Project ID: ${PROJECT_ID}`);
