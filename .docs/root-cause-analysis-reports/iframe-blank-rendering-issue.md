@@ -143,6 +143,41 @@ graph TD
 - ❌ Inability to test React applications in containers
 - ❌ Misleading status indicators (shows success when failing)
 
+## UPDATE: Root Causes Identified (2025-09-04)
+
+After deeper investigation, the following specific issues were found:
+
+### 1. **Missing React Dependencies in Package.json Template** ⚠️ CRITICAL
+The generated `package.json` in `entrypoint.js` (lines 154-177) is missing essential dependencies:
+```javascript
+// Current problematic template - MISSING React dependencies
+const packageJson = {
+  "name": "velocity-preview",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 3001 --strictPort"
+  },
+  "devDependencies": {
+    "vite": "^4.4.0"
+    // ❌ Missing: "@vitejs/plugin-react": "^4.0.3"
+  }
+  // ❌ Missing dependencies block with react and react-dom
+};
+```
+
+### 2. **Additional CSP Blocking Issue** (FIXED)
+- **Discovery**: Content Security Policy was blocking `http://localhost:8080`
+- **Location**: `frontend/index.html` and `frontend/vite.config.ts`
+- **Fix Applied**: Added `http://localhost:8080` to connect-src directive
+
+### 3. **Silent NPM Install Failures**
+```javascript
+// orchestrator/preview-container/entrypoint.js:267-268
+const installProcess = spawn('npm', installArgs, {
+  stdio: 'inherit',  // ❌ Errors not captured in container logs
+  cwd: PROJECT_DIR
+});
+```
+
 ## Probable Root Causes (In Order of Likelihood)
 
 ### 1. NPM Dependencies Installation Failure
@@ -156,6 +191,7 @@ const installProcess = spawn('npm', installArgs, {
 ```
 
 **Likely Issues:**
+- **Missing React/React-DOM in package.json template** ⚠️ PRIMARY CAUSE
 - Network connectivity problems in Fly.io containers
 - NPM registry timeouts
 - Missing Node.js/NPM versions
@@ -193,6 +229,48 @@ devServerProcess = spawn(command, args, {
 
 ## Recommended Fix Strategy
 
+### Immediate Fixes Required
+
+#### Fix 1: Update Package.json Template in entrypoint.js
+```javascript
+// Replace lines 154-177 in entrypoint.js with:
+const packageJson = {
+  "name": "velocity-preview",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 3001 --strictPort --clearScreen false",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.0.3",
+    "vite": "^4.4.5"
+  }
+};
+```
+
+#### Fix 2: Improve Error Logging for NPM Install
+```javascript
+// Update lines 267-268 in entrypoint.js:
+const installProcess = spawn('npm', installArgs, {
+  stdio: ['inherit', 'pipe', 'pipe'],  // Capture stdout and stderr
+  cwd: PROJECT_DIR
+});
+
+installProcess.stdout.on('data', (data) => {
+  console.log(`[NPM INSTALL] ${data.toString()}`);
+});
+
+installProcess.stderr.on('data', (data) => {
+  console.error(`[NPM INSTALL ERROR] ${data.toString()}`);
+});
+```
+
 ### Phase 1: Diagnostic Enhancement
 1. **Add detailed logging** to development server startup
 2. **Capture npm install output** and errors
@@ -226,13 +304,46 @@ devServerProcess = spawn(command, args, {
   - Node.js and NPM versions
   - System dependencies
 
+## Fix Implementation Status (2025-09-04 13:30 PST)
+
+### ✅ Completed Fixes
+
+1. **Enhanced NPM Install Logging**
+   - Changed stdio from 'inherit' to ['inherit', 'pipe', 'pipe'] to capture output
+   - Added detailed stdout and stderr logging with [NPM INSTALL] prefix
+   - Added post-install verification for critical packages
+   - Added package.json content logging on failure
+
+2. **Improved Vite Server Startup Logging**
+   - Added comprehensive logging for command, working directory, and environment
+   - Track server startup success with output pattern matching
+   - Capture and log last 500 chars of output/errors on failure
+   - Added process spawn error handling with context
+
+3. **Tool Availability Checks**
+   - Added checkRequiredTools() function to verify node and npm availability
+   - Log versions of available tools at startup
+   - Fail fast with clear error if tools are missing
+
+4. **Package.json Template Verification**
+   - Confirmed template already includes React dependencies
+   - Template includes @vitejs/plugin-react plugin
+   - All required dependencies are properly specified
+
+### 🚀 Deployment Status
+
+- **Code Changes**: Committed to master branch (commit: 234af5b)
+- **Docker Image**: Building via GitHub Actions (triggered at 2025-09-04T20:30:40Z)
+- **Container Registry**: ghcr.io/tdoan35/velocity/velocity-preview-container:latest
+- **Deployment**: Pending - waiting for build completion
+
 ## Next Steps
 
-1. **Deploy enhanced logging** to capture dev server startup failures
-2. **Test npm install process** in container environment
-3. **Validate Vite configuration** and port availability
-4. **Implement robust error handling** and recovery mechanisms
-5. **Add monitoring** for development server health
+1. **Monitor GitHub Actions build** completion
+2. **Deploy updated container** to Fly.io after successful build
+3. **Test with live preview session** to verify fixes
+4. **Monitor container logs** for new diagnostic information
+5. **Address any remaining issues** revealed by enhanced logging
 
 ## Historical Context
 
