@@ -103,7 +103,13 @@
       "Bash(timeout 10 fly logs -a velocity-preview-containers)",
       "Bash(fly status:*)",
       "Bash(fly machines list:*)",
-      "Bash(fly machine status:*)"
+      "Bash(fly machine status:*)",
+      "Read(/C:\\Users\\Ty\\Desktop\\velocity\\orchestrator\\preview-container/**)",
+      "Read(/C:\\Users\\Ty\\Desktop\\velocity\\orchestrator\\preview-container/**)",
+      "Read(/C:\\Users\\Ty\\Desktop\\velocity\\orchestrator\\preview-container/**)",
+      "Read(/C:\\Users\\Ty\\Desktop\\velocity\\orchestrator\\preview-container/**)",
+      "Read(/C:\\Users\\Ty\\Desktop\\velocity\\orchestrator\\preview-container/**)",
+      "Read(/C:\\Users\\Ty\\Desktop\\velocity\\orchestrator\\preview-container/**)"
     ],
     "defaultMode": "acceptEdits",
     "additionalDirectories": [
