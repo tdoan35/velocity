@@ -21,6 +21,7 @@ const detectPort = require('detect-port');
 const kill = require('tree-kill');
 const { v4: uuidv4 } = require('uuid');
 const { detectProjectType, getDevCommand } = require('./detect-project-type');
+const { createProxyMiddleware } = require('http-proxy-middleware');
 
 // Configuration from environment variables
 const PROJECT_ID = process.env.PROJECT_ID;
@@ -441,29 +442,66 @@ async function startDevServer() {
       healthStatus = 'error';
     });
 
-    // Wait for server to start
-    const startupTimeout = 30000; // 30 seconds
-    const startTime = Date.now();
-    
-    while (Date.now() - startTime < startupTimeout) {
+    // Enhanced Vite health checking
+    const checkViteHealth = async () => {
       try {
-        const response = await axios.get(`http://localhost:${devServerPort}`, {
+        // Check if Vite client script is accessible (most reliable indicator)
+        const response = await axios.get(`http://localhost:${devServerPort}/@vite/client`, {
           timeout: 2000,
           validateStatus: () => true
         });
         
-        if (response.status < 500) {
-          console.log(`✅ Development server ready on port ${devServerPort}`);
-          return;
+        // Vite is ready if it serves the client script with JavaScript content-type
+        const contentType = response.headers['content-type'] || '';
+        const isViteReady = response.status === 200 && contentType.includes('javascript');
+        
+        if (isViteReady) {
+          console.log(`✅ Vite health check passed - @vite/client accessible`);
+          return true;
+        } else {
+          console.log(`⏳ Vite not ready yet - status: ${response.status}, content-type: ${contentType}`);
+          return false;
         }
       } catch (error) {
-        // Server not ready yet, continue waiting
+        console.log(`⏳ Vite health check failed: ${error.message}`);
+        return false;
+      }
+    };
+
+    // Wait for server to start with improved health checking
+    const startupTimeout = 45000; // 45 seconds (increased for npm install + vite startup)
+    const startTime = Date.now();
+    let viteReady = false;
+    
+    console.log(`⏳ Waiting for Vite server to become ready (timeout: ${startupTimeout/1000}s)...`);
+    
+    while (Date.now() - startTime < startupTimeout) {
+      // First check if the process is still alive
+      if (!devServerProcess || devServerProcess.killed) {
+        console.error('❌ Vite process died unexpectedly');
+        throw new Error('Vite process terminated');
       }
       
+      // Check Vite health
+      viteReady = await checkViteHealth();
+      if (viteReady) {
+        console.log(`✅ Development server ready on port ${devServerPort} after ${Math.round((Date.now() - startTime) / 1000)}s`);
+        healthStatus = 'ready';
+        return;
+      }
+      
+      // Wait before next check
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
     
-    console.log(`⚠️ Development server may not be fully ready, but continuing...`);
+    // If we get here, server didn't start properly
+    if (!viteReady) {
+      console.error(`❌ Vite server failed to become ready within ${startupTimeout/1000}s`);
+      console.log('📋 Last server output:', serverOutput.slice(-500));
+      console.log('📋 Last server errors:', serverErrors.slice(-500));
+      // Don't throw error, let it continue but mark as unhealthy
+      healthStatus = 'degraded';
+    }
 
   } catch (error) {
     console.error('❌ Failed to start development server:', error);
@@ -711,19 +749,22 @@ function startHealthServer() {
         }
       }
 
-      // Check development server
+      // Check development server with proper Vite health check
       if (devServerPort) {
         try {
-          const devServerHealth = await axios.get(`http://localhost:${devServerPort}/`, { 
+          // Check if Vite client script is accessible (same check as startup)
+          const response = await axios.get(`http://localhost:${devServerPort}/@vite/client`, { 
             timeout: 2000,
             validateStatus: () => true
-          }).then(r => r.status < 500).catch(() => false);
-          healthChecks.devServer = devServerHealth;
-          if (!devServerHealth) {
-            console.log(`❌ Health check: dev server not responding on port ${devServerPort}`);
+          });
+          const contentType = response.headers['content-type'] || '';
+          healthChecks.devServer = response.status === 200 && contentType.includes('javascript');
+          
+          if (!healthChecks.devServer) {
+            console.log(`❌ Health check: Vite not serving resources correctly on port ${devServerPort} (status: ${response.status}, type: ${contentType})`);
           }
         } catch (error) {
-          console.log(`❌ Health check: dev server check failed - ${error.message}`);
+          console.log(`❌ Health check: Vite server check failed - ${error.message}`);
           healthChecks.devServer = false;
         }
       }
@@ -762,6 +803,40 @@ function startHealthServer() {
       console.log('⚠️ Health check: returning 503 Service Unavailable (unknown status)');
       res.status(503).json(healthResponse);
     }
+  });
+
+  // Vite status endpoint for debugging
+  app.get('/vite-status', async (req, res) => {
+    const status = {
+      processAlive: devServerProcess && !devServerProcess.killed,
+      processPid: devServerProcess?.pid,
+      port: devServerPort,
+      healthCheck: false,
+      viteClientAccessible: false,
+      timestamp: new Date().toISOString()
+    };
+    
+    if (devServerPort) {
+      try {
+        // Check if Vite client is accessible
+        const response = await axios.get(`http://localhost:${devServerPort}/@vite/client`, {
+          timeout: 2000,
+          validateStatus: () => true
+        });
+        const contentType = response.headers['content-type'] || '';
+        status.viteClientAccessible = response.status === 200 && contentType.includes('javascript');
+        status.viteResponse = {
+          status: response.status,
+          contentType: contentType,
+          hasContent: response.data ? response.data.length > 0 : false
+        };
+        status.healthCheck = status.viteClientAccessible;
+      } catch (error) {
+        status.error = error.message;
+      }
+    }
+    
+    res.json(status);
   });
 
   // Diagnostic endpoint for debugging Vite server issues
@@ -928,6 +1003,13 @@ function startHealthServer() {
       const currentMachineId = process.env.FLY_MACHINE_ID;
       if (currentMachineId === session.container_id) {
         console.log(`✅ This is the correct machine for session ${sessionId}`);
+        
+        // Strip the session prefix from the URL before proxying
+        // Convert /session/{id}/path to /path
+        const originalUrl = req.url;
+        req.url = req.url.replace(`/session/${sessionId}`, '') || '/';
+        console.log(`🔗 URL rewrite: ${originalUrl} → ${req.url}`);
+        
         // This is the right machine, continue to proxy logic
         return next();
       } else {
@@ -952,57 +1034,79 @@ function startHealthServer() {
     }
   });
 
-  // Proxy to development server - catch-all for non-health requests  
-  app.use('*', async (req, res, next) => {
-    // Explicitly skip health endpoint - should never reach here due to route order
-    if (req.baseUrl === '/health' || req.path === '/health') {
-      return next();
-    }
-    
-    // Proxy logic - handle directly in middleware
+  // Create dynamic proxy middleware that checks if dev server is ready
+  const viteProxyMiddleware = (req, res, next) => {
     if (!devServerProcess || !devServerPort) {
+      // If requesting an HTML page or root, serve a loading page
+      if (req.accepts('html') && !req.path.includes('.')) {
+        return res.status(503).send(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Development Server Starting...</title>
+            <meta http-equiv="refresh" content="2">
+            <style>
+              body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+              .message { text-align: center; }
+            </style>
+          </head>
+          <body>
+            <div class="message">
+              <h2>Development server is starting...</h2>
+              <p>This page will automatically refresh when ready.</p>
+            </div>
+          </body>
+          </html>
+        `);
+      }
       return res.status(503).json({
         error: 'Development server not ready'
       });
     }
 
-    try {
-      // Handle session routing: strip /session/{sessionId} prefix
-      let targetPath = req.url;
-      const sessionMatch = req.url.match(/^\/session\/[^\/]+(\/.*)?$/);
-      if (sessionMatch) {
-        targetPath = sessionMatch[1] || '/';
-        console.log(`🎯 Stripping session prefix: ${req.url} → ${targetPath}`);
-      }
+    // Create the proxy middleware dynamically with the current port
+    const proxy = createProxyMiddleware({
+      target: `http://localhost:${devServerPort}`,
+      changeOrigin: true,
+      ws: true, // Enable WebSocket support for HMR
+      logLevel: 'warn',
+      onError: (err, req, res) => {
+        console.error('Proxy error:', err.message);
+        if (res.writeHead) {
+          res.writeHead(502, {
+            'Content-Type': 'text/plain'
+          });
+          res.end('Proxy error: ' + err.message);
+        }
+      },
+      onProxyReq: (proxyReq, req, res) => {
+        // Log the proxied request for debugging
+        const targetUrl = `http://localhost:${devServerPort}${req.url}`;
+        console.log(`[PROXY] ${req.method} ${req.originalUrl || req.url} -> ${targetUrl}`);
+        
+        // Fix headers for proper proxying
+        proxyReq.removeHeader('x-forwarded-for');
+        proxyReq.removeHeader('x-forwarded-host');
+        proxyReq.removeHeader('x-forwarded-proto');
+      },
+      onProxyRes: (proxyRes, req, res) => {
+        // Log successful proxy responses
+        const contentType = proxyRes.headers['content-type'] || 'unknown';
+        console.log(`[PROXY RESPONSE] ${req.method} ${req.url} - Status: ${proxyRes.statusCode}, Type: ${contentType}`);
+      },
+      // Don't verify SSL certificates (for local dev)
+      secure: false,
+    });
 
-      const targetUrl = `http://localhost:${devServerPort}${targetPath}`;
-      console.log(`🔗 Proxying to: ${targetUrl}`);
+    return proxy(req, res, next);
+  };
 
-      const response = await axios({
-        method: req.method,
-        url: targetUrl,
-        data: req.body,
-        headers: {
-          ...req.headers,
-          host: `localhost:${devServerPort}`,
-        },
-        responseType: 'stream',
-        validateStatus: () => true, // Don't throw on any status code
-      });
-
-      res.status(response.status);
-      Object.keys(response.headers).forEach(key => {
-        res.setHeader(key, response.headers[key]);
-      });
-      
-      response.data.pipe(res);
-    } catch (error) {
-      console.error('Proxy error:', error);
-      res.status(502).json({
-        error: 'Bad Gateway',
-        message: 'Failed to proxy request to development server'
-      });
+  // Apply proxy to all routes except /health
+  app.use((req, res, next) => {
+    if (req.path === '/health') {
+      return next();
     }
+    return viteProxyMiddleware(req, res, next);
   });
 
   app.listen(PORT, '0.0.0.0', () => {
