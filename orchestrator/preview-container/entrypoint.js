@@ -249,8 +249,35 @@ export default defineConfig({
 /**
  * Start the development server
  */
+async function checkRequiredTools() {
+  const tools = ['node', 'npm'];
+  const results = {};
+  
+  for (const tool of tools) {
+    try {
+      const { execSync } = require('child_process');
+      const version = execSync(`${tool} --version`, { encoding: 'utf-8' }).trim();
+      results[tool] = { available: true, version };
+      console.log(`✅ ${tool}: ${version}`);
+    } catch (error) {
+      results[tool] = { available: false, error: error.message };
+      console.error(`❌ ${tool} is not available: ${error.message}`);
+    }
+  }
+  
+  return results;
+}
+
 async function startDevServer() {
   try {
+    // Check required tools first
+    console.log('🔍 Checking required tools...');
+    const toolsCheck = await checkRequiredTools();
+    
+    if (!toolsCheck.node.available || !toolsCheck.npm.available) {
+      throw new Error('Required tools (node/npm) are not available in the container');
+    }
+    
     // Change to project directory
     process.chdir(PROJECT_DIR);
     
@@ -262,22 +289,76 @@ async function startDevServer() {
     // Install dependencies if needed
     if (projectType.commands.install) {
       console.log('📦 Installing project dependencies...');
+      console.log(`📂 Installing in directory: ${PROJECT_DIR}`);
+      console.log(`💻 Running command: ${projectType.commands.install}`);
+      
       await new Promise((resolve, reject) => {
         const installArgs = projectType.commands.install.split(' ').slice(1); // Remove 'npm'
         const installProcess = spawn('npm', installArgs, {
-          stdio: 'inherit',
+          stdio: ['inherit', 'pipe', 'pipe'],
           cwd: PROJECT_DIR
         });
 
-        installProcess.on('close', (code) => {
+        let installOutput = '';
+        let installErrors = '';
+
+        installProcess.stdout?.on('data', (data) => {
+          const output = data.toString();
+          installOutput += output;
+          console.log(`[NPM INSTALL] ${output.trim()}`);
+        });
+
+        installProcess.stderr?.on('data', (data) => {
+          const error = data.toString();
+          installErrors += error;
+          console.error(`[NPM INSTALL ERROR] ${error.trim()}`);
+        });
+
+        installProcess.on('close', async (code) => {
           if (code === 0) {
+            console.log('✅ Dependencies installed successfully');
+            
+            // Verify installation
+            const nodeModulesExists = await fs.pathExists(path.join(PROJECT_DIR, 'node_modules'));
+            const packageLockExists = await fs.pathExists(path.join(PROJECT_DIR, 'package-lock.json'));
+            
+            console.log(`📁 node_modules exists: ${nodeModulesExists}`);
+            console.log(`📁 package-lock.json exists: ${packageLockExists}`);
+            
+            if (nodeModulesExists) {
+              const nodeModulesContent = await fs.readdir(path.join(PROJECT_DIR, 'node_modules'));
+              console.log(`📦 Installed packages: ${nodeModulesContent.length} modules`);
+              
+              // Check for critical packages
+              const criticalPackages = ['vite', '@vitejs/plugin-react', 'react', 'react-dom'];
+              for (const pkg of criticalPackages) {
+                const exists = await fs.pathExists(path.join(PROJECT_DIR, 'node_modules', pkg));
+                console.log(`  - ${pkg}: ${exists ? '✅' : '❌'}`);
+              }
+            }
+            
             resolve();
           } else {
+            console.error(`❌ npm install failed with code ${code}`);
+            console.error(`Full error output:\n${installErrors}`);
+            
+            // Check if package.json exists
+            const packageJsonExists = await fs.pathExists(path.join(PROJECT_DIR, 'package.json'));
+            if (packageJsonExists) {
+              const packageJson = await fs.readJSON(path.join(PROJECT_DIR, 'package.json'));
+              console.log('📋 package.json content:', JSON.stringify(packageJson, null, 2));
+            } else {
+              console.error('❌ package.json does not exist!');
+            }
+            
             reject(new Error(`${projectType.commands.install} failed with code ${code}`));
           }
         });
 
-        installProcess.on('error', reject);
+        installProcess.on('error', (err) => {
+          console.error(`❌ Failed to spawn npm install process: ${err.message}`);
+          reject(err);
+        });
       });
     }
 
@@ -288,11 +369,15 @@ async function startDevServer() {
     // Get the appropriate dev command
     const devCommand = getDevCommand(projectType, devServerPort);
     console.log(`🛠️ Starting development server: ${devCommand}`);
+    console.log(`📂 Working directory: ${PROJECT_DIR}`);
+    console.log(`🔧 Environment PORT: ${devServerPort}`);
 
     // Parse command
     const commandParts = devCommand.split(' ');
     const command = commandParts[0];
     const args = commandParts.slice(1);
+    
+    console.log(`🚀 Spawning process: ${command} ${args.join(' ')}`);
 
     // Start the development server
     devServerProcess = spawn(command, args, {
@@ -305,22 +390,44 @@ async function startDevServer() {
       }
     });
 
+    let serverStarted = false;
+    let serverOutput = '';
+    let serverErrors = '';
+
     devServerProcess.stdout.on('data', (data) => {
-      const output = data.toString().trim();
-      if (output) {
-        console.log(`[DEV SERVER] ${output}`);
-      }
+      const output = data.toString();
+      serverOutput += output;
+      const lines = output.trim().split('\n');
+      lines.forEach(line => {
+        if (line.trim()) {
+          console.log(`[VITE] ${line}`);
+          // Check for successful startup indicators
+          if (line.includes('ready in') || line.includes('Local:') || line.includes('Network:')) {
+            serverStarted = true;
+            console.log('✅ Vite server started successfully!');
+          }
+        }
+      });
     });
 
     devServerProcess.stderr.on('data', (data) => {
-      const output = data.toString().trim();
-      if (output) {
-        console.error(`[DEV SERVER ERROR] ${output}`);
-      }
+      const error = data.toString();
+      serverErrors += error;
+      const lines = error.trim().split('\n');
+      lines.forEach(line => {
+        if (line.trim()) {
+          console.error(`[VITE ERROR] ${line}`);
+        }
+      });
     });
 
     devServerProcess.on('close', (code) => {
-      console.log(`[DEV SERVER] Process exited with code ${code}`);
+      console.log(`[VITE] Process exited with code ${code}`);
+      if (!serverStarted) {
+        console.error('❌ Vite server failed to start');
+        console.error(`Last output:\n${serverOutput.slice(-500)}`);
+        console.error(`Last errors:\n${serverErrors.slice(-500)}`);
+      }
       devServerProcess = null;
       if (code !== 0) {
         healthStatus = 'error';
@@ -328,7 +435,9 @@ async function startDevServer() {
     });
 
     devServerProcess.on('error', (error) => {
-      console.error(`[DEV SERVER] Error: ${error}`);
+      console.error(`[VITE] Failed to spawn process: ${error.message}`);
+      console.error(`Command was: ${command} ${args.join(' ')}`);
+      console.error(`Working directory: ${PROJECT_DIR}`);
       healthStatus = 'error';
     });
 
