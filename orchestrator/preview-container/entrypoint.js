@@ -1070,6 +1070,14 @@ function startHealthServer() {
       changeOrigin: true,
       ws: true, // Enable WebSocket support for HMR
       logLevel: 'warn',
+      // CRITICAL: Tell proxy to use req.url instead of req.originalUrl
+      // This ensures our URL rewriting from the session handler is respected
+      proxyReqPathResolver: (req) => {
+        // Use the rewritten URL (req.url) which has the session prefix stripped
+        const path = req.url || '/';
+        console.log(`[PROXY PATH] Original: ${req.originalUrl} -> Rewritten: ${path}`);
+        return path;
+      },
       onError: (err, req, res) => {
         console.error('Proxy error:', err.message);
         if (res.writeHead) {
