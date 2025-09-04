@@ -100,7 +100,10 @@
       "Bash(source ~/.bashrc)",
       "Bash(fly logs:*)",
       "Bash(timeout 10 fly logs)",
-      "Bash(timeout 10 fly logs -a velocity-preview-containers)"
+      "Bash(timeout 10 fly logs -a velocity-preview-containers)",
+      "Bash(fly status:*)",
+      "Bash(fly machines list:*)",
+      "Bash(fly machine status:*)"
     ],
     "defaultMode": "acceptEdits",
     "additionalDirectories": [

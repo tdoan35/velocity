@@ -26,6 +26,7 @@ const { detectProjectType, getDevCommand } = require('./detect-project-type');
 const PROJECT_ID = process.env.PROJECT_ID;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const PORT = process.env.PORT || 8080;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
@@ -55,13 +56,13 @@ async function initialize() {
     console.log(`📊 Environment: ${NODE_ENV}`);
     
     // Validate required environment variables
-    if (!PROJECT_ID || !SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      throw new Error('Missing required environment variables: PROJECT_ID, SUPABASE_URL, SUPABASE_ANON_KEY');
+    if (!PROJECT_ID || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Missing required environment variables: PROJECT_ID, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY');
     }
 
     // Initialize Supabase client
     console.log('🔌 Connecting to Supabase...');
-    supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
     // Create project directory
     await fs.ensureDir(PROJECT_DIR);
