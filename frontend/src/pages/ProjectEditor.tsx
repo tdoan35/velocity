@@ -21,7 +21,7 @@ import { FullStackPreviewPanel } from '../components/preview/FullStackPreviewPan
 import { EnhancedChatInterface } from '@/components/chat/enhanced-chat-interface';
 import { VerticalCollapsiblePanel } from '../components/layout/vertical-collapsible-panel';
 import { useFileSecurityMonitoring } from '../hooks/useSecurityMonitoring';
-import { LogsPanel } from '../components/logs/LogsPanel';
+import { LogsPanel } from '../components/logs-panel/LogsPanel';
 import { TerminalPanel } from '../components/terminal/TerminalPanel';
 
 // Core ProjectEditor component that can be used with or without router

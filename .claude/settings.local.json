@@ -109,7 +109,8 @@
       "Read(/C:\\Users\\Ty\\Desktop\\velocity\\orchestrator\\preview-container/**)",
       "Read(/C:\\Users\\Ty\\Desktop\\velocity\\orchestrator\\preview-container/**)",
       "Read(/C:\\Users\\Ty\\Desktop\\velocity\\orchestrator\\preview-container/**)",
-      "Read(/C:\\Users\\Ty\\Desktop\\velocity\\orchestrator\\preview-container/**)"
+      "Read(/C:\\Users\\Ty\\Desktop\\velocity\\orchestrator\\preview-container/**)",
+      "Bash(git check-ignore:*)"
     ],
     "defaultMode": "acceptEdits",
     "additionalDirectories": [
