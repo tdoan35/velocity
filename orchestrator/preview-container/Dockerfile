@@ -33,8 +33,9 @@ COPY package.json ./
 # Install container-specific dependencies
 RUN npm install
 
-# Copy the entrypoint script and supporting modules
+# Copy the entrypoint scripts and supporting modules
 COPY entrypoint.js ./
+COPY entrypoint-subdomain.js ./
 COPY detect-project-type.js ./
 
 # Create project directory where user code will be synced
@@ -55,5 +56,5 @@ USER node
 HEALTHCHECK --interval=15s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
-# Start the entrypoint script
-CMD ["node", "entrypoint.js"]
+# Start the appropriate entrypoint script based on USE_SUBDOMAIN env var
+CMD ["npm", "start"]

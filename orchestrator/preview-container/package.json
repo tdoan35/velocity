@@ -4,7 +4,9 @@
   "description": "Preview container runtime for Velocity real-time development - build trigger",
   "main": "entrypoint.js",
   "scripts": {
-    "start": "node entrypoint.js"
+    "start": "node $([ \"$USE_SUBDOMAIN\" = \"true\" ] && echo entrypoint-subdomain.js || echo entrypoint.js)",
+    "start:subdomain": "node entrypoint-subdomain.js",
+    "start:legacy": "node entrypoint.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.38.0",

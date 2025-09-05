@@ -22,6 +22,25 @@ primary_region = 'ord'
   interval = '10s'
   timeout = '2s'
 
+[[services]]
+  http_checks = []
+  internal_port = 8080
+  protocol = "tcp"
+  script_checks = []
+
+  [[services.ports]]
+    handlers = ["http"]
+    port = 80
+
+  [[services.ports]]
+    handlers = ["tls", "http"]
+    port = 443
+
+# Enable wildcard routing and experimental features
+[experimental]
+  allowed_public_ports = []
+  auto_rollback = true
+
 [[vm]]
   memory = '512mb'
   cpu_kind = 'shared'

@@ -42,18 +42,26 @@ export class FlyIOService {
     const tier = getContainerTier(tierName);
     console.log(`Creating machine with tier: ${tier.name} (${tierName})`);
 
+    // Generate session ID if not provided
+    const actualSessionId = sessionId || `${projectId}-${Date.now()}`.replace(/[^a-z0-9-]/g, '-').toLowerCase();
+    
     // Machine config with HTTP service for external access
     const createRequest: CreateMachineRequest = {
-      name: `preview-${projectId}-${Date.now()}`,
+      name: `preview-${actualSessionId}`,
       region: 'ord',
       config: {
         image: 'ghcr.io/tdoan35/velocity/velocity-preview-container:latest',
         env: {
           NODE_ENV: 'development',
           PROJECT_ID: projectId,
+          SESSION_ID: actualSessionId,
           SUPABASE_URL: process.env.SUPABASE_URL!,
           SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY!,
-          SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY!
+          SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          // New: Subdomain configuration
+          // Using custom domain for proper subdomain routing
+          PREVIEW_DOMAIN: `${actualSessionId}.preview.velocity-dev.com`,
+          USE_SUBDOMAIN: 'true'
         },
         guest: {
           cpu_kind: 'shared',
@@ -102,9 +110,15 @@ export class FlyIOService {
       // Wait for machine to be ready
       await this.waitForMachineReady(machine.id);
 
+      // Return subdomain URL instead of path-based URL
+      const useSubdomain = process.env.USE_SUBDOMAIN_ROUTING === 'true';
+      const url = useSubdomain 
+        ? `https://${actualSessionId}.preview.velocity-dev.com`
+        : `https://${this.appName}.fly.dev/session/${actualSessionId}`;
+
       return {
         machine,
-        url: `https://${this.appName}.fly.dev/session/${sessionId || projectId}`,
+        url,
       };
     } catch (error) {
       console.error('❌ Failed to create Fly machine:', error);

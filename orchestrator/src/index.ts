@@ -10,6 +10,7 @@ import { apiRoutes } from './api/routes';
 import { handleAuthError } from './middleware/auth';
 import { SchedulerService } from './services/scheduler';
 import { setSchedulerService } from './api/monitoring-controller';
+import metricsRoutes from './routes/metrics';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -58,6 +59,9 @@ app.set('trust proxy', 1);
 
 // API routes
 app.use('/api', apiRoutes);
+
+// Metrics routes (not behind /api for Prometheus convention)
+app.use(metricsRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
