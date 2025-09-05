@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/useAuthStore'
-import { useAppStore } from '@/stores/useAppStore'
 import { projectService } from '@/services/projectService'
 import { conversationService } from '@/services/conversationService'
 import { prdService } from '@/services/prdService'
@@ -23,8 +22,6 @@ import {
   Sparkles,
   Code2,
   History,
-  Plus,
-  ChevronLeft,
   MessageSquare,
   MoreVertical,
   Edit,
@@ -32,7 +29,6 @@ import {
   Check,
   FileText,
   Database,
-  AlertCircle
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { supabase } from '@/lib/supabase'
@@ -57,7 +53,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 
 interface ConversationTab {
   id: string
@@ -82,7 +77,6 @@ function ProjectDesignContent() {
   const { 
     supabaseConnection, 
     isBuildReady,
-    testSupabaseConnection 
   } = useProjectContext()
   
   const [project, setProject] = useState<any>(null)

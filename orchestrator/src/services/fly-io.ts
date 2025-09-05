@@ -25,7 +25,7 @@ export class FlyIOService {
         'Authorization': `Bearer ${apiToken}`,
         'Content-Type': 'application/json',
       },
-      timeout: 30000, // 30 second timeout
+      timeout: 60000, // 60 second timeout
     });
   }
 
@@ -75,7 +75,7 @@ export class FlyIOService {
             type: 'http',
             port: 8080,
             method: 'GET',
-            path: '/',
+            path: '/health',
             grace_period: '5s',
             interval: '10s',
             timeout: '2s'
