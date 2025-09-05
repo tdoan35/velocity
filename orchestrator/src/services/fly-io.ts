@@ -19,6 +19,7 @@ export class FlyIOService {
   constructor(apiToken: string, appName: string) {
     this.appName = appName;
     console.log(`🛩️  FlyIOService initialized with app name: "${appName}"`);
+    console.log(`🔧 Environment variables: USE_SUBDOMAIN_ROUTING="${process.env.USE_SUBDOMAIN_ROUTING}"`);
     this.client = axios.create({
       baseURL: 'https://api.machines.dev/v1',
       headers: {
@@ -112,9 +113,13 @@ export class FlyIOService {
 
       // Return subdomain URL instead of path-based URL
       const useSubdomain = process.env.USE_SUBDOMAIN_ROUTING === 'true';
+      console.log(`🔧 URL Generation: USE_SUBDOMAIN_ROUTING="${process.env.USE_SUBDOMAIN_ROUTING}", useSubdomain=${useSubdomain}`);
+      
       const url = useSubdomain 
         ? `https://${actualSessionId}.preview.velocity-dev.com`
         : `https://${this.appName}.fly.dev/session/${actualSessionId}`;
+
+      console.log(`🔗 Generated URL: ${url}`);
 
       return {
         machine,

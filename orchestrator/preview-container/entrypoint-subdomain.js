@@ -50,7 +50,7 @@ app.get('/health', (req, res) => {
 });
 
 /**
- * Session validation middleware (only for subdomain mode)
+ * Session validation middleware
  */
 app.use((req, res, next) => {
   // Skip validation for health checks
@@ -58,18 +58,32 @@ app.use((req, res, next) => {
     return next();
   }
 
-  // In subdomain mode, validate that request is for correct session
+  // Flexible session validation that works for both subdomain and path-based access
   if (USE_SUBDOMAIN) {
     const requestHost = req.get('host');
+    const requestPath = req.path;
     
-    // Validate request is for correct session
-    if (!requestHost || !requestHost.includes(SESSION_ID)) {
-      console.warn(`Invalid session request: ${requestHost} does not match ${SESSION_ID}`);
+    // For subdomain mode, check if host contains session ID OR path contains session ID (for transition period)
+    const isValidSubdomain = requestHost && requestHost.includes(SESSION_ID);
+    const isValidPath = requestPath && requestPath.includes(SESSION_ID);
+    
+    if (!isValidSubdomain && !isValidPath) {
+      console.warn(`Invalid session request: host="${requestHost}", path="${requestPath}", expected session="${SESSION_ID}"`);
       return res.status(404).json({ 
         error: 'Invalid session',
         expected: SESSION_ID,
-        received: requestHost
+        received: {
+          host: requestHost,
+          path: requestPath
+        }
       });
+    }
+    
+    // Log access type for debugging
+    if (isValidSubdomain) {
+      console.log(`✅ Subdomain access: ${requestHost}`);
+    } else if (isValidPath) {
+      console.log(`🔄 Path-based access (transition): ${requestPath}`);
     }
   }
   
