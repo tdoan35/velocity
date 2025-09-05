@@ -22,7 +22,6 @@ const kill = require('tree-kill');
 const { v4: uuidv4 } = require('uuid');
 const { detectProjectType, getDevCommand } = require('./detect-project-type');
 const { createProxyMiddleware } = require('http-proxy-middleware');
-const net = require('net');
 
 // Configuration from environment variables
 const PROJECT_ID = process.env.PROJECT_ID;
@@ -42,7 +41,6 @@ let healthStatus = 'starting';
 let connectionRetryCount = 0;
 let maxRetryAttempts = 5;
 let reconnectTimer = null;
-let viteHealthMonitor = null;
 
 // Project directory where code will be synced
 const PROJECT_DIR = '/app/project';
@@ -149,154 +147,9 @@ async function performInitialFileSync() {
 }
 
 /**
- * Transform HTML content to include session prefix in all resource URLs
+ * Create default project structure
  */
-function transformHtml(html, sessionId) {
-  if (!sessionId) return html;
-  
-  // Transform src attributes
-  html = html.replace(/src="\/(?!session\/)/g, `src="/session/${sessionId}/`);
-  // Transform href attributes
-  html = html.replace(/href="\/(?!session\/)/g, `href="/session/${sessionId}/`);
-  // Transform ES module imports
-  html = html.replace(/from ['"]\/(?!session\/)/g, `from '/session/${sessionId}/`);
-  html = html.replace(/import\(['"]\/(?!session\/)/g, `import('/session/${sessionId}/`);
-  // Handle Vite client specifically
-  html = html.replace('/@vite/client', `/session/${sessionId}/@vite/client`);
-  // Update WebSocket configuration for HMR
-  const flyAppName = process.env.FLY_APP_NAME || 'velocity-preview-containers';
-  html = html.replace(/ws:\/\/0\.0\.0\.0:3001/g, `wss://${flyAppName}.fly.dev/session/${sessionId}`);
-  html = html.replace(/wss:\/\/0\.0\.0\.0:3001/g, `wss://${flyAppName}.fly.dev/session/${sessionId}`);
-  html = html.replace(/ws:\/\/localhost:3001/g, `wss://${flyAppName}.fly.dev/session/${sessionId}`);
-  
-  return html;
-}
-
-/**
- * Health monitoring system for Vite server with auto-recovery
- */
-class ViteHealthMonitor {
-  constructor(projectDir) {
-    this.projectDir = projectDir;
-    this.isHealthy = false;
-    this.restartAttempts = 0;
-    this.maxRestartAttempts = 3;
-    this.healthCheckInterval = null;
-    this.lastHealthCheck = null;
-  }
-
-  async checkHealth() {
-    try {
-      if (!devServerPort || !devServerProcess) {
-        this.isHealthy = false;
-        return false;
-      }
-
-      // Check if process is alive
-      if (devServerProcess.killed) {
-        console.log('[HEALTH] Vite process is dead');
-        this.isHealthy = false;
-        return false;
-      }
-
-      // Check if Vite responds to client request
-      const response = await axios.get(
-        `http://localhost:${devServerPort}/@vite/client`,
-        { timeout: 5000, validateStatus: () => true }
-      );
-      
-      this.isHealthy = response.status === 200 && 
-                      response.headers['content-type']?.includes('javascript');
-      
-      if (this.isHealthy) {
-        this.restartAttempts = 0; // Reset counter on successful health check
-        this.lastHealthCheck = new Date();
-      } else if (this.restartAttempts < this.maxRestartAttempts) {
-        console.log('[HEALTH] Vite unhealthy, attempting restart...');
-        await this.restartVite();
-      }
-      
-      return this.isHealthy;
-    } catch (error) {
-      console.error('[HEALTH] Check failed:', error.message);
-      this.isHealthy = false;
-      
-      if (this.restartAttempts < this.maxRestartAttempts) {
-        await this.restartVite();
-      }
-      
-      return false;
-    }
-  }
-
-  async restartVite() {
-    this.restartAttempts++;
-    console.log(`[HEALTH] Restart attempt ${this.restartAttempts}/${this.maxRestartAttempts}`);
-    
-    // Kill existing process if any
-    if (devServerProcess && !devServerProcess.killed) {
-      try {
-        console.log('[HEALTH] Killing existing Vite process...');
-        kill(devServerProcess.pid, 'SIGTERM');
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      } catch (err) {
-        console.error('[HEALTH] Error killing process:', err.message);
-      }
-    }
-    
-    // Restart Vite server
-    try {
-      await startDevServer();
-      
-      // Wait for startup
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      
-      // Recheck health
-      const healthy = await this.checkHealth();
-      if (healthy) {
-        console.log('[HEALTH] Vite server successfully restarted');
-      } else {
-        console.error('[HEALTH] Vite server restart failed');
-      }
-      
-      return healthy;
-    } catch (error) {
-      console.error('[HEALTH] Failed to restart Vite:', error.message);
-      return false;
-    }
-  }
-
-  startMonitoring() {
-    console.log('[HEALTH] Starting health monitoring (checks every 30s)');
-    
-    // Initial check after 10 seconds
-    setTimeout(() => this.checkHealth(), 10000);
-    
-    // Regular checks every 30 seconds
-    this.healthCheckInterval = setInterval(async () => {
-      const healthy = await this.checkHealth();
-      const status = healthy ? '✅ Healthy' : '❌ Unhealthy';
-      console.log(`[HEALTH] Status: ${status}, Last check: ${this.lastHealthCheck || 'Never'}`);
-      
-      if (!healthy && this.restartAttempts >= this.maxRestartAttempts) {
-        console.error('[HEALTH] Max restart attempts reached. Manual intervention required.');
-        healthStatus = 'error';
-      }
-    }, 30000);
-  }
-
-  stopMonitoring() {
-    if (this.healthCheckInterval) {
-      clearInterval(this.healthCheckInterval);
-      console.log('[HEALTH] Stopped health monitoring');
-    }
-  }
-}
-
-/**
- * Create default project structure with session-aware configuration
- */
-async function createDefaultProject(sessionId = null) {
+async function createDefaultProject() {
   console.log('🏗️ Creating default React Native project structure...');
   
   // Create basic package.json
@@ -371,32 +224,22 @@ export default App`;
 
   await fs.writeFile(path.join(PROJECT_DIR, 'src/App.jsx'), appJsx);
 
-  // Create Vite config with session-aware configuration
-  const flyAppName = process.env.FLY_APP_NAME || 'velocity-preview-containers';
-  const viteBase = sessionId ? `/session/${sessionId}/` : '/';
-  
+  // Create Vite config
   const viteConfig = `import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  base: '${viteBase}',
   server: {
     host: '0.0.0.0',
     port: 3001,
     strictPort: true,
     cors: true,
     hmr: {
-      protocol: 'wss',
-      host: '${flyAppName}.fly.dev',
-      clientPort: 443,
-      path: '${sessionId ? `/session/${sessionId}/hmr` : '/hmr'}'
+      port: 3001,
+      host: '0.0.0.0'
     },
   },
-  define: {
-    'import.meta.env.SESSION_ID': JSON.stringify('${sessionId || ''}'),
-    'import.meta.env.SESSION_BASE': JSON.stringify('${viteBase}')
-  }
 })`;
 
   await fs.writeFile(path.join(PROJECT_DIR, 'vite.config.js'), viteConfig);
@@ -658,11 +501,6 @@ async function startDevServer() {
       console.log('📋 Last server errors:', serverErrors.slice(-500));
       // Don't throw error, let it continue but mark as unhealthy
       healthStatus = 'degraded';
-    } else {
-      // Initialize health monitoring if server started successfully
-      viteHealthMonitor = new ViteHealthMonitor(PROJECT_DIR);
-      viteHealthMonitor.startMonitoring();
-      console.log('🏥 Health monitoring initialized');
     }
 
   } catch (error) {
@@ -1196,7 +1034,7 @@ function startHealthServer() {
     }
   });
 
-  // Enhanced proxy middleware with HTML transformation and session support
+  // Create dynamic proxy middleware that checks if dev server is ready
   const viteProxyMiddleware = (req, res, next) => {
     if (!devServerProcess || !devServerPort) {
       // If requesting an HTML page or root, serve a loading page
@@ -1208,16 +1046,13 @@ function startHealthServer() {
             <title>Development Server Starting...</title>
             <meta http-equiv="refresh" content="2">
             <style>
-              body { font-family: system-ui; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-              .message { text-align: center; background: white; padding: 2rem 3rem; border-radius: 10px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
-              .spinner { font-size: 2rem; animation: spin 1s linear infinite; display: inline-block; }
-              @keyframes spin { to { transform: rotate(360deg); } }
+              body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+              .message { text-align: center; }
             </style>
           </head>
           <body>
             <div class="message">
-              <div class="spinner">⏳</div>
-              <h2>Development Server Starting...</h2>
+              <h2>Development server is starting...</h2>
               <p>This page will automatically refresh when ready.</p>
             </div>
           </body>
@@ -1225,104 +1060,50 @@ function startHealthServer() {
         `);
       }
       return res.status(503).json({
-        error: 'Development server not ready',
-        details: 'The development server is still starting. Please try again in a few moments.'
+        error: 'Development server not ready'
       });
     }
 
-    // Extract session ID from the original URL
-    const sessionMatch = req.originalUrl?.match(/\/session\/([^/]+)/);
-    const sessionId = sessionMatch ? sessionMatch[1] : null;
-
-    // Create the proxy middleware with enhanced configuration
+    // Create the proxy middleware dynamically with the current port
     const proxy = createProxyMiddleware({
       target: `http://localhost:${devServerPort}`,
       changeOrigin: true,
-      ws: true,
+      ws: true, // Enable WebSocket support for HMR
       logLevel: 'warn',
-      
-      // Use the rewritten URL from session middleware
+      // CRITICAL: Tell proxy to use req.url instead of req.originalUrl
+      // This ensures our URL rewriting from the session handler is respected
       proxyReqPathResolver: (req) => {
+        // Use the rewritten URL (req.url) which has the session prefix stripped
         const path = req.url || '/';
-        console.log(`[PROXY PATH] ${req.originalUrl} -> ${path}`);
+        console.log(`[PROXY PATH] Original: ${req.originalUrl} -> Rewritten: ${path}`);
         return path;
       },
-      
-      // Intercept and transform HTML responses
-      selfHandleResponse: true,
-      onProxyRes: (proxyRes, req, res) => {
-        let body = [];
-        
-        proxyRes.on('data', (chunk) => body.push(chunk));
-        proxyRes.on('end', () => {
-          const bodyString = Buffer.concat(body).toString();
-          const contentType = proxyRes.headers['content-type'] || '';
-          
-          // Copy headers except content-length
-          Object.keys(proxyRes.headers).forEach((key) => {
-            if (key.toLowerCase() !== 'content-length') {
-              res.setHeader(key, proxyRes.headers[key]);
-            }
-          });
-          
-          // Transform HTML if we have a session ID
-          if (sessionId && contentType.includes('text/html')) {
-            const transformed = transformHtml(bodyString, sessionId);
-            res.setHeader('Content-Length', Buffer.byteLength(transformed));
-            res.statusCode = proxyRes.statusCode;
-            res.end(transformed);
-            console.log(`[PROXY] Transformed HTML for session ${sessionId}`);
-          } else {
-            res.setHeader('Content-Length', Buffer.byteLength(bodyString));
-            res.statusCode = proxyRes.statusCode;
-            res.end(bodyString);
-          }
-          
-          console.log(`[PROXY RESPONSE] ${req.method} ${req.url} - ${proxyRes.statusCode} ${contentType}`);
-        });
-      },
-      
-      // Handle proxy errors
       onError: (err, req, res) => {
-        console.error('[PROXY ERROR]', err.message, 'for', req.url);
-        
-        if (req.accepts('html') && !req.path.includes('.')) {
-          res.status(502).send(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <title>Proxy Error</title>
-              <style>
-                body { font-family: system-ui; padding: 2rem; max-width: 600px; margin: 0 auto; }
-                .error { color: #dc2626; background: #fee2e2; padding: 1rem; border-radius: 5px; }
-              </style>
-            </head>
-            <body>
-              <h1>Proxy Error</h1>
-              <div class="error">
-                <p>Failed to connect to development server.</p>
-                <p>Error: ${err.message}</p>
-              </div>
-            </body>
-            </html>
-          `);
-        } else {
-          res.status(502).json({
-            error: 'Proxy error',
-            message: err.message,
-            path: req.path
+        console.error('Proxy error:', err.message);
+        if (res.writeHead) {
+          res.writeHead(502, {
+            'Content-Type': 'text/plain'
           });
+          res.end('Proxy error: ' + err.message);
         }
       },
-      
-      // WebSocket handling for HMR
-      onProxyReqWs: (proxyReq, req, socket, options, head) => {
-        socket.on('error', (err) => {
-          console.error('[WS ERROR]', err);
-        });
+      onProxyReq: (proxyReq, req, res) => {
+        // Log the proxied request for debugging
+        const targetUrl = `http://localhost:${devServerPort}${req.url}`;
+        console.log(`[PROXY] ${req.method} ${req.originalUrl || req.url} -> ${targetUrl}`);
+        
+        // Fix headers for proper proxying
+        proxyReq.removeHeader('x-forwarded-for');
+        proxyReq.removeHeader('x-forwarded-host');
+        proxyReq.removeHeader('x-forwarded-proto');
       },
-      
-      secure: false
+      onProxyRes: (proxyRes, req, res) => {
+        // Log successful proxy responses
+        const contentType = proxyRes.headers['content-type'] || 'unknown';
+        console.log(`[PROXY RESPONSE] ${req.method} ${req.url} - Status: ${proxyRes.statusCode}, Type: ${contentType}`);
+      },
+      // Don't verify SSL certificates (for local dev)
+      secure: false,
     });
 
     return proxy(req, res, next);

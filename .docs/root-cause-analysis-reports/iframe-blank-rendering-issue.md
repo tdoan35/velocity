@@ -1030,9 +1030,411 @@ The iframe blank rendering issue is **partially resolved but not fully functiona
 
 The enhanced logging and proxy fixes have improved the situation, but a complete solution requires addressing the Vite base path configuration to ensure all resources are served with the correct session prefix.
 
+## Recommended Long-Term Solution (2025-09-05)
+
+After thorough analysis of the root causes and partial fixes, here is a comprehensive solution to permanently resolve the iframe blank rendering issue:
+
+### Solution Architecture
+
+#### 1. **Dynamic Base Path Configuration for Vite**
+
+The core issue is that Vite doesn't know about the session-prefixed routing. We need to dynamically configure Vite's base path at startup:
+
+```javascript
+// entrypoint.js - When creating vite.config.js
+const viteConfig = `
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+  base: process.env.VITE_BASE_PATH || '/',
+  server: {
+    host: '0.0.0.0',
+    port: 3001,
+    strictPort: true,
+    hmr: {
+      protocol: 'wss',
+      host: '${process.env.FLY_APP_NAME}.fly.dev',
+      clientPort: 443,
+      path: '/session/${sessionId}/hmr'
+    },
+    proxy: {
+      // Handle session-prefixed requests internally
+      '^/session/[^/]+': {
+        target: 'http://localhost:3001',
+        rewrite: (path) => path.replace(/^\/session\/[^/]+/, '')
+      }
+    }
+  },
+  define: {
+    'import.meta.env.SESSION_ID': JSON.stringify('${sessionId}'),
+    'import.meta.env.SESSION_BASE': JSON.stringify('/session/${sessionId}')
+  }
+});
+`;
+```
+
+#### 2. **HTML Transform Middleware**
+
+Implement middleware to rewrite HTML on-the-fly to include session prefixes:
+
+```javascript
+// entrypoint.js - Add HTML transformation middleware
+const transformHtml = (html, sessionId) => {
+  // Rewrite all absolute paths to include session prefix
+  return html
+    .replace(/src="\//g, `src="/session/${sessionId}/`)
+    .replace(/href="\//g, `href="/session/${sessionId}/`)
+    .replace(/from '\//g, `from '/session/${sessionId}/`)
+    .replace(/import\("\//g, `import("/session/${sessionId}/`)
+    // Handle Vite client specifically
+    .replace('/@vite/client', `/session/${sessionId}/@vite/client`)
+    // Update WebSocket configuration
+    .replace('ws://0.0.0.0:3001', `wss://${process.env.FLY_APP_NAME}.fly.dev/session/${sessionId}`)
+    .replace('wss://0.0.0.0:3001', `wss://${process.env.FLY_APP_NAME}.fly.dev/session/${sessionId}`);
+};
+
+// Apply transformation when serving HTML
+app.use('/session/:sessionId', async (req, res, next) => {
+  const sessionId = req.params.sessionId;
+  
+  // Intercept HTML responses
+  const originalSend = res.send;
+  res.send = function(data) {
+    if (res.get('Content-Type')?.includes('text/html') && typeof data === 'string') {
+      data = transformHtml(data, sessionId);
+    }
+    return originalSend.call(this, data);
+  };
+  
+  next();
+});
+```
+
+#### 3. **Unified Proxy Configuration with Fallback**
+
+Create a robust proxy setup that handles all edge cases:
+
+```javascript
+// entrypoint.js - Comprehensive proxy configuration
+const setupProxy = (sessionId, devServerPort) => {
+  return createProxyMiddleware({
+    target: `http://localhost:${devServerPort}`,
+    changeOrigin: true,
+    ws: true,
+    
+    // Custom path resolver
+    pathRewrite: (path, req) => {
+      // Strip session prefix if present
+      const cleanPath = path.replace(`/session/${sessionId}`, '') || '/';
+      console.log(`[PROXY] Rewriting: ${path} -> ${cleanPath}`);
+      return cleanPath;
+    },
+    
+    // WebSocket upgrade handling
+    onProxyReqWs: (proxyReq, req, socket, options, head) => {
+      // Ensure WebSocket requests are properly routed
+      socket.on('error', (err) => {
+        console.error('[WS ERROR]', err);
+      });
+    },
+    
+    // Response interceptor for HTML transformation
+    selfHandleResponse: true,
+    onProxyRes: (proxyRes, req, res) => {
+      let body = [];
+      proxyRes.on('data', (chunk) => body.push(chunk));
+      proxyRes.on('end', () => {
+        const bodyString = Buffer.concat(body).toString();
+        
+        // Copy headers
+        Object.keys(proxyRes.headers).forEach((key) => {
+          res.setHeader(key, proxyRes.headers[key]);
+        });
+        
+        // Transform HTML if needed
+        if (proxyRes.headers['content-type']?.includes('text/html')) {
+          const transformed = transformHtml(bodyString, sessionId);
+          res.end(transformed);
+        } else {
+          res.end(bodyString);
+        }
+      });
+    },
+    
+    // Error handling
+    onError: (err, req, res) => {
+      console.error('[PROXY ERROR]', err);
+      res.status(502).json({
+        error: 'Proxy error',
+        message: err.message,
+        path: req.path
+      });
+    }
+  });
+};
+```
+
+#### 4. **Session-Aware Static File Server**
+
+Implement a fallback static file server for when Vite is starting up:
+
+```javascript
+// entrypoint.js - Static file fallback
+const serveStaticWithSession = (sessionId, projectDir) => {
+  return (req, res, next) => {
+    // Strip session prefix from request
+    const cleanPath = req.path.replace(`/session/${sessionId}`, '') || '/';
+    const filePath = path.join(projectDir, cleanPath);
+    
+    // Security check
+    if (!filePath.startsWith(projectDir)) {
+      return res.status(403).send('Forbidden');
+    }
+    
+    // Check if file exists
+    if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+      // Set appropriate content-type
+      const ext = path.extname(filePath);
+      const contentType = {
+        '.js': 'application/javascript',
+        '.jsx': 'application/javascript',
+        '.css': 'text/css',
+        '.html': 'text/html',
+        '.json': 'application/json'
+      }[ext] || 'application/octet-stream';
+      
+      res.setHeader('Content-Type', contentType);
+      
+      // Transform HTML files
+      if (ext === '.html') {
+        let content = fs.readFileSync(filePath, 'utf8');
+        content = transformHtml(content, sessionId);
+        res.send(content);
+      } else {
+        res.sendFile(filePath);
+      }
+    } else {
+      next();
+    }
+  };
+};
+```
+
+#### 5. **Robust Health Monitoring and Recovery**
+
+Implement comprehensive health checks with automatic recovery:
+
+```javascript
+// entrypoint.js - Health monitoring system
+class ViteHealthMonitor {
+  constructor(sessionId, devServerPort, projectDir) {
+    this.sessionId = sessionId;
+    this.devServerPort = devServerPort;
+    this.projectDir = projectDir;
+    this.isHealthy = false;
+    this.restartAttempts = 0;
+    this.maxRestartAttempts = 3;
+  }
+  
+  async checkHealth() {
+    try {
+      // Check if Vite responds to client request
+      const response = await axios.get(
+        `http://localhost:${this.devServerPort}/@vite/client`,
+        { timeout: 5000 }
+      );
+      
+      this.isHealthy = response.status === 200 && 
+                      response.headers['content-type']?.includes('javascript');
+      
+      if (!this.isHealthy && this.restartAttempts < this.maxRestartAttempts) {
+        console.log('[HEALTH] Vite unhealthy, attempting restart...');
+        await this.restartVite();
+      }
+      
+      return this.isHealthy;
+    } catch (error) {
+      this.isHealthy = false;
+      return false;
+    }
+  }
+  
+  async restartVite() {
+    this.restartAttempts++;
+    
+    // Kill existing process if any
+    if (global.devServerProcess) {
+      global.devServerProcess.kill();
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+    
+    // Restart Vite
+    const startViteServer = require('./start-vite-server');
+    const { process: newProcess } = await startViteServer(
+      this.projectDir,
+      this.sessionId,
+      this.devServerPort
+    );
+    
+    global.devServerProcess = newProcess;
+    
+    // Wait for startup
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
+    // Recheck health
+    return this.checkHealth();
+  }
+  
+  startMonitoring() {
+    // Check health every 30 seconds
+    this.interval = setInterval(async () => {
+      const healthy = await this.checkHealth();
+      if (!healthy) {
+        console.error('[HEALTH] Vite server is unhealthy');
+      }
+    }, 30000);
+  }
+  
+  stopMonitoring() {
+    if (this.interval) {
+      clearInterval(this.interval);
+    }
+  }
+}
+```
+
+#### 6. **Progressive Enhancement Strategy**
+
+Implement a multi-tier serving strategy:
+
+```javascript
+// entrypoint.js - Progressive enhancement
+app.use('/session/:sessionId/*', async (req, res, next) => {
+  const sessionId = req.params.sessionId;
+  
+  // Tier 1: Try Vite dev server (best - HMR support)
+  if (devServerProcess && viteHealthy) {
+    return proxyToVite(req, res, next);
+  }
+  
+  // Tier 2: Try pre-built version (good - fast loading)
+  const distPath = path.join(PROJECT_DIR, 'dist');
+  if (fs.existsSync(distPath)) {
+    return serveStatic(distPath)(req, res, next);
+  }
+  
+  // Tier 3: Serve raw source files (fallback - basic functionality)
+  if (fs.existsSync(PROJECT_DIR)) {
+    return serveStaticWithSession(sessionId, PROJECT_DIR)(req, res, next);
+  }
+  
+  // Tier 4: Error state
+  res.status(503).json({
+    error: 'Preview not available',
+    details: 'Development server is starting...',
+    retry: true
+  });
+});
+```
+
+### Implementation Plan
+
+#### Phase 1: Core Fixes (Immediate)
+1. Implement HTML transformation middleware
+2. Fix proxy path resolution
+3. Configure Vite with proper base paths
+4. Test with a single session
+
+#### Phase 2: Robustness (1-2 days)
+1. Add health monitoring system
+2. Implement automatic recovery
+3. Add progressive enhancement
+4. Deploy to staging environment
+
+#### Phase 3: Optimization (3-5 days)
+1. Pre-build optimization for faster starts
+2. Caching layer for transformed HTML
+3. WebSocket connection pooling
+4. Performance monitoring
+
+#### Phase 4: Production Hardening (1 week)
+1. Comprehensive error handling
+2. Rate limiting and resource management
+3. Session cleanup and lifecycle management
+4. Monitoring and alerting integration
+
+### Success Metrics
+
+1. **Functional Metrics**
+   - ✅ Iframe renders React application within 5 seconds
+   - ✅ All resources load without 404 errors
+   - ✅ HMR works through WebSocket connection
+   - ✅ Session routing preserves throughout navigation
+
+2. **Performance Metrics**
+   - Container startup time < 30 seconds
+   - First meaningful paint < 3 seconds
+   - Resource loading time < 500ms per file
+   - WebSocket latency < 100ms
+
+3. **Reliability Metrics**
+   - 99% uptime for preview sessions
+   - Automatic recovery within 30 seconds
+   - Zero data loss during restarts
+   - Graceful degradation when Vite fails
+
+### Testing Strategy
+
+1. **Unit Tests**
+   - HTML transformation logic
+   - Path rewriting functions
+   - Session validation
+
+2. **Integration Tests**
+   - Full request flow through proxy
+   - WebSocket upgrade handling
+   - Static file serving fallback
+
+3. **E2E Tests**
+   - Complete session lifecycle
+   - Multiple concurrent sessions
+   - Recovery from failures
+   - Performance under load
+
+### Monitoring and Observability
+
+```javascript
+// Structured logging for debugging
+const log = {
+  info: (event, data) => console.log(JSON.stringify({ level: 'info', event, ...data, timestamp: Date.now() })),
+  error: (event, error, data) => console.error(JSON.stringify({ level: 'error', event, error: error.message, ...data, timestamp: Date.now() })),
+  metric: (name, value, tags) => console.log(JSON.stringify({ level: 'metric', name, value, tags, timestamp: Date.now() }))
+};
+
+// Track key metrics
+log.metric('session.created', 1, { sessionId });
+log.metric('vite.startup.time', startupTime, { sessionId });
+log.metric('proxy.request', 1, { path: req.path, status: res.statusCode });
+```
+
+### Conclusion
+
+This comprehensive solution addresses all identified issues:
+- ✅ Proper session-based routing for all resources
+- ✅ Dynamic HTML transformation for correct paths
+- ✅ Robust proxy configuration with fallbacks
+- ✅ Health monitoring and automatic recovery
+- ✅ Progressive enhancement for reliability
+- ✅ Comprehensive error handling and logging
+
+The implementation follows a phased approach allowing for incremental improvements while maintaining system stability. The solution is designed to be maintainable, scalable, and resilient to failures.
+
 ---
 
 **Investigation conducted by**: Claude Code  
 **Session ID**: cc838cae-60b2-4d03-b6b9-3e3214718efe  
 **Container URL**: https://velocity-preview-containers.fly.dev/session/cc838cae-60b2-4d03-b6b9-3e3214718efe  
 **Investigation Completed**: 2025-09-04 21:00 PST
+**Solution Documented**: 2025-09-05
