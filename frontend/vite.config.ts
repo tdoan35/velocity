@@ -106,8 +106,8 @@ export default defineConfig(({ mode }) => {
           "font-src 'self' https://cdn.jsdelivr.net",
           "connect-src 'self' ws: wss: http://localhost:8080 https://exp.host https://snackager.expo.io https://cdn.jsdelivr.net https://ozjipxxukgrvjxlefslq.supabase.co https://velocity-orchestrator.fly.dev",
           "worker-src 'self' blob:",
-          "frame-src 'self' https://snack.expo.dev https://*.expo.dev https://snack-web-player.s3.us-west-1.amazonaws.com https://*.fly.dev",
-          "child-src 'self' https://snack.expo.dev https://*.expo.dev https://snack-web-player.s3.us-west-1.amazonaws.com https://*.fly.dev",
+          "frame-src 'self' https://snack.expo.dev https://*.expo.dev https://snack-web-player.s3.us-west-1.amazonaws.com https://*.fly.dev https://*.preview.velocity-dev.com https://*.velocity-dev.com",
+          "child-src 'self' https://snack.expo.dev https://*.expo.dev https://snack-web-player.s3.us-west-1.amazonaws.com https://*.fly.dev https://*.preview.velocity-dev.com https://*.velocity-dev.com",
         ].join('; '),
       },
       // Proxy configuration to handle CORS issues with Expo APIs
