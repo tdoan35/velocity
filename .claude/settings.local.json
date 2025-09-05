@@ -86,7 +86,7 @@
       "Bash(claude --version)",
       "Bash(git checkout:*)",
       "Bash(PORT=5174 npm run dev)",
-      "Read(/C:\\Users\\Ty\\Desktop\\velocity/**)",
+      "Read(**)",
       "Bash(git log:*)",
       "mcp__playwright__browser_resize",
       "WebSearch",
@@ -95,7 +95,6 @@
       "Bash(deno:*)",
       "Bash(echo $CLAUDE_CODE_SSE_PORT)",
       "Bash(echo $ENABLE_IDE_INTEGRATION)",
-      "Read(C:\\Users\\Ty\\.claude\\ide/**)",
       "Bash(echo $SHELL)",
       "Bash(source ~/.bashrc)",
       "Bash(fly logs:*)",
@@ -104,20 +103,13 @@
       "Bash(fly status:*)",
       "Bash(fly machines list:*)",
       "Bash(fly machine status:*)",
-      "Read(/C:\\Users\\Ty\\Desktop\\velocity\\orchestrator\\preview-container/**)",
-      "Read(/C:\\Users\\Ty\\Desktop\\velocity\\orchestrator\\preview-container/**)",
-      "Read(/C:\\Users\\Ty\\Desktop\\velocity\\orchestrator\\preview-container/**)",
-      "Read(/C:\\Users\\Ty\\Desktop\\velocity\\orchestrator\\preview-container/**)",
-      "Read(/C:\\Users\\Ty\\Desktop\\velocity\\orchestrator\\preview-container/**)",
-      "Read(/C:\\Users\\Ty\\Desktop\\velocity\\orchestrator\\preview-container/**)",
+      "Read(orchestrator/preview-container/**)",
       "Bash(git check-ignore:*)",
       "Bash(fly deploy:*)",
       "Bash(fly auth:*)"
     ],
     "defaultMode": "acceptEdits",
-    "additionalDirectories": [
-      "C:\\Users\\Ty\\Desktop\\velocity"
-    ]
+    "additionalDirectories": []
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
@@ -126,5 +118,57 @@
     "github",
     "playwright",
     "github.com/upstash/context7-mcp"
-  ]
+  ],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run ~/.claude/hooks/voice_notifications/voice_handler.py --hook PreToolUse"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run ~/.claude/hooks/voice_notifications/voice_handler.py --hook PostToolUse"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run ~/.claude/hooks/voice_notifications/voice_handler.py --hook Stop"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run ~/.claude/hooks/voice_notifications/voice_handler.py --hook UserPromptSubmit"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run ~/.claude/hooks/voice_notifications/voice_handler.py --hook Notification"
+          }
+        ]
+      }
+    ]
+  }
 }
