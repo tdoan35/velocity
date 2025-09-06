@@ -1,28 +1,31 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { usePreviewSession } from '../../hooks/usePreviewSession';
 import type { PreviewStatus } from '../../hooks/usePreviewSession';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
-import { Badge } from '../ui/badge';
 import { 
   Smartphone, 
-  Monitor, 
-  Tablet,
   AlertCircle,
   Loader2,
   RefreshCw,
-  ExternalLink,
-  Power,
-  PowerOff,
-  RotateCw
+  Power
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+export interface ContainerPreviewPanelRef {
+  startSession: () => Promise<void>;
+  stopSession: () => Promise<void>;
+  refresh: () => void;
+  openInNewWindow: () => void;
+}
 
 interface ContainerPreviewPanelProps {
   projectId: string;
   className?: string;
   onStatusChange?: (status: PreviewStatus) => void;
   onSessionChange?: (hasSession: boolean) => void;
+  selectedDevice?: string;
+  onDeviceChange?: (deviceId: string) => void;
 }
 
 interface DeviceConfig {
@@ -61,13 +64,15 @@ const DEVICE_CONFIGS: DeviceConfig[] = [
   }
 ];
 
-export function ContainerPreviewPanel({ 
+export const ContainerPreviewPanel = forwardRef<ContainerPreviewPanelRef, ContainerPreviewPanelProps>(({ 
   projectId, 
   className,
   onStatusChange,
-  onSessionChange
-}: ContainerPreviewPanelProps) {
-  const [selectedDevice, setSelectedDevice] = useState<string>('mobile');
+  onSessionChange,
+  selectedDevice: externalSelectedDevice
+}, ref) => {
+  const [internalSelectedDevice, setInternalSelectedDevice] = useState<string>('mobile');
+  const selectedDevice = externalSelectedDevice || internalSelectedDevice;
   const [isLandscape, setIsLandscape] = useState(false);
   const [iframeLoading, setIframeLoading] = useState(false);
   const [iframeError, setIframeError] = useState<string | null>(null);
@@ -185,11 +190,6 @@ export function ContainerPreviewPanel({
     };
   }, []);
 
-  const handleDeviceChange = (deviceId: string) => {
-    setSelectedDevice(deviceId);
-    // Reset orientation when changing devices
-    setIsLandscape(false);
-  };
 
   const handleStartSession = async (deviceType?: string) => {
     const device = deviceType || selectedDevice;
@@ -216,28 +216,23 @@ export function ContainerPreviewPanel({
     if (iframeRef.current) {
       setIframeLoading(true);
       setIframeError(null);
-      
-      // Set timeout for iframe loading
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-      }
-      
-      loadingTimeoutRef.current = setTimeout(() => {
-        if (iframeLoading) {
-          setIframeLoading(false);
-          setIframeError('Preview container took too long to respond');
-        }
-      }, 30000); // 30 second timeout
-      
       iframeRef.current.src = iframeRef.current.src;
     }
   };
 
-  const handleOpenExternal = () => {
+  const handleOpenInNewWindow = () => {
     if (previewSession.containerUrl) {
       window.open(previewSession.containerUrl, '_blank');
     }
   };
+
+  // Expose methods to parent through ref
+  useImperativeHandle(ref, () => ({
+    startSession: () => handleStartSession(),
+    stopSession: () => handleStopSession(),
+    refresh: () => handleRefresh(),
+    openInNewWindow: () => handleOpenInNewWindow()
+  }), [selectedDevice, previewSession.containerUrl]);
 
   const handleIframeLoad = () => {
     // Clear loading timeout
@@ -261,155 +256,11 @@ export function ContainerPreviewPanel({
     setIframeError('Failed to load preview container');
   };
 
-  const getDeviceIcon = (type: string) => {
-    switch (type) {
-      case 'mobile':
-        return <Smartphone className="h-4 w-4" />;
-      case 'tablet':
-        return <Tablet className="h-4 w-4" />;
-      case 'desktop':
-        return <Monitor className="h-4 w-4" />;
-      default:
-        return <Smartphone className="h-4 w-4" />;
-    }
-  };
-
-  const getStatusColor = () => {
-    switch (previewSession.status) {
-      case 'running':
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300';
-      case 'starting':
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300';
-      case 'error':
-        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300';
-      case 'stopping':
-        return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300';
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
-    }
-  };
-
-  const getStatusText = () => {
-    switch (previewSession.status) {
-      case 'running':
-        return 'Running';
-      case 'starting':
-        return 'Starting...';
-      case 'error':
-        return 'Error';
-      case 'stopping':
-        return 'Stopping...';
-      default:
-        return 'Stopped';
-    }
-  };
 
   return (
-    <div className={cn('flex flex-col h-full bg-background', className)}>
-      {/* Header Controls */}
-      <div className="flex items-center justify-between p-4 border-b bg-card">
-        <div className="flex items-center gap-4">
-          {/* Device Selection */}
-          <div className="flex items-center gap-2">
-            {DEVICE_CONFIGS.map((device) => (
-              <Button
-                key={device.id}
-                variant={selectedDevice === device.id ? 'default' : 'outline'}
-                size="sm"
-                className="h-8"
-                onClick={() => handleDeviceChange(device.id)}
-                disabled={previewSession.isLoading}
-              >
-                {getDeviceIcon(device.type)}
-                <span className="ml-1 text-xs">{device.name}</span>
-              </Button>
-            ))}
-          </div>
-
-          {/* Rotate Button */}
-          {selectedDevice !== 'desktop' && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8"
-              onClick={() => setIsLandscape(!isLandscape)}
-              disabled={previewSession.status !== 'running'}
-              title="Rotate device"
-            >
-              <RotateCw className="h-3 w-3" />
-            </Button>
-          )}
-
-          {/* Status Badge */}
-          <Badge className={`text-xs ${getStatusColor()}`}>
-            {getStatusText()}
-          </Badge>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* Refresh Button */}
-          {previewSession.status === 'running' && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8"
-              onClick={handleRefresh}
-              disabled={iframeLoading}
-              title="Refresh preview"
-            >
-              <RefreshCw className={`h-3 w-3 ${iframeLoading ? 'animate-spin' : ''}`} />
-            </Button>
-          )}
-
-          {/* External Link Button */}
-          {previewSession.containerUrl && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8"
-              onClick={handleOpenExternal}
-              title="Open in new tab"
-            >
-              <ExternalLink className="h-3 w-3" />
-            </Button>
-          )}
-
-          {/* Start/Stop Button */}
-          {previewSession.status === 'idle' || previewSession.status === 'error' ? (
-            <Button
-              size="sm"
-              className="h-8"
-              onClick={() => handleStartSession()}
-              disabled={previewSession.isLoading}
-            >
-              {previewSession.isLoading ? (
-                <Loader2 className="h-3 w-3 animate-spin mr-1" />
-              ) : (
-                <Power className="h-3 w-3 mr-1" />
-              )}
-              Start
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8"
-              onClick={handleStopSession}
-              disabled={previewSession.isLoading}
-            >
-              {previewSession.isLoading ? (
-                <Loader2 className="h-3 w-3 animate-spin mr-1" />
-              ) : (
-                <PowerOff className="h-3 w-3 mr-1" />
-              )}
-              Stop
-            </Button>
-          )}
-        </div>
-      </div>
-
+    <div className={cn('flex flex-col h-full bg-transparent', className)}>
       {/* Preview Area */}
-      <div className="flex-1 flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-900">
+      <div className="flex-1 flex items-center justify-center p-4 bg-transparent">
         {previewSession.status === 'idle' ? (
           <Card className="p-8 max-w-md text-center">
             <Smartphone className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
@@ -506,4 +357,6 @@ export function ContainerPreviewPanel({
       )}
     </div>
   );
-}
+});
+
+ContainerPreviewPanel.displayName = 'ContainerPreviewPanel';

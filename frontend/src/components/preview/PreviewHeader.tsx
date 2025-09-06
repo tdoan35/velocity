@@ -4,10 +4,19 @@ import {
   Smartphone, 
   Share2, 
   RefreshCw,
-  Info,
   Play,
-  Code
+  Code,
+  Square,
+  Monitor,
+  Tablet,
+  ExternalLink
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu';
 
 interface PreviewHeaderProps {
   // Mode configuration
@@ -16,19 +25,23 @@ interface PreviewHeaderProps {
   // Status dot configuration
   status: 'connecting' | 'error' | 'connected' | 'preparing' | 'idle' | 'retrying';
   
+  // Device selection
+  selectedDevice?: 'mobile' | 'tablet' | 'desktop';
+  onDeviceChange?: (device: 'mobile' | 'tablet' | 'desktop') => void;
+  
+  // Preview state
+  isPreviewRunning?: boolean;
+  onStartPreview?: () => void;
+  onStopPreview?: () => void;
+  
   // Action handlers
-  onMobilePreview?: () => void;
-  onSessionInfo?: () => void;
+  onOpenInNewWindow?: () => void;
   onSharePreview?: () => void;
   onRefresh: () => void;
-  onBuild?: () => void;
   onDemoMode?: () => void;
   
-  // Build-related props (for FullStackPreviewPanel)
-  showBuildButton?: boolean;
+  // Demo mode button
   showDemoButton?: boolean;
-  isBuilding?: boolean;
-  buildButtonText?: string;
   
   // State flags
   isRefreshing?: boolean;
@@ -40,16 +53,16 @@ interface PreviewHeaderProps {
 export function PreviewHeader({
   mode,
   status,
-  onMobilePreview,
-  onSessionInfo,
+  selectedDevice = 'mobile',
+  onDeviceChange,
+  isPreviewRunning = false,
+  onStartPreview,
+  onStopPreview,
+  onOpenInNewWindow,
   onSharePreview,
   onRefresh,
-  onBuild,
   onDemoMode,
-  showBuildButton = false,
   showDemoButton = false,
-  isBuilding = false,
-  buildButtonText = 'Build',
   isRefreshing = false,
   isStuck = false,
   sessionDisabled = false
@@ -75,12 +88,51 @@ export function PreviewHeader({
     }
   };
 
+  const getDeviceIcon = () => {
+    switch (selectedDevice) {
+      case 'tablet':
+        return <Tablet className="h-4 w-4" />;
+      case 'desktop':
+        return <Monitor className="h-4 w-4" />;
+      default:
+        return <Smartphone className="h-4 w-4" />;
+    }
+  };
+
   return (
     <div className="px-4 py-1 border-b border-gray-300 dark:border-gray-700/50">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <Smartphone className="h-4 w-4 text-muted-foreground" />
+            {onDeviceChange ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 bg-transparent"
+                  >
+                    {getDeviceIcon()}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem onClick={() => onDeviceChange('mobile')}>
+                    <Smartphone className="h-4 w-4 mr-2" />
+                    Mobile
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onDeviceChange('tablet')}>
+                    <Tablet className="h-4 w-4 mr-2" />
+                    Tablet
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onDeviceChange('desktop')}>
+                    <Monitor className="h-4 w-4 mr-2" />
+                    Desktop
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              getDeviceIcon()
+            )}
             <span className="font-medium text-sm">
               {mode === 'live' ? 'Live Mode' : 'Demo Mode'}
             </span>
@@ -103,29 +155,16 @@ export function PreviewHeader({
             </Button>
           )}
           
-          {onMobilePreview && (
+          {onOpenInNewWindow && (
             <Button
               variant="ghost"
               size="sm"
-              onClick={onMobilePreview}
+              onClick={onOpenInNewWindow}
               disabled={sessionDisabled}
-              title="Mobile preview"
+              title="Open in new window"
               className="h-7 px-2 bg-transparent"
             >
-              <Smartphone className="w-3 h-3" />
-            </Button>
-          )}
-          
-          {onSessionInfo && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onSessionInfo}
-              disabled={sessionDisabled}
-              title="Session info"
-              className="h-7 px-2 bg-transparent"
-            >
-              <Info className="w-3 h-3" />
+              <ExternalLink className="w-3 h-3" />
             </Button>
           )}
           
@@ -165,23 +204,23 @@ export function PreviewHeader({
             </Button>
           )}
 
-          {showBuildButton && onBuild && (
+          {(onStartPreview || onStopPreview) && (
             <Button
               variant="default"
               size="sm"
-              onClick={onBuild}
-              disabled={isBuilding}
+              onClick={isPreviewRunning ? onStopPreview : onStartPreview}
+              disabled={!onStartPreview && !onStopPreview}
               className="text-xs h-7 px-2"
             >
-              {isBuilding ? (
+              {isPreviewRunning ? (
                 <>
-                  <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
-                  Building...
+                  <Square className="h-3 w-3 mr-1" />
+                  Stop
                 </>
               ) : (
                 <>
                   <Play className="h-3 w-3 mr-1" />
-                  {buildButtonText}
+                  Start
                 </>
               )}
             </Button>
