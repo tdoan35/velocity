@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { usePreviewSession } from '../../hooks/usePreviewSession';
 import type { PreviewStatus } from '../../hooks/usePreviewSession';
 import { Button } from '../ui/button';
@@ -8,7 +8,14 @@ import {
   AlertCircle,
   Loader2,
   RefreshCw,
-  Power
+  Power,
+  Tablet,
+  Monitor,
+  ChevronDown,
+  ZoomIn,
+  ZoomOut,
+  RotateCw,
+  Maximize
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -33,33 +40,49 @@ interface DeviceConfig {
   name: string;
   width: number;
   height: number;
-  aspectRatio: number;
+  icon: React.ReactNode;
   type: 'mobile' | 'tablet' | 'desktop';
 }
 
 const DEVICE_CONFIGS: DeviceConfig[] = [
   {
-    id: 'mobile',
-    name: 'Mobile',
-    width: 375,
-    height: 667,
-    aspectRatio: 9/16,
+    id: 'iphone-16-pro',
+    name: 'iPhone 16 Pro',
+    width: 402,
+    height: 874,
+    icon: <Smartphone className="w-4 h-4" />,
     type: 'mobile'
   },
   {
-    id: 'tablet',
-    name: 'Tablet',
-    width: 768,
-    height: 1024,
-    aspectRatio: 3/4,
+    id: 'iphone-14',
+    name: 'iPhone 14',
+    width: 390,
+    height: 844,
+    icon: <Smartphone className="w-4 h-4" />,
+    type: 'mobile'
+  },
+  {
+    id: 'iphone-se',
+    name: 'iPhone SE',
+    width: 375,
+    height: 667,
+    icon: <Smartphone className="w-4 h-4" />,
+    type: 'mobile'
+  },
+  {
+    id: 'ipad',
+    name: 'iPad',
+    width: 820,
+    height: 1180,
+    icon: <Tablet className="w-4 h-4" />,
     type: 'tablet'
   },
   {
     id: 'desktop',
     name: 'Desktop',
-    width: 1200,
-    height: 800,
-    aspectRatio: 3/2,
+    width: 1024,
+    height: 768,
+    icon: <Monitor className="w-4 h-4" />,
     type: 'desktop'
   }
 ];
@@ -69,15 +92,54 @@ export const ContainerPreviewPanel = forwardRef<ContainerPreviewPanelRef, Contai
   className,
   onStatusChange,
   onSessionChange,
-  selectedDevice: externalSelectedDevice
+  selectedDevice: externalSelectedDevice,
+  onDeviceChange
 }, ref) => {
-  const [internalSelectedDevice, setInternalSelectedDevice] = useState<string>('mobile');
-  const selectedDevice = externalSelectedDevice || internalSelectedDevice;
-  const [isLandscape, setIsLandscape] = useState(false);
+  // Initialize with a default device
+  const [internalSelectedDevice, setInternalSelectedDevice] = useState<string>('iphone-16-pro');
+  
+  // Determine which device to use
+  // If external device is provided and it's a generic type, use internal selection
+  // This preserves specific device selections when parent only knows generic types
+  let selectedDevice = internalSelectedDevice;
+  
+  // Only override with external if it's a specific device ID
+  if (externalSelectedDevice && DEVICE_CONFIGS.some(d => d.id === externalSelectedDevice)) {
+    selectedDevice = externalSelectedDevice;
+  } else if (externalSelectedDevice === 'mobile' || externalSelectedDevice === 'tablet' || externalSelectedDevice === 'desktop') {
+    // Keep internal selection when parent provides generic type
+    // But ensure we're using an appropriate device for that type
+    const currentDevice = DEVICE_CONFIGS.find(d => d.id === internalSelectedDevice);
+    if (currentDevice) {
+      // Check if current selection matches the requested type
+      const typeMatches = 
+        (externalSelectedDevice === 'mobile' && currentDevice.type === 'mobile') ||
+        (externalSelectedDevice === 'tablet' && currentDevice.type === 'tablet') ||
+        (externalSelectedDevice === 'desktop' && currentDevice.type === 'desktop');
+      
+      if (!typeMatches) {
+        // Switch to default for that type
+        if (externalSelectedDevice === 'mobile') selectedDevice = 'iphone-16-pro';
+        else if (externalSelectedDevice === 'tablet') selectedDevice = 'ipad';
+        else if (externalSelectedDevice === 'desktop') selectedDevice = 'desktop';
+      }
+    }
+  }
+  const [isRotated, setIsRotated] = useState(false);
   const [iframeLoading, setIframeLoading] = useState(false);
   const [iframeError, setIframeError] = useState<string | null>(null);
+  const [isPreviewHovered, setIsPreviewHovered] = useState(false);
+  const [isDeviceDropdownOpen, setIsDeviceDropdownOpen] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [isResponsiveZoom, setIsResponsiveZoom] = useState(true);
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const [baseScale, setBaseScale] = useState(1); // Scale that makes device fit in container
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const previewAreaRef = useRef<HTMLDivElement>(null);
   const loadingTimeoutRef = useRef<number | null>(null);
+  
+  const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
 
   const previewSession = usePreviewSession({
     projectId,
@@ -121,65 +183,7 @@ export const ContainerPreviewPanel = forwardRef<ContainerPreviewPanelRef, Contai
 
   const currentDevice = DEVICE_CONFIGS.find(d => d.id === selectedDevice) || DEVICE_CONFIGS[0];
 
-  // Calculate responsive dimensions with enhanced scaling logic
-  const getResponsiveDimensions = useCallback(() => {
-    const baseWidth = isLandscape ? currentDevice.height : currentDevice.width;
-    const baseHeight = isLandscape ? currentDevice.width : currentDevice.height;
-    
-    // Get available viewport space, accounting for headers and padding
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    
-    // Reserve space for headers, controls, and padding
-    const headerHeight = 80; // Approximate header height
-    const footerHeight = 40; // Approximate footer height
-    const padding = 32; // Total padding around preview
-    
-    const availableWidth = viewportWidth - padding;
-    const availableHeight = viewportHeight - headerHeight - footerHeight - padding;
-    
-    // For mobile viewports, use more of the available space
-    const isMobileViewport = viewportWidth < 768;
-    const widthFactor = isMobileViewport ? 0.95 : 0.85;
-    const heightFactor = isMobileViewport ? 0.8 : 0.75;
-    
-    const maxWidth = Math.min(
-      selectedDevice === 'desktop' ? 1200 : selectedDevice === 'tablet' ? 900 : 600,
-      availableWidth * widthFactor
-    );
-    const maxHeight = Math.min(
-      selectedDevice === 'desktop' ? 800 : selectedDevice === 'tablet' ? 1024 : 800,
-      availableHeight * heightFactor
-    );
-    
-    const scaleX = maxWidth / baseWidth;
-    const scaleY = maxHeight / baseHeight;
-    const scale = Math.min(scaleX, scaleY, 1);
-    
-    return {
-      width: Math.round(baseWidth * scale),
-      height: Math.round(baseHeight * scale),
-      scale,
-      isMobileViewport
-    };
-  }, [selectedDevice, isLandscape, currentDevice.height, currentDevice.width]);
 
-  const [dimensions, setDimensions] = useState(getResponsiveDimensions());
-
-  // Update dimensions on window resize
-  useEffect(() => {
-    const handleResize = () => {
-      setDimensions(getResponsiveDimensions());
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [getResponsiveDimensions]);
-
-  // Update dimensions when device or orientation changes
-  useEffect(() => {
-    setDimensions(getResponsiveDimensions());
-  }, [getResponsiveDimensions]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -189,6 +193,161 @@ export const ContainerPreviewPanel = forwardRef<ContainerPreviewPanelRef, Contai
       }
     };
   }, []);
+  
+  // Sync internal device with external changes only when switching between major types
+  useEffect(() => {
+    if (externalSelectedDevice) {
+      // Only update internal if external is a specific device ID
+      if (DEVICE_CONFIGS.some(d => d.id === externalSelectedDevice)) {
+        setInternalSelectedDevice(externalSelectedDevice);
+      }
+      // If switching to a different device type via PreviewHeader
+      else if (externalSelectedDevice === 'mobile' || externalSelectedDevice === 'tablet' || externalSelectedDevice === 'desktop') {
+        const currentDevice = DEVICE_CONFIGS.find(d => d.id === internalSelectedDevice);
+        if (currentDevice) {
+          const typeMatches = 
+            (externalSelectedDevice === 'mobile' && currentDevice.type === 'mobile') ||
+            (externalSelectedDevice === 'tablet' && currentDevice.type === 'tablet') ||
+            (externalSelectedDevice === 'desktop' && currentDevice.type === 'desktop');
+          
+          if (!typeMatches) {
+            // Only change when type doesn't match
+            if (externalSelectedDevice === 'mobile') setInternalSelectedDevice('iphone-16-pro');
+            else if (externalSelectedDevice === 'tablet') setInternalSelectedDevice('ipad');
+            else if (externalSelectedDevice === 'desktop') setInternalSelectedDevice('desktop');
+          }
+        }
+      }
+    }
+  }, [externalSelectedDevice, internalSelectedDevice]);
+
+  // Handle device selection
+  const handleDeviceChange = (device: DeviceConfig) => {
+    setInternalSelectedDevice(device.id);
+    setIsRotated(false);
+    setZoomLevel(1);
+    // Call the parent's onDeviceChange if provided
+    onDeviceChange?.(device.id);
+  };
+
+  // Handle rotation
+  const handleRotate = () => {
+    setIsRotated(!isRotated);
+  };
+
+  // Zoom controls
+  const handleZoomIn = () => {
+    const currentIndex = ZOOM_LEVELS.findIndex(level => level === zoomLevel);
+    if (currentIndex < ZOOM_LEVELS.length - 1) {
+      setZoomLevel(ZOOM_LEVELS[currentIndex + 1]);
+    }
+  };
+
+  const handleZoomOut = () => {
+    const currentIndex = ZOOM_LEVELS.findIndex(level => level === zoomLevel);
+    if (currentIndex > 0) {
+      setZoomLevel(ZOOM_LEVELS[currentIndex - 1]);
+    }
+  };
+
+  const handleZoomReset = () => {
+    setZoomLevel(1);
+  };
+
+  const handleToggleResponsiveZoom = () => {
+    setIsResponsiveZoom(!isResponsiveZoom);
+    if (!isResponsiveZoom) {
+      setZoomLevel(1);
+    }
+  };
+
+  // Calculate the base scale that makes the device fit in container
+  const calculateBaseScale = () => {
+    if (containerSize.width === 0 || containerSize.height === 0) {
+      return 1;
+    }
+
+    const deviceWidth = isRotated ? currentDevice.height : currentDevice.width;
+    const deviceHeight = isRotated ? currentDevice.width : currentDevice.height;
+    
+    // Account for padding and controls
+    const HORIZONTAL_PADDING = 120; // Left/right padding + controls
+    const VERTICAL_PADDING = 120; // Top/bottom padding + controls
+    
+    const availableWidth = Math.max(containerSize.width - HORIZONTAL_PADDING, 100);
+    const availableHeight = Math.max(containerSize.height - VERTICAL_PADDING, 100);
+    
+    const scaleX = availableWidth / deviceWidth;
+    const scaleY = availableHeight / deviceHeight;
+    
+    // Use the smaller scale to ensure it fits in both dimensions
+    return Math.min(scaleX, scaleY);
+  };
+
+  // Calculate responsive zoom
+  const calculateResponsiveZoom = () => {
+    if (!isResponsiveZoom || containerSize.width === 0 || containerSize.height === 0) {
+      return zoomLevel * baseScale;
+    }
+
+    // In responsive mode, always fit to container
+    return calculateBaseScale();
+  };
+
+  const getEffectiveZoomLevel = () => {
+    if (isResponsiveZoom) {
+      return calculateResponsiveZoom();
+    } else {
+      // Manual zoom is now relative to the base scale
+      // 100% (zoomLevel = 1) means "fit to container"
+      return zoomLevel * calculateBaseScale();
+    }
+  };
+
+  const getZoomPercentage = () => {
+    // Show percentage relative to "fit" size, not actual size
+    // 100% means "fits in container", not "actual device size"
+    return Math.round(zoomLevel * 100);
+  };
+
+  // Track container size for responsive zoom
+  useEffect(() => {
+    // Use previewAreaRef to get the actual preview area size
+    if (!previewAreaRef.current) return;
+
+    const updateContainerSize = () => {
+      if (!previewAreaRef.current) return;
+      
+      const rect = previewAreaRef.current.getBoundingClientRect();
+      setContainerSize({ width: rect.width, height: rect.height });
+    };
+
+    const resizeObserver = new ResizeObserver(updateContainerSize);
+    resizeObserver.observe(previewAreaRef.current);
+    
+    updateContainerSize();
+    
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
+  
+  // Update base scale when container size or device changes
+  useEffect(() => {
+    setBaseScale(calculateBaseScale());
+  }, [containerSize.width, containerSize.height, currentDevice.id, isRotated]);
+
+  // Handle click outside dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (isDeviceDropdownOpen && containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsDeviceDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isDeviceDropdownOpen]);
 
 
   const handleStartSession = async (deviceType?: string) => {
@@ -258,9 +417,15 @@ export const ContainerPreviewPanel = forwardRef<ContainerPreviewPanelRef, Contai
 
 
   return (
-    <div className={cn('flex flex-col h-full bg-transparent', className)}>
+    <div className={cn('flex flex-col h-full bg-transparent overflow-hidden', className)}>
       {/* Preview Area */}
-      <div className="flex-1 flex items-center justify-center p-4 bg-transparent">
+      <div 
+        ref={previewAreaRef} 
+        className={cn(
+          "flex-1 flex items-center justify-center bg-transparent relative",
+          // Use overflow auto for manual zoom to allow scrolling if content exceeds container
+          isResponsiveZoom ? "overflow-hidden" : "overflow-auto"
+        )}>
         {previewSession.status === 'idle' ? (
           <Card className="p-8 max-w-md text-center">
             <Smartphone className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
@@ -298,50 +463,320 @@ export const ContainerPreviewPanel = forwardRef<ContainerPreviewPanelRef, Contai
             </Button>
           </Card>
         ) : previewSession.status === 'running' && previewSession.containerUrl ? (
-          <div className="flex flex-col items-center">
-            {/* Device Frame */}
-            <div
-              className={cn(
-                'bg-white dark:bg-gray-900 rounded-lg shadow-2xl overflow-hidden relative',
-                'border-8 border-gray-300 dark:border-gray-700',
-                selectedDevice === 'mobile' && 'border-4',
-                selectedDevice === 'tablet' && 'border-6',
-                selectedDevice === 'desktop' && 'border-2'
+          <div 
+            ref={containerRef}
+            className={cn(
+              "w-full h-full relative bg-white",
+              // AUTO mode: use flex centering with overflow hidden
+              // Manual mode: use overflow auto without flex centering to allow proper scrolling
+              isResponsiveZoom 
+                ? "flex items-center justify-center overflow-hidden" 
+                : "overflow-auto"
+            )}
+            onMouseEnter={() => setIsPreviewHovered(true)}
+            onMouseLeave={() => setIsPreviewHovered(false)}
+          >
+            {/* Device selector dropdown - positioned in top-left corner */}
+            <div className={cn(
+              "absolute top-6 left-6 z-20 transition-opacity duration-200",
+              isPreviewHovered ? "opacity-100" : "opacity-0 pointer-events-none"
+            )}>
+              <div className="relative">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setIsDeviceDropdownOpen(!isDeviceDropdownOpen)}
+                  className="gap-2"
+                >
+                  {currentDevice.icon}
+                  <span className="text-xs">{currentDevice.name}</span>
+                  <ChevronDown className={cn("w-3 h-3 transition-transform", isDeviceDropdownOpen && "rotate-180")} />
+                </Button>
+
+                {/* Dropdown menu */}
+                {isDeviceDropdownOpen && (
+                  <div className="absolute top-full left-0 mt-1 bg-background border rounded-md shadow-lg min-w-[240px] z-30">
+                    {DEVICE_CONFIGS.map((device) => (
+                      <button
+                        key={device.id}
+                        onClick={() => {
+                          handleDeviceChange(device);
+                          setIsDeviceDropdownOpen(false);
+                        }}
+                        className={cn(
+                          "w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors",
+                          selectedDevice === device.id && "bg-accent text-accent-foreground"
+                        )}
+                      >
+                        {device.icon}
+                        <span>{device.name}</span>
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          {device.width} × {device.height}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right-side controls - positioned in top-right corner */}
+            <div className={cn(
+              "absolute top-6 right-6 z-20 transition-opacity duration-200 flex items-center gap-2",
+              isPreviewHovered ? "opacity-100" : "opacity-0 pointer-events-none"
+            )}>
+              {/* Zoom controls */}
+              <div className="flex items-center gap-1 bg-background/90 backdrop-blur-sm rounded-md p-1 border">
+                {/* Responsive zoom toggle */}
+                <Button
+                  variant={isResponsiveZoom ? "default" : "ghost"}
+                  size="sm"
+                  onClick={handleToggleResponsiveZoom}
+                  title="Toggle responsive zoom"
+                  className="h-7 w-7 p-0"
+                >
+                  <Maximize className="w-3 h-3" />
+                </Button>
+                
+                {/* Manual zoom controls */}
+                <div className={cn("flex items-center gap-1", isResponsiveZoom && "opacity-50")}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleZoomOut}
+                    disabled={isResponsiveZoom || zoomLevel <= ZOOM_LEVELS[0]}
+                    title="Zoom out"
+                    className="h-7 w-7 p-0"
+                  >
+                    <ZoomOut className="w-3 h-3" />
+                  </Button>
+                  
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleZoomReset}
+                    disabled={isResponsiveZoom}
+                    title={isResponsiveZoom ? "Responsive zoom active" : "Reset zoom to 100%"}
+                    className={cn("h-7 px-2 text-xs font-mono", isResponsiveZoom && "text-primary")}
+                  >
+                    {isResponsiveZoom ? 'AUTO' : `${getZoomPercentage()}%`}
+                  </Button>
+                  
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleZoomIn}
+                    disabled={isResponsiveZoom || zoomLevel >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]}
+                    title="Zoom in"
+                    className="h-7 w-7 p-0"
+                  >
+                    <ZoomIn className="w-3 h-3" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Rotate button */}
+              {currentDevice.type !== 'desktop' && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleRotate}
+                  title="Rotate device"
+                  className="h-8 w-8 p-0"
+                >
+                  <RotateCw className={cn("w-4 h-4 transition-transform", isRotated && "rotate-90")} />
+                </Button>
               )}
-              style={{
-                width: dimensions.width,
-                height: dimensions.height,
-              }}
-            >
-              {/* Loading Overlay */}
-              {iframeLoading && (
-                <div className="absolute inset-0 bg-white/80 dark:bg-gray-900/80 flex items-center justify-center z-10">
-                  <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+            </div>
+
+            {/* Device Frame Positioning Wrapper for Manual Zoom */}
+            {!isResponsiveZoom && (() => {
+              const deviceWidth = isRotated ? currentDevice.height : currentDevice.width;
+              const deviceHeight = isRotated ? currentDevice.width : currentDevice.height;
+              const scale = getEffectiveZoomLevel();
+              const scaledWidth = deviceWidth * scale;
+              const scaledHeight = deviceHeight * scale;
+              
+              return (
+                <div 
+                  className="relative flex items-center justify-center"
+                  style={{
+                    // Create actual space for the scaled device plus padding
+                    width: `${scaledWidth + 64}px`,
+                    height: `${scaledHeight + 64}px`,
+                    // Center the wrapper if it's smaller than container
+                    margin: 'auto',
+                    minWidth: '100%',
+                    minHeight: '100%'
+                  }}
+                >
+                  <div
+                    className={cn(
+                      'transition-all duration-500 ease-in-out flex-shrink-0',
+                      'bg-black shadow-2xl overflow-hidden',
+                      currentDevice.type !== 'desktop' && 'rounded-[3rem] p-3',
+                      currentDevice.type === 'desktop' && 'bg-white dark:bg-gray-900'
+                    )}
+                    style={{
+                      width: deviceWidth,
+                      height: deviceHeight,
+                      transform: `scale(${scale})`,
+                      transformOrigin: 'center center',
+                      transitionProperty: 'width, height, border-width, box-shadow, transform'
+                    }}
+                  >
+              {/* Device frame elements */}
+              {currentDevice.type !== 'desktop' && (
+                <div className="absolute inset-0 pointer-events-none">
+                  {/* Outer bezel ring */}
+                  <div className="absolute inset-0 rounded-[2.5rem] ring-8 ring-black/10" />
+                  
+                  {/* Notch/Dynamic Island for iPhone models */}
+                  {currentDevice.id.includes('iphone') && !currentDevice.id.includes('se') && (
+                    <>
+                      {currentDevice.id === 'iphone-16-pro' ? (
+                        /* Dynamic Island for iPhone 16 Pro */
+                        isRotated ? (
+                          <div className="absolute right-6 top-1/2 -translate-y-1/2 w-6 h-32 bg-black rounded-full z-20" />
+                        ) : (
+                          <div className="absolute top-6 left-1/2 -translate-x-1/2 w-32 h-6 bg-black rounded-full z-20" />
+                        )
+                      ) : (
+                        /* Traditional notch for iPhone 14 */
+                        isRotated ? (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2 w-7 h-40 bg-black rounded-l-2xl z-20" />
+                        ) : (
+                          <div className="absolute top-3 left-1/2 -translate-x-1/2 w-40 h-7 bg-black rounded-b-2xl z-20" />
+                        )
+                      )}
+                    </>
+                  )}
+                  
+                  {/* Home indicator for modern iPhones */}
+                  {currentDevice.type === 'mobile' && !currentDevice.id.includes('se') && (
+                    isRotated ? (
+                      <div className="absolute left-2 top-1/2 -translate-y-1/2 w-1 h-32 bg-white/20 rounded-full z-20" />
+                    ) : (
+                      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-32 h-1 bg-white/20 rounded-full z-20" />
+                    )
+                  )}
                 </div>
               )}
 
-              {/* Iframe */}
-              <iframe
-                ref={iframeRef}
-                src={previewSession.containerUrl}
-                className="w-full h-full border-0"
-                title={`${currentDevice.name} Preview`}
-                onLoad={handleIframeLoad}
-                onError={handleIframeError}
-                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-downloads allow-pointer-lock"
-                allow="accelerometer; autoplay; camera; encrypted-media; geolocation; gyroscope; microphone; midi; payment; usb; web-share; fullscreen"
-                referrerPolicy="strict-origin-when-cross-origin"
-                loading="eager"
-              />
-            </div>
+              {/* Inner content area with rounded corners for devices */}
+              <div className={cn(
+                "relative w-full h-full overflow-hidden",
+                currentDevice.type !== 'desktop' && "rounded-[2rem] bg-white"
+              )}>
+                {/* Loading Overlay */}
+                {iframeLoading && (
+                  <div className="absolute inset-0 bg-white/80 dark:bg-gray-900/80 flex items-center justify-center z-10">
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                  </div>
+                )}
 
-            {/* Device Info */}
-            <div className="mt-4 text-center">
-              <p className="text-sm text-muted-foreground">
-                {currentDevice.name} • {dimensions.width}×{dimensions.height}
-                {isLandscape && selectedDevice !== 'desktop' && ' (Landscape)'}
-              </p>
+                {/* Iframe */}
+                <iframe
+                  ref={iframeRef}
+                  src={previewSession.containerUrl}
+                  className="w-full h-full border-0"
+                  title={`${currentDevice.name} Preview`}
+                  onLoad={handleIframeLoad}
+                  onError={handleIframeError}
+                  sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-downloads allow-pointer-lock"
+                  allow="accelerometer; autoplay; camera; encrypted-media; geolocation; gyroscope; microphone; midi; payment; usb; web-share; fullscreen"
+                  referrerPolicy="strict-origin-when-cross-origin"
+                  loading="eager"
+                />
+              </div>
             </div>
+                </div>
+              );
+            })()}
+
+            {/* AUTO mode - device without wrapper */}
+            {isResponsiveZoom && (
+              <div
+                className={cn(
+                  'transition-all duration-500 ease-in-out flex-shrink-0 relative',
+                  'bg-black shadow-2xl overflow-hidden',
+                  currentDevice.type !== 'desktop' && 'rounded-[3rem] p-3',
+                  currentDevice.type === 'desktop' && 'bg-white dark:bg-gray-900'
+                )}
+                style={{
+                  width: isRotated ? currentDevice.height : currentDevice.width,
+                  height: isRotated ? currentDevice.width : currentDevice.height,
+                  transform: `scale(${getEffectiveZoomLevel()})`,
+                  transformOrigin: 'center center',
+                  transitionProperty: 'width, height, border-width, box-shadow, transform'
+                }}
+              >
+                {/* Device frame elements */}
+                {currentDevice.type !== 'desktop' && (
+                  <div className="absolute inset-0 pointer-events-none">
+                    {/* Outer bezel ring */}
+                    <div className="absolute inset-0 rounded-[2.5rem] ring-8 ring-black/10" />
+                    
+                    {/* Notch/Dynamic Island for iPhone models */}
+                    {currentDevice.id.includes('iphone') && !currentDevice.id.includes('se') && (
+                      <>
+                        {currentDevice.id === 'iphone-16-pro' ? (
+                          /* Dynamic Island for iPhone 16 Pro */
+                          isRotated ? (
+                            <div className="absolute right-6 top-1/2 -translate-y-1/2 w-6 h-32 bg-black rounded-full z-20" />
+                          ) : (
+                            <div className="absolute top-6 left-1/2 -translate-x-1/2 w-32 h-6 bg-black rounded-full z-20" />
+                          )
+                        ) : (
+                          /* Traditional notch for iPhone 14 */
+                          isRotated ? (
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 w-7 h-40 bg-black rounded-l-2xl z-20" />
+                          ) : (
+                            <div className="absolute top-3 left-1/2 -translate-x-1/2 w-40 h-7 bg-black rounded-b-2xl z-20" />
+                          )
+                        )}
+                      </>
+                    )}
+                    
+                    {/* Home indicator for modern iPhones */}
+                    {currentDevice.type === 'mobile' && !currentDevice.id.includes('se') && (
+                      isRotated ? (
+                        <div className="absolute left-2 top-1/2 -translate-y-1/2 w-1 h-32 bg-white/20 rounded-full z-20" />
+                      ) : (
+                        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-32 h-1 bg-white/20 rounded-full z-20" />
+                      )
+                    )}
+                  </div>
+                )}
+
+                {/* Inner content area with rounded corners for devices */}
+                <div className={cn(
+                  "relative w-full h-full overflow-hidden",
+                  currentDevice.type !== 'desktop' && "rounded-[2rem] bg-white"
+                )}>
+                  {/* Loading Overlay */}
+                  {iframeLoading && (
+                    <div className="absolute inset-0 bg-white/80 dark:bg-gray-900/80 flex items-center justify-center z-10">
+                      <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                    </div>
+                  )}
+
+                  {/* Preview Iframe */}
+                  <iframe
+                    ref={iframeRef}
+                    src={`${previewSession.containerUrl}?t=${Date.now()}`}
+                    className="w-full h-full border-0 bg-white"
+                    title={`${currentDevice.name} Preview`}
+                    onLoad={handleIframeLoad}
+                    onError={handleIframeError}
+                    sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-downloads allow-pointer-lock"
+                    allow="accelerometer; autoplay; camera; encrypted-media; geolocation; gyroscope; microphone; midi; payment; usb; web-share; fullscreen"
+                    referrerPolicy="strict-origin-when-cross-origin"
+                    loading="eager"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         ) : null}
       </div>

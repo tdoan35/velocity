@@ -133,8 +133,20 @@ export function FullStackPreviewPanelContainer({ projectId }: FullStackPreviewPa
             setIsPreviewRunning(status === 'running' || status === 'starting');
           }}
           onSessionChange={setHasSession}
-          selectedDevice={selectedDevice === 'mobile' ? 'mobile' : selectedDevice === 'tablet' ? 'tablet' : 'desktop'}
-          onDeviceChange={(deviceId) => setSelectedDevice(deviceId as 'mobile' | 'tablet' | 'desktop')}
+          selectedDevice={selectedDevice}
+          onDeviceChange={(deviceId) => {
+            // Map specific device IDs to generic types for PreviewHeader
+            if (deviceId === 'iphone-16-pro' || deviceId === 'iphone-14' || deviceId === 'iphone-se') {
+              setSelectedDevice('mobile');
+            } else if (deviceId === 'ipad') {
+              setSelectedDevice('tablet');
+            } else if (deviceId === 'desktop') {
+              setSelectedDevice('desktop');
+            } else {
+              // Default fallback
+              setSelectedDevice(deviceId as 'mobile' | 'tablet' | 'desktop');
+            }
+          }}
         />
       </div>
 
