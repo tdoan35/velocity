@@ -8,9 +8,26 @@ export declare class FlyIOService {
      */
     createMachine(projectId: string, tierName?: string, customConfig?: Partial<FlyMachineConfig>, sessionId?: string): Promise<CreateMachineResponse>;
     /**
-     * Destroy a Fly machine
+     * Destroy a Fly machine with retry logic and verification
      */
     destroyMachine(machineId: string): Promise<void>;
+    /**
+     * Verify that a machine has been destroyed
+     */
+    verifyMachineDestroyed(machineId: string): Promise<boolean>;
+    /**
+     * Check health of a container
+     */
+    checkContainerHealth(containerId: string): Promise<{
+        isHealthy: boolean;
+        state: string | null;
+        checks: Array<{
+            name: string;
+            status: string;
+            output: string;
+        }>;
+        error?: string;
+    }>;
     /**
      * Get machine status and details
      */
@@ -64,6 +81,14 @@ export declare class FlyIOService {
      * Apply resource limit enforcement to a running machine
      */
     enforceResourceLimits(machineId: string): Promise<boolean>;
+    /**
+     * Find all containers for a specific project/session
+     */
+    findContainersForProject(projectId: string): Promise<FlyMachine[]>;
+    /**
+     * Clean up stale containers for a project before creating a new one
+     */
+    cleanupProjectContainers(projectId: string): Promise<number>;
     /**
      * Clean up orphaned machines (for maintenance)
      */

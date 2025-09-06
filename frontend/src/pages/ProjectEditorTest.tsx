@@ -6,7 +6,7 @@ import { ProjectEditorCore } from './ProjectEditor';
 
 // Comprehensive mock data for a complete project
 const mockProjectData = {
-  id: 'demo-project-12345',
+  id: '550e8400-e29b-41d4-a716-446655440000',
   name: 'Velocity E-commerce App',
   description: 'A full-stack React Native e-commerce application with Supabase backend',
   user_id: 'demo-user-123',
@@ -994,7 +994,7 @@ function ProjectEditorTestContent() {
   return (
     <div className="h-full">
       <ProjectEditorCore 
-        projectId="demo-project-12345"
+        projectId="550e8400-e29b-41d4-a716-446655440000"
         showAuthRedirect={false}  // Don't redirect in test mode
         showProjectValidation={false}  // Don't validate project in test mode
         skipInitialization={true}  // Skip API calls, use mock data
@@ -1023,7 +1023,7 @@ export function ProjectEditorTest() {
 
     // Set up project editor store with comprehensive mock data
     useProjectEditorStore.setState({
-      projectId: 'demo-project-12345',
+      projectId: '550e8400-e29b-41d4-a716-446655440000',
       projectData: mockProjectData,
       projectType: 'full-stack',
       frontendFiles: mockFrontendFiles,
@@ -1050,7 +1050,7 @@ export function ProjectEditorTest() {
   return (
     <div className="min-h-screen w-full bg-background p-8 pt-16">
       <div className="w-full max-w-7xl mx-auto border border-border rounded-lg overflow-hidden" style={{ height: 'calc(100vh - 8rem)' }}>
-        <SecurityProvider projectId="demo-project-12345">
+        <SecurityProvider projectId="550e8400-e29b-41d4-a716-446655440000">
           <ProjectEditorTestContent />
         </SecurityProvider>
       </div>

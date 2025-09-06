@@ -15,6 +15,7 @@ const routes_1 = require("./api/routes");
 const auth_1 = require("./middleware/auth");
 const scheduler_1 = require("./services/scheduler");
 const monitoring_controller_1 = require("./api/monitoring-controller");
+const metrics_1 = __importDefault(require("./routes/metrics"));
 const app = (0, express_1.default)();
 exports.app = app;
 const PORT = process.env.PORT || 8080;
@@ -56,6 +57,8 @@ app.use((0, morgan_1.default)('combined', {
 app.set('trust proxy', 1);
 // API routes
 app.use('/api', routes_1.apiRoutes);
+// Metrics routes (not behind /api for Prometheus convention)
+app.use(metrics_1.default);
 // Root endpoint
 app.get('/', (req, res) => {
     res.json({

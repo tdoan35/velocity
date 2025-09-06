@@ -64,6 +64,13 @@ export class FlyIOService {
           PREVIEW_DOMAIN: `${actualSessionId}.preview.velocity-dev.com`,
           USE_SUBDOMAIN: 'true'
         },
+        metadata: {
+          'velocity-service': 'preview-container',
+          'velocity-project-id': projectId,
+          'velocity-session-id': actualSessionId,
+          'velocity-tier': tierName,
+          'velocity-created-at': new Date().toISOString()
+        },
         guest: {
           cpu_kind: 'shared',
           cpus: 1,
@@ -142,27 +149,156 @@ export class FlyIOService {
   }
 
   /**
-   * Destroy a Fly machine
+   * Destroy a Fly machine with retry logic and verification
    */
   async destroyMachine(machineId: string): Promise<void> {
+    const maxRetries = 3;
+    const retryDelay = 2000; // 2 seconds between retries
+    
+    console.log(`🗑️ Starting destruction of machine: ${machineId}`);
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // First, check if machine exists
+        const machine = await this.getMachine(machineId);
+        if (!machine) {
+          console.log(`✅ Machine ${machineId} does not exist (already destroyed)`);
+          return;
+        }
+        
+        // If already destroyed, we're done
+        if (machine.state === 'destroyed') {
+          console.log(`✅ Machine ${machineId} is already destroyed`);
+          return;
+        }
+        
+        console.log(`🔄 Destruction attempt ${attempt}/${maxRetries} for machine ${machineId} (current state: ${machine.state})`);
+        
+        // Stop the machine first if it's running
+        if (machine.state === 'started' || machine.state === 'starting') {
+          try {
+            console.log(`⏹️ Stopping machine ${machineId} before destruction...`);
+            await this.client.post(
+              `/apps/${this.appName}/machines/${machineId}/stop`
+            );
+            // Wait for graceful shutdown
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          } catch (stopError) {
+            console.warn(`⚠️ Failed to stop machine ${machineId}, proceeding with force destroy:`, stopError);
+          }
+        }
+        
+        // Force destroy the machine
+        console.log(`💥 Force destroying machine ${machineId}...`);
+        await this.client.delete(
+          `/apps/${this.appName}/machines/${machineId}?force=true`
+        );
+        
+        // Verify destruction
+        console.log(`🔍 Verifying destruction of machine ${machineId}...`);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait a moment for API to update
+        
+        const verifyMachine = await this.getMachine(machineId);
+        if (!verifyMachine || verifyMachine.state === 'destroyed') {
+          console.log(`✅ Machine ${machineId} successfully destroyed and verified`);
+          return;
+        }
+        
+        // If still exists and not destroyed, we'll retry
+        console.warn(`⚠️ Machine ${machineId} still exists with state: ${verifyMachine.state}`);
+        
+        if (attempt < maxRetries) {
+          console.log(`⏳ Waiting ${retryDelay}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
+        
+      } catch (error) {
+        console.error(`❌ Attempt ${attempt} failed to destroy machine ${machineId}:`, error);
+        
+        // Check if it's a 404 (machine doesn't exist) - that's actually success
+        if (axios.isAxiosError(error) && error.response?.status === 404) {
+          console.log(`✅ Machine ${machineId} does not exist (404) - considering as destroyed`);
+          return;
+        }
+        
+        if (attempt === maxRetries) {
+          // On final attempt, throw the error
+          throw new Error(`Failed to destroy machine ${machineId} after ${maxRetries} attempts: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+        
+        console.log(`⏳ Waiting ${retryDelay}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      }
+    }
+    
+    // If we get here, all retries failed
+    throw new Error(`Failed to destroy machine ${machineId} after ${maxRetries} attempts`);
+  }
+  
+  /**
+   * Verify that a machine has been destroyed
+   */
+  async verifyMachineDestroyed(machineId: string): Promise<boolean> {
     try {
-      // Stop the machine first
-      await this.client.post(
-        `/apps/${this.appName}/machines/${machineId}/stop`
-      );
-
-      // Wait a moment for graceful shutdown
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // Destroy the machine
-      await this.client.delete(
-        `/apps/${this.appName}/machines/${machineId}?force=true`
-      );
-
-      console.log(`Successfully destroyed machine: ${machineId}`);
+      const machine = await this.getMachine(machineId);
+      return !machine || machine.state === 'destroyed';
     } catch (error) {
-      console.error(`Failed to destroy machine ${machineId}:`, error);
-      // Don't throw here - we want to continue cleanup even if destroy fails
+      // If we get a 404, the machine doesn't exist (destroyed)
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        return true;
+      }
+      console.error(`Failed to verify machine destruction for ${machineId}:`, error);
+      return false;
+    }
+  }
+  
+  /**
+   * Check health of a container
+   */
+  async checkContainerHealth(containerId: string): Promise<{
+    isHealthy: boolean;
+    state: string | null;
+    checks: Array<{ name: string; status: string; output: string }>;
+    error?: string;
+  }> {
+    try {
+      const machine = await this.getMachine(containerId);
+      
+      if (!machine) {
+        return {
+          isHealthy: false,
+          state: null,
+          checks: [],
+          error: 'Machine not found'
+        };
+      }
+      
+      // Check machine state
+      const isRunning = machine.state === 'started';
+      
+      // Check health checks
+      const healthChecks = machine.checks || [];
+      const allChecksPass = healthChecks.length === 0 || 
+        healthChecks.every(check => check.status === 'passing');
+      
+      return {
+        isHealthy: isRunning && allChecksPass,
+        state: machine.state,
+        checks: healthChecks.map(check => ({
+          name: check.name,
+          status: check.status,
+          output: check.output || ''
+        }))
+      };
+      
+    } catch (error) {
+      console.error(`Failed to check health for container ${containerId}:`, error);
+      return {
+        isHealthy: false,
+        state: null,
+        checks: [],
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
     }
   }
 
@@ -466,6 +602,57 @@ export class FlyIOService {
     }
   }
 
+  /**
+   * Find all containers for a specific project/session
+   */
+  async findContainersForProject(projectId: string): Promise<FlyMachine[]> {
+    try {
+      const machines = await this.listMachines();
+      return machines.filter(machine => 
+        machine.config?.metadata?.['velocity-project-id'] === projectId &&
+        machine.state !== 'destroyed'
+      );
+    } catch (error) {
+      console.error(`Failed to find containers for project ${projectId}:`, error);
+      return [];
+    }
+  }
+  
+  /**
+   * Clean up stale containers for a project before creating a new one
+   */
+  async cleanupProjectContainers(projectId: string): Promise<number> {
+    try {
+      console.log(`🧹 Checking for existing containers for project: ${projectId}`);
+      const existingContainers = await this.findContainersForProject(projectId);
+      
+      if (existingContainers.length === 0) {
+        console.log(`✅ No existing containers found for project ${projectId}`);
+        return 0;
+      }
+      
+      console.log(`⚠️ Found ${existingContainers.length} existing containers for project ${projectId}, cleaning up...`);
+      
+      let cleanedCount = 0;
+      for (const container of existingContainers) {
+        try {
+          console.log(`🗑️ Destroying stale container ${container.id} for project ${projectId}`);
+          await this.destroyMachine(container.id);
+          cleanedCount++;
+        } catch (error) {
+          console.error(`❌ Failed to destroy stale container ${container.id}:`, error);
+        }
+      }
+      
+      console.log(`✅ Cleaned up ${cleanedCount}/${existingContainers.length} stale containers for project ${projectId}`);
+      return cleanedCount;
+      
+    } catch (error) {
+      console.error(`Failed to cleanup project containers for ${projectId}:`, error);
+      return 0;
+    }
+  }
+  
   /**
    * Clean up orphaned machines (for maintenance)
    */

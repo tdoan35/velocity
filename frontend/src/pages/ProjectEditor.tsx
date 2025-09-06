@@ -17,7 +17,7 @@ import {
 } from '../components/ui/dropdown-menu';
 import { FullStackFileExplorer } from '../components/editor/FullStackFileExplorer';
 import { EnhancedEditorContainer } from '../components/editor/EnhancedEditorContainer';
-import { FullStackPreviewPanel } from '../components/preview/FullStackPreviewPanel';
+import { FullStackPreviewPanelContainer } from '../components/preview/FullStackPreviewPanelContainer';
 import { EnhancedChatInterface } from '@/components/chat/enhanced-chat-interface';
 import { VerticalCollapsiblePanel } from '../components/layout/vertical-collapsible-panel';
 import { useFileSecurityMonitoring } from '../hooks/useSecurityMonitoring';
@@ -37,6 +37,10 @@ function ProjectEditorCore({
   skipInitialization?: boolean;
 }) {
   const { user } = useAuthStore();
+  
+  // Development mode flag - bypass auth in development
+  const isDevelopment = import.meta.env.MODE === 'development';
+  const effectiveUser = isDevelopment && !user ? { id: 'dev-user' } as any : user;
   // No longer need to manually sync - ProjectContext handles this automatically
   const securityMonitoring = useFileSecurityMonitoring();
   const {
@@ -56,27 +60,43 @@ function ProjectEditorCore({
   const [isAIChatPanelVisible, setIsAIChatPanelVisible] = useState(true);
 
   useEffect(() => {
+    console.log('[ProjectEditor] useEffect triggered', {
+      projectId,
+      effectiveUser,
+      isInitialized,
+      skipInitialization,
+      isDevelopment
+    });
+    
     if (skipInitialization) {
       // Skip API initialization for test mode
       setIsInitialized(true);
       return;
     }
     
-    if (projectId && user && !isInitialized) {
+    if (projectId && effectiveUser && !isInitialized) {
+      console.log('[ProjectEditor] Calling initializeProject for:', projectId);
       initializeProject(projectId)
         .then(() => {
+          console.log('[ProjectEditor] Project initialized successfully');
           setIsInitialized(true);
         })
         .catch((error) => {
+          console.error('[ProjectEditor] Failed to initialize:', error);
           toast.error('Failed to initialize project: ' + error.message);
+          // Even if initialization fails, mark as initialized to show the UI
+          if (isDevelopment) {
+            console.log('[ProjectEditor] Development mode - continuing despite error');
+            setIsInitialized(true);
+          }
         });
     }
-  }, [projectId, user, initializeProject, isInitialized, skipInitialization]);
+  }, [projectId, effectiveUser, initializeProject, isInitialized, skipInitialization, isDevelopment]);
 
   // ProjectContext automatically handles currentProject syncing based on route changes
 
-  // Redirect if not authenticated (only if enabled)
-  if (showAuthRedirect && !user) {
+  // Redirect if not authenticated (only if enabled and not in dev mode)
+  if (showAuthRedirect && !effectiveUser && !isDevelopment) {
     return <Navigate to="/signup" replace />;
   }
 
@@ -85,13 +105,19 @@ function ProjectEditorCore({
     return <Navigate to="/" replace />;
   }
 
-  // Loading state
+  // Loading state - add more detailed debugging
   if (isLoading || !isInitialized) {
+    console.log('[ProjectEditor] Still loading:', { isLoading, isInitialized, effectiveUser, projectId });
     return (
       <div className="h-screen flex items-center justify-center">
         <div className="text-center space-y-4">
           <Loader2 className="h-8 w-8 animate-spin mx-auto" />
           <p className="text-muted-foreground">Loading project...</p>
+          <p className="text-xs text-muted-foreground">
+            {!effectiveUser && "No user authenticated - checking..."}
+            {effectiveUser && !isInitialized && "Initializing project..."}
+            {isLoading && "Loading project data..."}
+          </p>
         </div>
       </div>
     );
@@ -274,7 +300,7 @@ function ProjectEditorCore({
           </ResizablePanelGroup>
         ) : (
           <div className="h-full">
-            <FullStackPreviewPanel
+            <FullStackPreviewPanelContainer
               projectId={currentProjectId}
             />
           </div>

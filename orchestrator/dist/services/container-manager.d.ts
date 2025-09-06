@@ -15,7 +15,7 @@ export declare class ContainerManager {
         customConfig?: any;
     }): Promise<ContainerSession>;
     /**
-     * Destroys a preview session and cleans up resources
+     * Destroys a preview session and cleans up resources with enhanced verification
      */
     destroySession(sessionId: string): Promise<void>;
     /**

@@ -48,6 +48,12 @@ class ContainerManager {
             console.log(`🔍 Ensuring project is ready: ${request.projectId}`);
             const projectInfo = await this.ensureProjectReady(request.projectId);
             console.log(`✅ Project validation complete: ${request.projectId} (${projectInfo.isNew ? 'new' : 'existing'})`);
+            // PHASE 0.5: CLEAN UP STALE CONTAINERS FOR THIS PROJECT
+            console.log(`🧹 Checking for stale containers for project: ${request.projectId}`);
+            const cleanedContainers = await this.flyService.cleanupProjectContainers(request.projectId);
+            if (cleanedContainers > 0) {
+                console.log(`✅ Cleaned up ${cleanedContainers} stale containers for project ${request.projectId}`);
+            }
             // PHASE 1: ATOMIC SESSION CREATION
             // Create session record in database with 'creating' status
             const expiresAt = new Date(Date.now() + (tierConfig.maxDurationHours * 60 * 60 * 1000));
@@ -112,6 +118,21 @@ class ContainerManager {
                 console.warn(`⚠️ Session ${sessionId} is not active yet, current status: ${verification.status}`);
             }
             console.log(`✅ Session verification successful: ${sessionId} (status: ${verification.status})`);
+            // PHASE 4.5: HEALTH CHECK - Verify container is actually healthy
+            console.log(`🏥 Checking container health: ${actualContainerId}`);
+            const healthCheck = await this.flyService.checkContainerHealth(actualContainerId);
+            if (!healthCheck.isHealthy) {
+                console.error(`❌ Container ${actualContainerId} is not healthy:`, healthCheck);
+                // Try to destroy the unhealthy container
+                try {
+                    await this.flyService.destroyMachine(actualContainerId);
+                }
+                catch (destroyError) {
+                    console.error(`Failed to destroy unhealthy container:`, destroyError);
+                }
+                throw new Error(`Container health check failed: ${healthCheck.error || `Container state: ${healthCheck.state}`}`);
+            }
+            console.log(`✅ Container ${actualContainerId} is healthy and ready`);
             // PHASE 5: REGISTER WITH REALTIME (non-critical)
             try {
                 const realtimeInfo = await this.realtimeManager.registerContainer(request.projectId, actualContainerId, containerUrl);
@@ -147,10 +168,11 @@ class ContainerManager {
         }
     }
     /**
-     * Destroys a preview session and cleans up resources
+     * Destroys a preview session and cleans up resources with enhanced verification
      */
     async destroySession(sessionId) {
         try {
+            console.log(`🗑️ Starting session destruction: ${sessionId}`);
             // Get session details from database
             const { data: session, error: fetchError } = await this.supabase
                 .from('preview_sessions')
@@ -158,6 +180,7 @@ class ContainerManager {
                 .eq('id', sessionId)
                 .single();
             if (fetchError || !session) {
+                console.warn(`⚠️ Session not found: ${sessionId}`);
                 throw new Error(`Session not found: ${sessionId}`);
             }
             if (session.container_id) {
@@ -170,8 +193,35 @@ class ContainerManager {
                     console.error('⚠️ Failed to unregister container from realtime:', realtimeError);
                     // Continue with machine destruction
                 }
-                // Destroy the Fly.io machine
-                await this.flyService.destroyMachine(session.container_id);
+                // Destroy the Fly.io machine with enhanced retry logic
+                console.log(`🔥 Destroying container: ${session.container_id}`);
+                try {
+                    await this.flyService.destroyMachine(session.container_id);
+                    // Verify destruction was successful
+                    const isDestroyed = await this.flyService.verifyMachineDestroyed(session.container_id);
+                    if (!isDestroyed) {
+                        console.error(`❌ Container ${session.container_id} verification failed - may still exist`);
+                        // Log but don't throw - we'll still mark session as ended
+                    }
+                    else {
+                        console.log(`✅ Container ${session.container_id} destruction verified`);
+                    }
+                }
+                catch (destroyError) {
+                    console.error(`❌ Failed to destroy container ${session.container_id}:`, destroyError);
+                    // Log the error but continue to update session status
+                    // We don't want to leave the session in a limbo state
+                }
+                // Also clean up any other containers for this project (belt and suspenders)
+                try {
+                    const cleanedCount = await this.flyService.cleanupProjectContainers(session.project_id);
+                    if (cleanedCount > 0) {
+                        console.log(`🧹 Cleaned up ${cleanedCount} additional containers for project ${session.project_id}`);
+                    }
+                }
+                catch (cleanupError) {
+                    console.error(`⚠️ Failed to cleanup additional project containers:`, cleanupError);
+                }
             }
             // Update session status to ended
             const { error: updateError } = await this.supabase
@@ -186,6 +236,7 @@ class ContainerManager {
                 console.error('Failed to update session status:', updateError);
                 throw new Error(`Failed to update session: ${updateError.message}`);
             }
+            console.log(`✅ Session ${sessionId} successfully destroyed`);
         }
         catch (error) {
             console.error('Failed to destroy preview session:', error);
