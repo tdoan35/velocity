@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { supabase } from '../lib/supabase';
 import { getDefaultFrontendFiles, getDefaultBackendFiles, getDefaultSharedFiles } from '../utils/defaultProjectFiles';
+import { isFeatureEnabled, FSYNC_FLAGS } from '../utils/featureFlags';
 import type { FileTree, FileContent, ProjectData, SupabaseProject, BuildStatus, DeploymentStatus } from '../types/editor';
 
 export interface ProjectEditorState {
@@ -164,11 +165,42 @@ export const useProjectEditorStore = create<ProjectEditorState>()(
           // Load existing files if any (handle missing table gracefully)
           let files = null;
           try {
-            const { data } = await supabase
-              .from('project_files')
-              .select('*')
-              .eq('project_id', projectId);
-            files = data;
+            // Check if we should use new RPC functions
+            const useRPC = await isFeatureEnabled(FSYNC_FLAGS.USE_RPC);
+            
+            if (useRPC) {
+              // Use the new list_current_files RPC function
+              const { data, error } = await supabase.rpc('list_current_files', {
+                project_uuid: projectId
+              });
+              
+              if (error) {
+                console.log('RPC list_current_files failed, falling back to direct query:', error);
+                // Fallback to direct query
+                const fallbackResult = await supabase
+                  .from('project_files')
+                  .select('*')
+                  .eq('project_id', projectId)
+                  .eq('is_current_version', true);
+                files = fallbackResult.data;
+              } else {
+                // Convert RPC response to expected format
+                files = data?.map((file: any) => ({
+                  ...file,
+                  project_id: projectId,
+                  path: file.file_path,
+                  type: file.file_type,
+                  // RPC already filters current versions
+                })) || [];
+              }
+            } else {
+              // Legacy path - direct database operations  
+              const { data } = await supabase
+                .from('project_files')
+                .select('*')
+                .eq('project_id', projectId);
+              files = data;
+            }
           } catch (err: any) {
             console.log('project_files table not found, will create default files');
             files = null;
@@ -230,6 +262,8 @@ export const useProjectEditorStore = create<ProjectEditorState>()(
                 content: file.content,
                 type: file.type,
                 lastModified: new Date(file.updated_at),
+                version: file.version,
+                contentHash: file.content_hash,
               };
 
               if (file.path.startsWith('frontend/')) {
@@ -307,34 +341,76 @@ export const useProjectEditorStore = create<ProjectEditorState>()(
 
           const generatedFiles = await response.json();
 
-          // Save files to database and update store
-          const filePromises = Object.entries(generatedFiles).map(async ([path, content]) => {
-            const fileType = path.endsWith('.tsx') || path.endsWith('.ts') ? 'typescript' :
-                            path.endsWith('.js') || path.endsWith('.jsx') ? 'javascript' :
-                            path.endsWith('.sql') ? 'sql' :
-                            path.endsWith('.json') ? 'json' : 'text';
+          // Check if we should use bulk RPC functions
+          const useBulkRPC = await isFeatureEnabled(FSYNC_FLAGS.BULK_GENERATION);
+          
+          if (useBulkRPC) {
+            // Use bulk RPC function for atomic operation
+            const filesArray = Object.entries(generatedFiles).map(([path, content]) => {
+              const fileType = path.endsWith('.tsx') || path.endsWith('.ts') ? 'typescript' :
+                              path.endsWith('.js') || path.endsWith('.jsx') ? 'javascript' :
+                              path.endsWith('.sql') ? 'sql' :
+                              path.endsWith('.json') ? 'json' :
+                              path.endsWith('.md') ? 'markdown' : 'text';
 
-            await supabase
-              .from('project_files')
-              .upsert({
-                project_id: projectId,
-                path,
+              return {
+                file_path: path,
+                file_type: fileType,
                 content: content as string,
-                type: fileType,
-              });
+              };
+            });
 
-            return {
-              path,
+            const { data, error } = await supabase.rpc('bulk_upsert_project_files', {
+              project_uuid: projectId,
+              files: filesArray
+            });
+
+            if (error) {
+              throw new Error(`Bulk file creation failed: ${error.message}`);
+            }
+
+            // Convert bulk response to savedFiles format
+            const savedFiles = data.files.map((file: any) => ({
+              path: file.file_path,
               content: {
-                path,
-                content: content as string,
-                type: fileType,
+                path: file.file_path,
+                content: filesArray.find(f => f.file_path === file.file_path)?.content || '',
+                type: filesArray.find(f => f.file_path === file.file_path)?.file_type || 'text',
                 lastModified: new Date(),
+                version: file.version,
+                contentHash: file.content_hash,
               } as FileContent,
-            };
-          });
+            }));
+          } else {
+            // Legacy path - individual operations
+            const filePromises = Object.entries(generatedFiles).map(async ([path, content]) => {
+              const fileType = path.endsWith('.tsx') || path.endsWith('.ts') ? 'typescript' :
+                              path.endsWith('.js') || path.endsWith('.jsx') ? 'javascript' :
+                              path.endsWith('.sql') ? 'sql' :
+                              path.endsWith('.json') ? 'json' : 'text';
 
-          const savedFiles = await Promise.all(filePromises);
+              await supabase
+                .from('project_files')
+                .upsert({
+                  project_id: projectId,
+                  file_path: path,
+                  content: content as string,
+                  file_type: fileType,
+                });
+
+              return {
+                path,
+                content: {
+                  path,
+                  content: content as string,
+                  type: fileType,
+                  lastModified: new Date(),
+                } as FileContent,
+              };
+            });
+
+            var savedFiles = await Promise.all(filePromises);
+          }
 
           // Organize files by directory
           const frontendFiles = { ...get().frontendFiles };
@@ -464,48 +540,114 @@ export const useProjectEditorStore = create<ProjectEditorState>()(
       },
 
       saveFile: async (filePath: string, content: string) => {
-        const { projectId } = get();
+        const { projectId, frontendFiles, backendFiles, sharedFiles } = get();
         if (!projectId) return;
 
         try {
-          // Save to database
-          await supabase
-            .from('project_files')
-            .upsert({
-              project_id: projectId,
-              path: filePath,
-              content,
+          // Determine file type from extension
+          const fileType = filePath.endsWith('.tsx') || filePath.endsWith('.ts') ? 'typescript' :
+                          filePath.endsWith('.js') || filePath.endsWith('.jsx') ? 'javascript' :
+                          filePath.endsWith('.sql') ? 'sql' :
+                          filePath.endsWith('.json') ? 'json' :
+                          filePath.endsWith('.md') ? 'markdown' :
+                          filePath.endsWith('.toml') ? 'toml' : 'text';
+
+          // Check if we should use new RPC functions
+          const useRPC = await isFeatureEnabled(FSYNC_FLAGS.USE_RPC);
+          
+          if (useRPC) {
+            // Get current file version for optimistic concurrency control
+            const currentFiles = { ...frontendFiles, ...backendFiles, ...sharedFiles };
+            const existingFile = currentFiles[filePath];
+            const expectedVersion = existingFile?.version;
+
+            // Use the new RPC function
+            const { data, error } = await supabase.rpc('upsert_project_file', {
+              project_uuid: projectId,
+              p_file_path: filePath,
+              p_content: content,
+              p_file_type: fileType,
+              expected_version: expectedVersion || null
             });
 
-          // Update local state
-          const fileContent: FileContent = {
-            path: filePath,
-            content,
-            type: filePath.split('.').pop() || 'text',
-            lastModified: new Date(),
-          };
+            if (error) {
+              console.error('RPC upsert_project_file failed:', error);
+              throw new Error(`Failed to save file: ${error.message}`);
+            }
 
-          if (filePath.startsWith('frontend/')) {
-            set(state => ({
-              frontendFiles: {
-                ...state.frontendFiles,
-                [filePath]: fileContent,
-              },
-            }));
-          } else if (filePath.startsWith('backend/')) {
-            set(state => ({
-              backendFiles: {
-                ...state.backendFiles,
-                [filePath]: fileContent,
-              },
-            }));
+            // Update local state with RPC response data
+            const fileContent: FileContent = {
+              path: filePath,
+              content,
+              type: fileType,
+              lastModified: new Date(data.updated_at),
+              version: data.version,
+              contentHash: data.content_hash,
+            };
+
+            if (filePath.startsWith('frontend/')) {
+              set(state => ({
+                frontendFiles: {
+                  ...state.frontendFiles,
+                  [filePath]: fileContent,
+                },
+              }));
+            } else if (filePath.startsWith('backend/')) {
+              set(state => ({
+                backendFiles: {
+                  ...state.backendFiles,
+                  [filePath]: fileContent,
+                },
+              }));
+            } else {
+              set(state => ({
+                sharedFiles: {
+                  ...state.sharedFiles,
+                  [filePath]: fileContent,
+                },
+              }));
+            }
           } else {
-            set(state => ({
-              sharedFiles: {
-                ...state.sharedFiles,
-                [filePath]: fileContent,
-              },
-            }));
+            // Legacy path - direct database operations
+            await supabase
+              .from('project_files')
+              .upsert({
+                project_id: projectId,
+                file_path: filePath,
+                content,
+                file_type: fileType,
+              });
+
+            // Update local state
+            const fileContent: FileContent = {
+              path: filePath,
+              content,
+              type: fileType,
+              lastModified: new Date(),
+            };
+
+            if (filePath.startsWith('frontend/')) {
+              set(state => ({
+                frontendFiles: {
+                  ...state.frontendFiles,
+                  [filePath]: fileContent,
+                },
+              }));
+            } else if (filePath.startsWith('backend/')) {
+              set(state => ({
+                backendFiles: {
+                  ...state.backendFiles,
+                  [filePath]: fileContent,
+                },
+              }));
+            } else {
+              set(state => ({
+                sharedFiles: {
+                  ...state.sharedFiles,
+                  [filePath]: fileContent,
+                },
+              }));
+            }
           }
         } catch (error: any) {
           set({ error: error.message });
@@ -519,16 +661,38 @@ export const useProjectEditorStore = create<ProjectEditorState>()(
       },
 
       deleteFile: async (filePath: string) => {
-        const { projectId } = get();
+        const { projectId, frontendFiles, backendFiles, sharedFiles } = get();
         if (!projectId) return;
 
         try {
-          // Delete from database
-          await supabase
-            .from('project_files')
-            .delete()
-            .eq('project_id', projectId)
-            .eq('path', filePath);
+          // Check if we should use new RPC functions
+          const useRPC = await isFeatureEnabled(FSYNC_FLAGS.USE_RPC);
+          
+          if (useRPC) {
+            // Get current file version for optimistic concurrency control
+            const currentFiles = { ...frontendFiles, ...backendFiles, ...sharedFiles };
+            const existingFile = currentFiles[filePath];
+            const expectedVersion = existingFile?.version;
+
+            // Use the new RPC function
+            const { error } = await supabase.rpc('delete_project_file', {
+              project_uuid: projectId,
+              p_file_path: filePath,
+              expected_version: expectedVersion || null
+            });
+
+            if (error) {
+              console.error('RPC delete_project_file failed:', error);
+              throw new Error(`Failed to delete file: ${error.message}`);
+            }
+          } else {
+            // Legacy path - direct database operations
+            await supabase
+              .from('project_files')
+              .delete()
+              .eq('project_id', projectId)
+              .eq('file_path', filePath);
+          }
 
           // Remove from local state
           if (filePath.startsWith('frontend/')) {
