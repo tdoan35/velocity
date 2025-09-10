@@ -106,7 +106,8 @@
       "Read(orchestrator/preview-container/**)",
       "Bash(git check-ignore:*)",
       "Bash(fly deploy:*)",
-      "Bash(fly auth:*)"
+      "Bash(fly auth:*)",
+      "Read(//Users/tythanhdoan/**)"
     ],
     "defaultMode": "acceptEdits",
     "additionalDirectories": []
