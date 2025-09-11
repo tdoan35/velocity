@@ -36,7 +36,10 @@ export class FlyIOService {
   async createMachine(
     projectId: string, 
     tierName: string = 'free',
-    customConfig?: Partial<FlyMachineConfig>,
+    customConfig?: Partial<FlyMachineConfig> & {
+      snapshotUrl?: string;
+      realtimeToken?: string;
+    },
     sessionId?: string
   ): Promise<CreateMachineResponse> {
     // Get the appropriate container tier configuration
@@ -58,7 +61,11 @@ export class FlyIOService {
           SESSION_ID: actualSessionId,
           SUPABASE_URL: process.env.SUPABASE_URL!,
           SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY!,
-          SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          // Phase 2: Conditional service role key (omit when using snapshot hydration)
+          ...(customConfig?.snapshotUrl ? {} : { SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY! }),
+          // Phase 2: Snapshot hydration environment variables
+          ...(customConfig?.snapshotUrl && { SNAPSHOT_URL: customConfig.snapshotUrl }),
+          ...(customConfig?.realtimeToken && { REALTIME_TOKEN: customConfig.realtimeToken }),
           // New: Subdomain configuration
           // Using custom domain for proper subdomain routing
           PREVIEW_DOMAIN: `${actualSessionId}.preview.velocity-dev.com`,
