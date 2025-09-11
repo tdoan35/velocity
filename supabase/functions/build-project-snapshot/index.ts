@@ -31,14 +31,25 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
+  const startTime = Date.now()
+  let projectId: string | undefined
+  
   try {
-    const { projectId } = await req.json() as SnapshotRequest
+    const requestData = await req.json() as SnapshotRequest
+    projectId = requestData.projectId
 
     if (!projectId) {
       throw new Error('Project ID is required')
     }
 
-    console.log(`Building snapshot for project: ${projectId}`)
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'INFO',
+      message: 'Building project snapshot',
+      project_id: projectId,
+      function: 'build-project-snapshot',
+      event_type: 'snapshot_build_start'
+    }))
 
     // Get current files via list_current_files RPC
     const { data: files, error: filesError } = await supabase.rpc('list_current_files', {
@@ -116,7 +127,27 @@ serve(async (req) => {
       createdAt: new Date().toISOString()
     }
 
-    console.log('Snapshot created successfully:', manifest)
+    const buildTime = Date.now() - startTime
+    
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'INFO',
+      message: 'Snapshot created successfully',
+      project_id: projectId,
+      function: 'build-project-snapshot',
+      event_type: 'snapshot_build_success',
+      metric: {
+        name: 'snapshot_build_time',
+        value: buildTime,
+        unit: 'ms'
+      },
+      snapshot_stats: {
+        file_count: files?.length || 0,
+        total_size_bytes: totalSize,
+        zip_size_bytes: zipBlob.byteLength,
+        build_time_ms: buildTime
+      }
+    }))
 
     return new Response(
       JSON.stringify({
@@ -131,7 +162,21 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Snapshot creation error:', error)
+    const buildTime = Date.now() - startTime
+    
+    console.error(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'ERROR',
+      message: 'Snapshot creation failed',
+      project_id: projectId || 'unknown',
+      function: 'build-project-snapshot',
+      event_type: 'snapshot_build_error',
+      error: {
+        message: error.message,
+        stack: error.stack
+      },
+      build_time_ms: buildTime
+    }))
     
     return new Response(
       JSON.stringify({

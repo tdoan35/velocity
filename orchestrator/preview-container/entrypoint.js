@@ -23,6 +23,39 @@ const { v4: uuidv4 } = require('uuid');
 const { detectProjectType, getDevCommand } = require('./detect-project-type');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const net = require('net');
+const { logger, metrics } = require('./logger');
+
+// Retry utility with exponential backoff
+async function withRetry(operation, options = {}) {
+  const {
+    maxAttempts = 3,
+    baseDelay = 1000,
+    maxDelay = 10000,
+    backoffFactor = 2,
+    operationName = 'Operation'
+  } = options;
+
+  let lastError;
+  
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      
+      if (attempt === maxAttempts) {
+        throw lastError;
+      }
+      
+      const delay = Math.min(baseDelay * Math.pow(backoffFactor, attempt - 1), maxDelay);
+      console.warn(`${operationName} failed (attempt ${attempt}/${maxAttempts}): ${error.message}. Retrying in ${delay}ms...`);
+      
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw lastError;
+}
 
 // Configuration from environment variables
 const PROJECT_ID = process.env.PROJECT_ID;
@@ -55,10 +88,24 @@ const PROJECT_DIR = '/app/project';
  */
 async function initialize() {
   try {
+    // Start total initialization timer
+    metrics.startTimer('container_init_total');
+    
     // Start health check server immediately
     startHealthServer();
 
-    console.log(`🚀 Velocity Preview Container starting for project: ${PROJECT_ID}`);
+    logger.info('Velocity Preview Container starting', {
+      project_id: PROJECT_ID,
+      container_id: process.env.FLY_MACHINE_ID,
+      region: process.env.FLY_REGION,
+      snapshot_mode: !!SNAPSHOT_URL
+    });
+    
+    logger.event('container_start', {
+      has_snapshot_url: !!SNAPSHOT_URL,
+      has_realtime_token: !!REALTIME_TOKEN,
+      has_service_role_key: !!SUPABASE_SERVICE_ROLE_KEY
+    });
     console.log(`📊 Environment: ${NODE_ENV}`);
     
     // Validate required environment variables
@@ -143,27 +190,40 @@ async function initialize() {
  */
 async function hydrateFromSnapshot() {
   try {
+    metrics.startTimer('snapshot_hydration_total');
+    
     if (!SNAPSHOT_URL) {
-      console.log('📸 No snapshot URL provided, falling back to legacy sync');
+      logger.info('No snapshot URL provided, falling back to legacy sync');
+      logger.event('hydration_fallback', { reason: 'no_snapshot_url' });
       await performInitialFileSync();
       return;
     }
+    
+    logger.event('hydration_start', { snapshot_url: SNAPSHOT_URL });
 
     console.log('📥 Downloading snapshot from:', SNAPSHOT_URL);
     
-    // Download the snapshot
-    const response = await axios.get(SNAPSHOT_URL, {
-      responseType: 'arraybuffer',
-      timeout: 30000, // 30 second timeout for large snapshots
-      maxContentLength: 100 * 1024 * 1024, // 100MB max
+    // Download the snapshot with retry logic
+    const { zipData } = await withRetry(async () => {
+      const response = await axios.get(SNAPSHOT_URL, {
+        responseType: 'arraybuffer',
+        timeout: 30000, // 30 second timeout for large snapshots
+        maxContentLength: 100 * 1024 * 1024, // 100MB max
+      });
+
+      if (response.status !== 200) {
+        throw new Error(`Failed to download snapshot: HTTP ${response.status}`);
+      }
+
+      const zipData = Buffer.from(response.data);
+      console.log(`✅ Snapshot downloaded: ${zipData.length} bytes`);
+      return { zipData };
+    }, {
+      maxAttempts: 5,
+      baseDelay: 2000,
+      maxDelay: 30000,
+      operationName: 'Snapshot download'
     });
-
-    if (response.status !== 200) {
-      throw new Error(`Failed to download snapshot: HTTP ${response.status}`);
-    }
-
-    const zipData = Buffer.from(response.data);
-    console.log(`✅ Snapshot downloaded: ${zipData.length} bytes`);
 
     // Extract the ZIP using JSZip
     console.log('📦 Extracting snapshot...');
@@ -193,20 +253,47 @@ async function hydrateFromSnapshot() {
       console.log(`✅ Extracted: ${filename} (${content.length} bytes)`);
     }
 
-    console.log(`📦 Snapshot hydration complete: ${extractedFiles} files extracted`);
+    const hydrationTime = metrics.endTimer('snapshot_hydration_total');
+    metrics.setGauge('files_extracted', extractedFiles, 'count');
+    
+    logger.info('Snapshot hydration complete', {
+      files_extracted: extractedFiles,
+      hydration_time_ms: hydrationTime,
+      snapshot_size_mb: Math.round(zipData.length / 1024 / 1024 * 100) / 100
+    });
+    
+    logger.event('hydration_success', {
+      extracted_files: extractedFiles,
+      duration_ms: hydrationTime
+    });
 
     // Verify critical files exist
     const criticalFiles = ['package.json'];
+    let missingCriticalFiles = 0;
     for (const file of criticalFiles) {
       const exists = await fs.pathExists(path.join(PROJECT_DIR, file));
       if (!exists) {
-        console.warn(`⚠️ Critical file missing after extraction: ${file}`);
+        logger.warn(`Critical file missing after extraction: ${file}`, { file });
+        missingCriticalFiles++;
       }
     }
+    
+    metrics.setGauge('missing_critical_files', missingCriticalFiles, 'count');
 
   } catch (error) {
-    console.error('❌ Snapshot hydration failed:', error);
-    console.log('🔄 Falling back to legacy file sync...');
+    const hydrationTime = metrics.endTimer('snapshot_hydration_total');
+    logger.error('Snapshot hydration failed', error, { 
+      duration_ms: hydrationTime,
+      fallback_action: 'legacy_sync'
+    });
+    
+    logger.event('hydration_failure', {
+      error_message: error.message,
+      duration_ms: hydrationTime
+    });
+    
+    metrics.incrementCounter('hydration_failures');
+    
     // Fall back to legacy sync on failure
     await performInitialFileSync();
   }

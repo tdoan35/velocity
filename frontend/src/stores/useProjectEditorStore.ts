@@ -3,6 +3,7 @@ import { devtools } from 'zustand/middleware';
 import { supabase } from '../lib/supabase';
 import { getDefaultFrontendFiles, getDefaultBackendFiles, getDefaultSharedFiles } from '../utils/defaultProjectFiles';
 import { isFeatureEnabled, FSYNC_FLAGS } from '../utils/featureFlags';
+import { withRateLimitRetry, withFileOperationRetry } from '../utils/retryUtils';
 import type { FileTree, FileContent, ProjectData, SupabaseProject, BuildStatus, DeploymentStatus } from '../types/editor';
 
 export interface ProjectEditorState {
@@ -360,10 +361,13 @@ export const useProjectEditorStore = create<ProjectEditorState>()(
               };
             });
 
-            const { data, error } = await supabase.rpc('bulk_upsert_project_files', {
-              project_uuid: projectId,
-              files: filesArray
-            });
+            const { data, error } = await withRateLimitRetry(
+              () => supabase.rpc('bulk_upsert_project_files', {
+                project_uuid: projectId,
+                files: filesArray
+              }),
+              'Bulk file creation'
+            );
 
             if (error) {
               throw new Error(`Bulk file creation failed: ${error.message}`);
@@ -561,14 +565,17 @@ export const useProjectEditorStore = create<ProjectEditorState>()(
             const existingFile = currentFiles[filePath];
             const expectedVersion = existingFile?.version;
 
-            // Use the new RPC function
-            const { data, error } = await supabase.rpc('upsert_project_file', {
-              project_uuid: projectId,
-              p_file_path: filePath,
-              p_content: content,
-              p_file_type: fileType,
-              expected_version: expectedVersion || null
-            });
+            // Use the new RPC function with retry logic
+            const { data, error } = await withFileOperationRetry(
+              () => supabase.rpc('upsert_project_file', {
+                project_uuid: projectId,
+                p_file_path: filePath,
+                p_content: content,
+                p_file_type: fileType,
+                expected_version: expectedVersion || null
+              }),
+              filePath
+            );
 
             if (error) {
               console.error('RPC upsert_project_file failed:', error);
