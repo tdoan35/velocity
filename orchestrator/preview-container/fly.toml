@@ -2,7 +2,7 @@ app = 'velocity-preview-containers'
 primary_region = 'ord'
 
 [build]
-  image = 'ghcr.io/tdoan35/velocity/velocity-preview-container:latest'
+  image = 'ghcr.io/tythanhdoan/velocity/velocity-preview-container:latest'
 
 [env]
   NODE_ENV = 'production'
