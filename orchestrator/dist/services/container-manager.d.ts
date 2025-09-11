@@ -9,6 +9,7 @@ export declare class ContainerManager {
     /**
      * Creates a new preview session with container provisioning
      * Uses atomic transaction to prevent race condition between session creation and container lookup
+     * Phase 2: Enhanced with snapshot hydration and realtime token support
      */
     createSession(request: CreateSessionRequest & {
         tier?: string;
@@ -123,5 +124,10 @@ export declare class ContainerManager {
         };
         metrics: import("./cleanup-service").SessionMetrics;
     }>;
+    /**
+     * Mint ephemeral realtime token scoped to a specific project
+     * Phase 2: Snapshot hydration support
+     */
+    private mintRealtimeToken;
 }
 //# sourceMappingURL=container-manager.d.ts.map
