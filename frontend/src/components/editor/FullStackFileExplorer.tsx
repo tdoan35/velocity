@@ -159,6 +159,7 @@ export function FullStackFileExplorer({ projectId, showBackend }: FullStackFileE
   const {
     frontendFiles,
     backendFiles,
+    sharedFiles,
     activeFile,
     openFile,
     createFile,
@@ -251,6 +252,7 @@ export function FullStackFileExplorer({ projectId, showBackend }: FullStackFileE
 
   const frontendTree = buildFileTree(frontendFiles, 'frontend/');
   const backendTree = showBackend ? buildFileTree(backendFiles, 'backend/') : {};
+  const sharedTree = buildFileTree(sharedFiles, '');
 
   return (
     <div className="h-full flex flex-col">
@@ -318,6 +320,32 @@ export function FullStackFileExplorer({ projectId, showBackend }: FullStackFileE
                 ) : (
                   <div className="px-6 py-2 text-sm text-muted-foreground">
                     No backend files yet
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Shared Section */}
+        {Object.keys(sharedFiles).length > 0 && (
+          <div className="mb-4">
+            <FileTreeNode
+              name="Shared"
+              path="shared"
+              isFile={false}
+              level={0}
+              isOpen={expandedDirectories.has('shared')}
+              onToggle={() => toggleDirectory('shared')}
+              onContextMenu={(action) => handleContextMenu(action, 'shared')}
+            />
+            {expandedDirectories.has('shared') && (
+              <div>
+                {Object.keys(sharedTree).length > 0 ? (
+                  renderFileTree(sharedTree, 'shared', 1)
+                ) : (
+                  <div className="px-6 py-2 text-sm text-muted-foreground">
+                    No shared files yet
                   </div>
                 )}
               </div>
