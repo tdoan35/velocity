@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useProjectEditorStore } from '../../stores/useProjectEditorStore';
 import { ContainerPreviewPanel } from './ContainerPreviewPanel';
 import type { ContainerPreviewPanelRef } from './ContainerPreviewPanel';
@@ -7,52 +7,45 @@ import { SharePreviewDialog } from './SharePreviewDialog';
 import { 
   Smartphone
 } from 'lucide-react';
-import { toast } from 'sonner';
-import type { PreviewStatus } from '../../hooks/usePreviewSession';
+import type { PreviewStatus, PreviewSession } from '../../hooks/usePreviewSession';
+
+interface PreviewSessionProp {
+  status: PreviewStatus;
+  isLoading: boolean;
+  isActive: boolean;
+  containerUrl?: string;
+  errorMessage?: string;
+  startSession: (device?: string) => Promise<PreviewSession | null>;
+  stopSession: () => Promise<void>;
+  refreshStatus: () => void;
+}
 
 interface FullStackPreviewPanelContainerProps {
   projectId: string;
+  previewSession: PreviewSessionProp;
+  selectedDevice: 'mobile' | 'tablet' | 'desktop';
+  onDeviceChange: (device: 'mobile' | 'tablet' | 'desktop') => void;
 }
 
-export function FullStackPreviewPanelContainer({ projectId }: FullStackPreviewPanelContainerProps) {
+export function FullStackPreviewPanelContainer({ 
+  projectId, 
+  previewSession,
+  selectedDevice,
+  onDeviceChange
+}: FullStackPreviewPanelContainerProps) {
   const {
     projectData
   } = useProjectEditorStore();
 
   const containerPreviewRef = useRef<ContainerPreviewPanelRef>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isPreviewRunning, setIsPreviewRunning] = useState(false);
-  const [selectedDevice, setSelectedDevice] = useState<'mobile' | 'tablet' | 'desktop'>('mobile');
   
-  // Session state from ContainerPreviewPanel
-  const [sessionStatus, setSessionStatus] = useState<PreviewStatus>('idle');
-  const [hasSession, setHasSession] = useState(false);
+  // Session state now comes from props
+  const sessionStatus = previewSession.status;
+  const hasSession = previewSession.isActive;
   
   // Modal states for external handling
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
-
-  // Preview control handlers that delegate to ContainerPreviewPanel
-  const handleStartPreview = async () => {
-    if (containerPreviewRef.current) {
-      try {
-        await containerPreviewRef.current.startSession();
-      } catch (error) {
-        console.error('Failed to start preview:', error);
-        toast.error('Failed to start preview');
-      }
-    }
-  };
-
-  const handleStopPreview = async () => {
-    if (containerPreviewRef.current) {
-      try {
-        await containerPreviewRef.current.stopSession();
-      } catch (error) {
-        console.error('Failed to stop preview:', error);
-        toast.error('Failed to stop preview');
-      }
-    }
-  };
 
   const handleOpenInNewWindow = () => {
     if (containerPreviewRef.current) {
@@ -104,49 +97,28 @@ export function FullStackPreviewPanelContainer({ projectId }: FullStackPreviewPa
 
   return (
     <div className="h-full flex flex-col bg-transparent">
-      {/* Unified Header */}
+      {/* Preview Header */}
       <PreviewHeader
         mode="live"
         status={getHeaderStatus(sessionStatus)}
         selectedDevice={selectedDevice}
-        onDeviceChange={setSelectedDevice}
-        isPreviewRunning={isPreviewRunning}
-        onStartPreview={handleStartPreview}
-        onStopPreview={handleStopPreview}
+        onDeviceChange={onDeviceChange}
         onOpenInNewWindow={handleOpenInNewWindow}
         onSharePreview={() => setIsShareDialogOpen(true)}
         onRefresh={handleRefresh}
         isRefreshing={isRefreshing}
-        isStuck={false}
         sessionDisabled={!hasSession}
       />
-      
+
       {/* Container-based Preview Content */}
       <div className="flex-1 overflow-hidden">
         <ContainerPreviewPanel
           ref={containerPreviewRef}
           projectId={projectId}
           className="h-full"
-          onStatusChange={(status) => {
-            setSessionStatus(status);
-            // Update preview running state based on status
-            setIsPreviewRunning(status === 'running' || status === 'starting');
-          }}
-          onSessionChange={setHasSession}
+          previewSession={previewSession}
           selectedDevice={selectedDevice}
-          onDeviceChange={(deviceId) => {
-            // Map specific device IDs to generic types for PreviewHeader
-            if (deviceId === 'iphone-16-pro' || deviceId === 'iphone-14' || deviceId === 'iphone-se') {
-              setSelectedDevice('mobile');
-            } else if (deviceId === 'ipad') {
-              setSelectedDevice('tablet');
-            } else if (deviceId === 'desktop') {
-              setSelectedDevice('desktop');
-            } else {
-              // Default fallback
-              setSelectedDevice(deviceId as 'mobile' | 'tablet' | 'desktop');
-            }
-          }}
+          onDeviceChange={onDeviceChange}
         />
       </div>
 

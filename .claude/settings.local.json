@@ -173,5 +173,6 @@
       }
     ]
   },
-  "outputStyle": "tts-engineer"
+  "outputStyle": "tts-engineer",
+  "disableAllHooks": true
 }

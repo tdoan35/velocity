@@ -29,3 +29,4 @@ node_modules/
 .mcp.json
 settings.json
 .playwright-mcp
+settings.local.json
