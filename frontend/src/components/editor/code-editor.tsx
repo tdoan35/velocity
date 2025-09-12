@@ -20,7 +20,7 @@ interface CodeEditorProps {
 
 export function CodeEditor({
   fileId,
-  filePath: _filePath,
+  filePath,
   initialValue = '',
   language = 'typescript',
   onSave,
@@ -32,12 +32,65 @@ export function CodeEditor({
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<Monaco | null>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const modelsRef = useRef<Map<string, editor.ITextModel>>(new Map())
+  const currentFileIdRef = useRef<string>(fileId)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [retryCount, setRetryCount] = useState(0)
   
   // Tab content updates are now handled by the parent component via onChange prop
   
+  // Model management functions
+  const getOrCreateModel = useCallback((monaco: Monaco, fileId: string, filePath: string, content: string, language: string) => {
+    // Check if model already exists
+    let model = modelsRef.current.get(fileId)
+    
+    if (!model) {
+      // Create unique URI for the file
+      const uri = monaco.Uri.parse(`file:///${filePath}`)
+      
+      // Check if a model with this URI already exists and dispose it
+      const existingModel = monaco.editor.getModel(uri)
+      if (existingModel) {
+        existingModel.dispose()
+      }
+      
+      // Create new model
+      model = monaco.editor.createModel(content, language, uri)
+      modelsRef.current.set(fileId, model)
+      
+      // Set up change listener
+      model.onDidChangeContent(() => {
+        const value = model!.getValue()
+        onChange?.(value)
+        
+        // Debounced auto-save
+        if (onSave && saveTimeoutRef.current) {
+          clearTimeout(saveTimeoutRef.current)
+        }
+        
+        if (onSave) {
+          saveTimeoutRef.current = setTimeout(() => {
+            onSave(value)
+          }, 500) as unknown as NodeJS.Timeout
+        }
+      })
+    } else {
+      // Update existing model content if it's different
+      if (model.getValue() !== content) {
+        model.setValue(content)
+      }
+    }
+    
+    return model
+  }, [onChange, onSave])
+
+  const switchToFile = useCallback((monaco: Monaco, editor: editor.IStandaloneCodeEditor, fileId: string, filePath: string, content: string, language: string) => {
+    const model = getOrCreateModel(monaco, fileId, filePath, content, language)
+    editor.setModel(model)
+    currentFileIdRef.current = fileId
+  }, [getOrCreateModel])
+
   // Configure Monaco loader on first mount
   useEffect(() => {
     // Set a timeout for loading
@@ -56,24 +109,12 @@ export function CodeEditor({
     return () => clearTimeout(loadTimeout)
   }, [isLoading])
 
-  // Auto-save with debounce
-  const handleChange = useCallback((value: string | undefined) => {
-    if (!value) return
-    
-    // Call onChange immediately to update unified store
-    onChange?.(value)
-    
-    // Debounce auto-save
-    if (onSave) {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current)
-      }
-      
-      saveTimeoutRef.current = setTimeout(() => {
-        onSave(value)
-      }, 500) as unknown as NodeJS.Timeout
+  // Effect to handle file changes
+  useEffect(() => {
+    if (monacoRef.current && editorRef.current && fileId !== currentFileIdRef.current) {
+      switchToFile(monacoRef.current, editorRef.current, fileId, filePath, initialValue, language)
     }
-  }, [onChange, onSave])
+  }, [fileId, filePath, initialValue, language, switchToFile])
 
   const handleEditorDidMount: OnMount = useCallback((editor, monaco) => {
     console.log('Monaco Editor mounted successfully')
@@ -87,12 +128,21 @@ export function CodeEditor({
     } catch (error) {
       console.error('Error configuring Monaco:', error)
       setLoadError('Failed to configure editor')
+      return
     }
+    
+    // Create and set initial model
+    const initialModel = getOrCreateModel(monaco, fileId, filePath, initialValue, language)
+    editor.setModel(initialModel)
+    currentFileIdRef.current = fileId
     
     // Register keyboard shortcuts
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-      const value = editor.getValue()
-      onSave?.(value)
+      const model = editor.getModel()
+      if (model) {
+        const value = model.getValue()
+        onSave?.(value)
+      }
     })
     
     // Format document shortcut
@@ -119,7 +169,7 @@ export function CodeEditor({
     editor.addCommand(monaco.KeyCode.F2, () => {
       editor.trigger('', 'editor.action.rename', {})
     })
-  }, [onSave])
+  }, [fileId, filePath, initialValue, language, getOrCreateModel, onSave])
 
   // Update editor theme when app theme changes
   useEffect(() => {
@@ -136,12 +186,18 @@ export function CodeEditor({
     }
   }, [readOnly])
 
-  // Cleanup auto-save timeout
+  // Cleanup auto-save timeout and models
   useEffect(() => {
     return () => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current)
       }
+      
+      // Dispose all models when component unmounts
+      modelsRef.current.forEach(model => {
+        model.dispose()
+      })
+      modelsRef.current.clear()
     }
   }, [])
 
@@ -187,15 +243,12 @@ export function CodeEditor({
   return (
     <div className={cn('h-full w-full', className)}>
       <Editor
-        key={`${fileId}-${retryCount}`}
-        defaultValue={initialValue}
-        defaultLanguage={language}
+        key={retryCount} // Remove fileId from key to prevent re-mounting
         theme={theme === 'dark' ? 'velocity-dark' : 'velocity-light'}
         options={{
           ...MONACO_OPTIONS,
           readOnly,
         }}
-        onChange={handleChange}
         onMount={handleEditorDidMount}
         loading={
           <div className="flex h-full items-center justify-center">

@@ -1,6 +1,26 @@
-// @deprecated This store is deprecated in favor of useUnifiedEditorStore.
-// The new unified store eliminates the race condition bug in the autosave functionality.
-// Use useUnifiedEditorStore for all new development.
+/**
+ * @deprecated This store is DEPRECATED and should not be used in new development.
+ * 
+ * MIGRATION COMPLETE: All components have been migrated to useUnifiedEditorStore.
+ * This store is kept temporarily for backwards compatibility only.
+ * 
+ * Issues with this store:
+ * - Causes file sync issues between file explorer and preview container
+ * - Has known autosave race condition bugs
+ * - Uses outdated file structure (separate arrays vs unified Record)
+ * - Not compatible with the new orchestrator template file creation
+ * 
+ * Migration Guide:
+ * - Replace `useProjectEditorStore()` with `useUnifiedEditorStore()`
+ * - Change `frontendFiles`, `backendFiles`, `sharedFiles` to unified `files` structure
+ * - Update file path handling to use normalized paths (frontend/, backend/, shared/)
+ * - Replace `saveFile(path, content)` with `updateFileContent(path, content)` + `saveFile(path)`
+ * 
+ * REMOVAL PLANNED: This store will be removed in the next major version.
+ * 
+ * @see useUnifiedEditorStore for the replacement
+ * @see .docs/issues/CLAUDE-file-explorer-preview-sync-issue.md for context
+ */
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { supabase } from '../lib/supabase';
@@ -107,6 +127,9 @@ const initialState = {
   error: null,
 };
 
+/**
+ * @deprecated Use useUnifiedEditorStore instead. This store will be removed in the next major version.
+ */
 export const useProjectEditorStore = create<ProjectEditorState>()(
   devtools(
     (set, get) => ({

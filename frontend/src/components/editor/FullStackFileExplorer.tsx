@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ChevronRight, ChevronDown, File, Folder, FolderOpen, Plus, MoreHorizontal, Database, Server, Code } from 'lucide-react';
-import { useProjectEditorStore } from '../../stores/useProjectEditorStore';
+import { useUnifiedEditorStore } from '../../stores/useUnifiedEditorStore';
 import { Button } from '../ui/button';
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, ContextMenuItem } from '../ui/context-menu';
 import { toast } from 'sonner';
@@ -157,18 +157,41 @@ function buildFileTree(files: FileTree, basePath: string = ''): any {
 
 export function FullStackFileExplorer({ projectId, showBackend }: FullStackFileExplorerProps) {
   const {
-    frontendFiles,
-    backendFiles,
-    sharedFiles,
+    files,
     activeFile,
     openFile,
     createFile,
     deleteFile
-  } = useProjectEditorStore();
+  } = useUnifiedEditorStore();
 
   const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(
     new Set(['frontend', 'backend', 'shared'])
   );
+
+  // Convert unified files structure into categorized format for display
+  const { frontendFiles, backendFiles, sharedFiles } = useMemo(() => {
+    const frontend: FileTree = {};
+    const backend: FileTree = {};
+    const shared: FileTree = {};
+
+    Object.values(files).forEach(file => {
+      const { path, content } = file;
+      
+      if (path.startsWith('frontend/')) {
+        frontend[path] = content;
+      } else if (path.startsWith('backend/')) {
+        backend[path] = content;
+      } else if (path.startsWith('shared/')) {
+        shared[path] = content;
+      }
+    });
+
+    return {
+      frontendFiles: frontend,
+      backendFiles: backend,
+      sharedFiles: shared
+    };
+  }, [files]);
 
   const toggleDirectory = (path: string) => {
     const newExpanded = new Set(expandedDirectories);

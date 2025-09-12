@@ -494,7 +494,6 @@ function ProjectEditorCore({
               <div className="flex-1">
                 {activeFile && files[activeFile] && (
                   <CodeEditor
-                    key={activeFile} // Important: force re-mount when file changes
                     fileId={activeFile}
                     filePath={activeFile}
                     initialValue={files[activeFile].content}

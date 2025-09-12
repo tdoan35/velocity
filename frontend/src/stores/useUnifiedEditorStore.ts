@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { isFeatureEnabled, FSYNC_FLAGS } from '../utils/featureFlags';
 import { withRateLimitRetry, withFileOperationRetry } from '../utils/retryUtils';
 import type { FileContent, ProjectData, SupabaseProject, BuildStatus, DeploymentStatus } from '../types/editor';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 
 // Define a comprehensive type for a file, including its state
 export interface EditorFile extends FileContent {
@@ -33,6 +34,11 @@ export interface UnifiedEditorState {
   isSupabaseConnected: boolean;
   isLoading: boolean;
   error: string | null;
+  
+  // Realtime Subscription State
+  subscription: RealtimeChannel | null;
+  isSubscribed: boolean;
+  lastRefreshTime: Date | null;
 
   // Actions
   initializeProjectFiles: (projectId: string) => Promise<void>;
@@ -48,6 +54,11 @@ export interface UnifiedEditorState {
   setBuildStatus: (status: BuildStatus) => void;
   setError: (error: string | null) => void;
   reset: () => void;
+  
+  // Realtime Subscription Actions
+  subscribeToProjectFiles: (projectId: string) => void;
+  unsubscribeFromProjectFiles: () => void;
+  refreshProjectFiles: (projectId: string) => Promise<void>;
 }
 
 // Helper function to normalize file paths to canonical format
@@ -103,6 +114,9 @@ const initialState = {
   isSupabaseConnected: false,
   isLoading: false,
   error: null,
+  subscription: null,
+  isSubscribed: false,
+  lastRefreshTime: null,
 };
 
 export const useUnifiedEditorStore = create<UnifiedEditorState>()(
@@ -176,6 +190,16 @@ export const useUnifiedEditorStore = create<UnifiedEditorState>()(
             openTabs: initialTabs,
             isLoading: false,
           });
+
+          // Subscribe to real-time file changes (non-blocking)
+          setTimeout(() => {
+            try {
+              get().subscribeToProjectFiles(projectId);
+              console.log('🔄 Initialized project with real-time sync enabled');
+            } catch (error) {
+              console.warn('⚠️ Real-time sync unavailable, continuing without it:', error);
+            }
+          }, 100); // Small delay to ensure project is fully initialized
 
         } catch (error) {
           console.error('Failed to initialize project files:', error);
@@ -264,12 +288,13 @@ export const useUnifiedEditorStore = create<UnifiedEditorState>()(
         });
 
         try {
-          // Use the same RPC call pattern from the original store
+          // Use the correct RPC call with proper parameters
           const { data, error } = await supabase.rpc('upsert_project_file', {
-            p_project_id: projectId,
+            project_uuid: projectId,
             p_file_path: filePath,
             p_content: file.content,
-            p_file_type: file.type
+            p_file_type: file.type,
+            expected_version: file.version || null
           });
 
           if (error) throw error;
@@ -383,7 +408,181 @@ export const useUnifiedEditorStore = create<UnifiedEditorState>()(
       },
 
       reset: () => {
+        // Clean up subscription before resetting
+        get().unsubscribeFromProjectFiles();
         set(initialState);
+      },
+      
+      // Realtime Subscription Methods
+      subscribeToProjectFiles: (projectId: string) => {
+        const { subscription: currentSubscription, isSubscribed } = get();
+        
+        // Clean up existing subscription if any
+        if (currentSubscription || isSubscribed) {
+          get().unsubscribeFromProjectFiles();
+        }
+        
+        console.log(`🔄 Attempting to subscribe to project_files changes for project: ${projectId}`);
+        
+        try {
+          // Create new subscription for project files
+          const newSubscription = supabase
+            .channel(`project_files:${projectId}`)
+            .on('postgres_changes', {
+              event: 'INSERT',
+              schema: 'public',
+              table: 'project_files',
+              filter: `project_id=eq.${projectId}`
+            }, (payload) => {
+              console.log('📁 New file detected from orchestrator:', payload.new);
+              
+              // Debounce rapid changes to prevent excessive refreshes
+              const { lastRefreshTime } = get();
+              const now = new Date();
+              const timeSinceLastRefresh = lastRefreshTime 
+                ? now.getTime() - lastRefreshTime.getTime() 
+                : Infinity;
+              
+              // Only refresh if more than 2 seconds since last refresh
+              if (timeSinceLastRefresh > 2000) {
+                get().refreshProjectFiles(projectId);
+              } else {
+                // Schedule a delayed refresh if we're getting rapid changes
+                setTimeout(() => {
+                  const currentTime = get().lastRefreshTime;
+                  const timeSinceScheduled = currentTime 
+                    ? now.getTime() - currentTime.getTime()
+                    : Infinity;
+                  
+                  // Only refresh if no other refresh happened in the meantime
+                  if (timeSinceScheduled > 1500) {
+                    get().refreshProjectFiles(projectId);
+                  }
+                }, 2500);
+              }
+            })
+            .on('postgres_changes', {
+              event: 'UPDATE',
+              schema: 'public',
+              table: 'project_files', 
+              filter: `project_id=eq.${projectId}`
+            }, (payload) => {
+              console.log('📝 File updated from external source:', payload.new);
+              // Handle external file updates (less urgent than INSERT)
+              setTimeout(() => get().refreshProjectFiles(projectId), 1000);
+            })
+            .on('postgres_changes', {
+              event: 'DELETE',
+              schema: 'public', 
+              table: 'project_files',
+              filter: `project_id=eq.${projectId}`
+            }, (payload) => {
+              console.log('🗑️ File deleted from external source:', payload.old);
+              get().refreshProjectFiles(projectId);
+            })
+            .subscribe((status) => {
+              console.log(`📡 Subscription status for project ${projectId}:`, status);
+              
+              if (status === 'SUBSCRIBED') {
+                set({ isSubscribed: true });
+                console.log('✅ Successfully subscribed to project file changes');
+              } else if (status === 'CHANNEL_ERROR') {
+                console.warn('⚠️ Realtime subscription failed - likely not enabled for project_files table');
+                console.warn('💡 To enable: Supabase Dashboard → Settings → API → Realtime → Enable for project_files');
+                set({ isSubscribed: false });
+                // Don't retry on CHANNEL_ERROR as it's likely a configuration issue
+              } else if (status === 'CLOSED') {
+                set({ isSubscribed: false });
+                console.log('📡 Subscription closed');
+              }
+            });
+            
+          set({ subscription: newSubscription });
+          
+        } catch (error) {
+          console.warn('⚠️ Failed to create real-time subscription, continuing without it:', error);
+          console.warn('💡 Real-time sync requires Supabase Realtime to be enabled for project_files table');
+          set({ isSubscribed: false });
+        }
+      },
+      
+      unsubscribeFromProjectFiles: () => {
+        const { subscription, isSubscribed } = get();
+        
+        if (subscription) {
+          console.log('🔌 Unsubscribing from project file changes');
+          subscription.unsubscribe();
+          set({ subscription: null, isSubscribed: false });
+        } else if (isSubscribed) {
+          // Handle edge case where isSubscribed is true but subscription is null
+          set({ isSubscribed: false });
+        }
+      },
+      
+      refreshProjectFiles: async (projectId: string) => {
+        console.log('🔄 Refreshing project files from database...');
+        
+        try {
+          // Prevent excessive refreshes
+          set({ lastRefreshTime: new Date() });
+          
+          // Fetch updated files from database
+          const { data: files, error: filesError } = await supabase
+            .from('project_files')
+            .select('*')
+            .eq('project_id', projectId);
+            
+          if (filesError) {
+            console.error('❌ Failed to refresh project files:', filesError);
+            return;
+          }
+          
+          const { files: currentFiles } = get();
+          const updatedFiles = { ...currentFiles };
+          let hasChanges = false;
+          
+          // Process updated files
+          files?.forEach(file => {
+            const normalizedPath = normalizeFilePath(file.file_path);
+            const existingFile = currentFiles[normalizedPath];
+            
+            // Check if this is a new file or has been updated
+            const isNewFile = !existingFile;
+            const isUpdated = existingFile && 
+              new Date(file.updated_at).getTime() > existingFile.lastModified.getTime();
+            
+            if (isNewFile || isUpdated) {
+              hasChanges = true;
+              updatedFiles[normalizedPath] = {
+                path: normalizedPath,
+                content: file.content || '',
+                type: file.file_type || 'text',
+                lastModified: new Date(file.updated_at),
+                version: file.version,
+                isDirty: existingFile?.isDirty || false, // Preserve dirty state for open files
+                isSaving: existingFile?.isSaving || false,
+              };
+              
+              if (isNewFile) {
+                console.log(`📁 Added new file: ${normalizedPath}`);
+              } else {
+                console.log(`📝 Updated file: ${normalizedPath}`);
+              }
+            }
+          });
+          
+          // Update store if there were changes
+          if (hasChanges) {
+            set({ files: updatedFiles });
+            console.log('✅ Project files refreshed successfully');
+          } else {
+            console.log('ℹ️ No file changes detected during refresh');
+          }
+          
+        } catch (error) {
+          console.error('❌ Failed to refresh project files:', error);
+          set({ error: 'Failed to refresh project files' });
+        }
       },
     }),
     { name: 'unified-editor-store' }

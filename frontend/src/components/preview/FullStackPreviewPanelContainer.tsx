@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useProjectEditorStore } from '../../stores/useProjectEditorStore';
+import { useUnifiedEditorStore } from '../../stores/useUnifiedEditorStore';
 import { ContainerPreviewPanel } from './ContainerPreviewPanel';
 import type { ContainerPreviewPanelRef } from './ContainerPreviewPanel';
 import { PreviewHeader } from './PreviewHeader';
@@ -35,7 +35,7 @@ export function FullStackPreviewPanelContainer({
 }: FullStackPreviewPanelContainerProps) {
   const {
     projectData
-  } = useProjectEditorStore();
+  } = useUnifiedEditorStore();
 
   const containerPreviewRef = useRef<ContainerPreviewPanelRef>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
