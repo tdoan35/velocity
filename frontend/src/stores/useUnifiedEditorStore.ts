@@ -10,6 +10,19 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 export interface EditorFile extends FileContent {
   isDirty: boolean;
   isSaving: boolean;
+  saveAttempts: number;
+  lastSaveError?: string;
+  contentHash?: string;
+}
+
+// Conflict resolution state
+interface ConflictResolutionState {
+  hasConflict: boolean;
+  localContent: string;
+  remoteContent: string;
+  localVersion: number;
+  remoteVersion: number;
+  conflictType: 'version' | 'content' | 'both';
 }
 
 export interface UnifiedEditorState {
@@ -33,7 +46,12 @@ export interface UnifiedEditorState {
   // Connection State
   isSupabaseConnected: boolean;
   isLoading: boolean;
+  isOnline: boolean;
+  syncStatus: 'idle' | 'syncing' | 'error';
   error: string | null;
+  
+  // Conflict Resolution
+  conflictResolution: Record<string, ConflictResolutionState>;
   
   // Realtime Subscription State
   subscription: RealtimeChannel | null;
@@ -54,6 +72,10 @@ export interface UnifiedEditorState {
   setBuildStatus: (status: BuildStatus) => void;
   setError: (error: string | null) => void;
   reset: () => void;
+  
+  // Enhanced file management
+  refreshFile: (filePath: string) => Promise<void>;
+  resolveConflict: (filePath: string, resolution: 'local' | 'remote' | 'merge') => Promise<void>;
   
   // Realtime Subscription Actions
   subscribeToProjectFiles: (projectId: string) => void;
@@ -113,7 +135,10 @@ const initialState = {
   buildLogs: [],
   isSupabaseConnected: false,
   isLoading: false,
+  isOnline: true,
+  syncStatus: 'idle' as const,
   error: null,
+  conflictResolution: {},
   subscription: null,
   isSubscribed: false,
   lastRefreshTime: null,
@@ -167,15 +192,20 @@ export const useUnifiedEditorStore = create<UnifiedEditorState>()(
               type: file.file_type || 'text',
               lastModified: new Date(file.updated_at),
               version: file.version,
+              contentHash: file.content_hash,
               isDirty: false,
               isSaving: false,
+              saveAttempts: 0,
             };
           });
 
           // Add default files if none exist
           if (Object.keys(fileMap).length === 0) {
             defaultFiles.forEach(file => {
-              fileMap[file.path] = file;
+              fileMap[file.path] = {
+                ...file,
+                saveAttempts: 0,
+              };
             });
           }
 
@@ -274,58 +304,103 @@ export const useUnifiedEditorStore = create<UnifiedEditorState>()(
       },
 
       saveFile: async (filePath: string) => {
-        const { files, projectId } = get();
-        const file = files[filePath];
-        
-        if (!file || !projectId || file.isSaving) return;
+        const MAX_RETRIES = 3;
+        const RETRY_DELAY_BASE = 1000;
 
-        // Mark as saving
-        set({
-          files: { 
-            ...files, 
-            [filePath]: { ...file, isSaving: true } 
-          },
-        });
+        const attemptSave = async (attempt: number): Promise<void> => {
+          const { projectId } = get();
 
-        try {
-          // Use the correct RPC call with proper parameters
-          const { data, error } = await supabase.rpc('upsert_project_file', {
-            project_uuid: projectId,
-            p_file_path: filePath,
-            p_content: file.content,
-            p_file_type: file.type,
-            expected_version: file.version || null
-          });
+          // Always get fresh state for each attempt
+          const currentFile = get().files[filePath];
 
-          if (error) throw error;
+          if (!currentFile || !projectId || currentFile.isSaving) return;
 
-          // Update file with saved state
-          set({
+          // Mark as saving with functional update
+          set((state) => ({
             files: {
-              ...files,
+              ...state.files,
               [filePath]: {
-                ...file,
-                isDirty: false,
-                isSaving: false,
-                lastModified: new Date(data?.updated_at || new Date()),
-                version: data?.version || file.version,
+                ...state.files[filePath],
+                isSaving: true,
+                saveAttempts: attempt,
               },
             },
-          });
+          }));
 
-          console.log(`File ${filePath} saved successfully`);
-        } catch (error) {
-          console.error(`Failed to save file: ${filePath}`, error);
-          
-          // Reset saving state on error
-          set({
-            files: { 
-              ...files, 
-              [filePath]: { ...file, isSaving: false } 
-            },
-            error: error instanceof Error ? error.message : 'Failed to save file'
-          });
-        }
+          try {
+            const { data, error } = await supabase.rpc('upsert_project_file', {
+              project_uuid: projectId,
+              p_file_path: filePath,
+              p_content: currentFile.content,
+              p_file_type: currentFile.type,
+              expected_version: currentFile.version || null,
+            });
+
+            if (error) throw error;
+
+            // Check if response indicates success or failure
+            const responseData = typeof data === 'string' ? JSON.parse(data) : data;
+
+            if (!responseData?.success) {
+              if (
+                responseData?.error?.code === 'VERSION_CONFLICT' &&
+                attempt < MAX_RETRIES
+              ) {
+                // Refresh file state and retry
+                await get().refreshFile(filePath);
+                const delay = RETRY_DELAY_BASE * Math.pow(2, attempt - 1);
+                await new Promise((resolve) => setTimeout(resolve, delay));
+                return attemptSave(attempt + 1);
+              }
+              throw new Error(responseData?.error?.message || 'Unknown save error');
+            }
+
+            // Apply successful save with functional update
+            set((state) => ({
+              files: {
+                ...state.files,
+                [filePath]: {
+                  ...state.files[filePath],
+                  isDirty: false,
+                  isSaving: false,
+                  version: responseData.data.version,
+                  contentHash: responseData.data.content_hash,
+                  lastModified: new Date(responseData.data.updated_at),
+                  saveAttempts: 0,
+                  lastSaveError: undefined,
+                },
+              },
+            }));
+
+            console.log(`File ${filePath} saved successfully (version ${responseData.data.version})`);
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error ? error.message : 'Save failed';
+
+            set((state) => ({
+              files: {
+                ...state.files,
+                [filePath]: {
+                  ...state.files[filePath],
+                  isSaving: false,
+                  lastSaveError: errorMessage,
+                },
+              },
+            }));
+
+            if (attempt >= MAX_RETRIES) {
+              set({ error: `Failed to save ${filePath}: ${errorMessage}` });
+              throw error;
+            }
+
+            // Wait before retry
+            const delay = RETRY_DELAY_BASE * Math.pow(2, attempt - 1);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            return attemptSave(attempt + 1);
+          }
+        };
+
+        return attemptSave(1);
       },
 
       createFile: async (filePath: string, content = '') => {
@@ -345,6 +420,7 @@ export const useUnifiedEditorStore = create<UnifiedEditorState>()(
           lastModified: new Date(),
           isDirty: true,
           isSaving: false,
+          saveAttempts: 0,
         };
 
         set({
@@ -411,6 +487,100 @@ export const useUnifiedEditorStore = create<UnifiedEditorState>()(
         // Clean up subscription before resetting
         get().unsubscribeFromProjectFiles();
         set(initialState);
+      },
+
+      // Enhanced file refresh for conflict resolution
+      refreshFile: async (filePath: string) => {
+        const { projectId } = get();
+        if (!projectId) return;
+
+        try {
+          const { data, error } = await supabase
+            .from('project_files')
+            .select('*')
+            .eq('project_id', projectId)
+            .eq('file_path', filePath)
+            .eq('is_current_version', true)
+            .single();
+
+          if (error || !data) {
+            console.warn(`Could not refresh file ${filePath}:`, error);
+            return;
+          }
+
+          set((state) => ({
+            files: {
+              ...state.files,
+              [filePath]: {
+                ...state.files[filePath],
+                version: data.version,
+                contentHash: data.content_hash,
+                lastModified: new Date(data.updated_at),
+                // Preserve local content and dirty state for conflict resolution
+              },
+            },
+          }));
+        } catch (error) {
+          console.error(`Failed to refresh file ${filePath}:`, error);
+        }
+      },
+
+      // Conflict resolution interface
+      resolveConflict: async (
+        filePath: string,
+        resolution: 'local' | 'remote' | 'merge'
+      ) => {
+        const { projectId, files, conflictResolution } = get();
+        const conflict = conflictResolution[filePath];
+        
+        if (!projectId || !conflict) {
+          console.error(`No conflict found for file: ${filePath}`);
+          return;
+        }
+
+        try {
+          let resolvedContent: string;
+
+          switch (resolution) {
+            case 'local':
+              resolvedContent = conflict.localContent;
+              break;
+            case 'remote':
+              resolvedContent = conflict.remoteContent;
+              break;
+            case 'merge':
+              // Simple merge strategy - in production, you'd want a more sophisticated merge
+              resolvedContent = `${conflict.localContent}\n\n// === MERGED WITH REMOTE CHANGES ===\n\n${conflict.remoteContent}`;
+              break;
+            default:
+              throw new Error(`Unknown resolution type: ${resolution}`);
+          }
+
+          // Update file content and clear conflict
+          set((state) => ({
+            files: {
+              ...state.files,
+              [filePath]: {
+                ...state.files[filePath],
+                content: resolvedContent,
+                isDirty: true,
+              },
+            },
+            conflictResolution: {
+              ...state.conflictResolution,
+              [filePath]: {
+                ...state.conflictResolution[filePath],
+                hasConflict: false,
+              },
+            },
+          }));
+
+          // Save the resolved content
+          await get().saveFile(filePath);
+        } catch (error) {
+          console.error(`Failed to resolve conflict for ${filePath}:`, error);
+          set({ error: `Failed to resolve conflict: ${error instanceof Error ? error.message : 'Unknown error'}` });
+        }
       },
       
       // Realtime Subscription Methods

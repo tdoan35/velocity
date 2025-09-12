@@ -37,6 +37,10 @@ export function CodeEditor({
   const [loadError, setLoadError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [retryCount, setRetryCount] = useState(0)
+  const [saveIndicator, setSaveIndicator] = useState<
+    'idle' | 'saving' | 'saved' | 'error'
+  >('idle')
+  const [lastSaveError, setLastSaveError] = useState<string | null>(null)
   
   // Tab content updates are now handled by the parent component via onChange prop
   
@@ -59,19 +63,36 @@ export function CodeEditor({
       model = monaco.editor.createModel(content, language, uri)
       modelsRef.current.set(fileId, model)
       
-      // Set up change listener
+      // Set up change listener with improved debouncing
       model.onDidChangeContent(() => {
         const value = model!.getValue()
         onChange?.(value)
         
-        // Debounced auto-save
-        if (onSave && saveTimeoutRef.current) {
+        // Cancel previous auto-save if user is still typing
+        if (saveTimeoutRef.current) {
           clearTimeout(saveTimeoutRef.current)
+          saveTimeoutRef.current = null
         }
         
+        // Enhanced debounced auto-save with status indication
         if (onSave) {
-          saveTimeoutRef.current = setTimeout(() => {
-            onSave(value)
+          setSaveIndicator('idle') // Reset indicator when typing
+          setLastSaveError(null)   // Clear previous errors
+          
+          saveTimeoutRef.current = setTimeout(async () => {
+            try {
+              setSaveIndicator('saving')
+              await onSave(value)
+              setSaveIndicator('saved')
+              
+              // Reset indicator after showing success
+              setTimeout(() => setSaveIndicator('idle'), 2000)
+            } catch (error) {
+              setSaveIndicator('error')
+              const errorMessage = error instanceof Error ? error.message : 'Save failed'
+              setLastSaveError(errorMessage)
+              console.error('Auto-save failed:', error)
+            }
           }, 500) as unknown as NodeJS.Timeout
         }
       })
@@ -136,12 +157,30 @@ export function CodeEditor({
     editor.setModel(initialModel)
     currentFileIdRef.current = fileId
     
-    // Register keyboard shortcuts
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+    // Enhanced manual save command with immediate execution
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, async () => {
       const model = editor.getModel()
-      if (model) {
-        const value = model.getValue()
-        onSave?.(value)
+      if (!model || !onSave) return
+
+      // Cancel debounced save
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+        saveTimeoutRef.current = null
+      }
+
+      const value = model.getValue()
+      setSaveIndicator('saving')
+      setLastSaveError(null)
+
+      try {
+        await onSave(value)
+        setSaveIndicator('saved')
+        setTimeout(() => setSaveIndicator('idle'), 2000)
+      } catch (error) {
+        setSaveIndicator('error')
+        const errorMessage = error instanceof Error ? error.message : 'Save failed'
+        setLastSaveError(errorMessage)
+        console.error('Manual save failed:', error)
       }
     })
     
@@ -191,15 +230,26 @@ export function CodeEditor({
     return () => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current)
+        saveTimeoutRef.current = null
       }
       
       // Dispose all models when component unmounts
       modelsRef.current.forEach(model => {
-        model.dispose()
+        try {
+          model.dispose()
+        } catch (error) {
+          console.warn('Error disposing model:', error)
+        }
       })
       modelsRef.current.clear()
     }
   }, [])
+
+  // Clear error indicator when file changes
+  useEffect(() => {
+    setSaveIndicator('idle')
+    setLastSaveError(null)
+  }, [fileId, filePath])
 
   // Handle editor resize
   useEffect(() => {
@@ -241,7 +291,36 @@ export function CodeEditor({
   }
   
   return (
-    <div className={cn('h-full w-full', className)}>
+    <div className={cn('relative h-full w-full', className)}>
+      {/* Save Status Indicator */}
+      {saveIndicator !== 'idle' && (
+        <div
+          className={cn(
+            'absolute top-2 right-2 z-10 px-2 py-1 rounded text-xs font-medium shadow-md',
+            {
+              'bg-blue-500 text-white': saveIndicator === 'saving',
+              'bg-green-500 text-white': saveIndicator === 'saved',
+              'bg-red-500 text-white': saveIndicator === 'error',
+            }
+          )}
+        >
+          {saveIndicator === 'saving' && '💾 Saving...'}
+          {saveIndicator === 'saved' && '✅ Saved'}
+          {saveIndicator === 'error' && '❌ Save Failed'}
+        </div>
+      )}
+      
+      {/* Error Details Tooltip */}
+      {saveIndicator === 'error' && lastSaveError && (
+        <div className="absolute top-10 right-2 z-10 bg-red-100 border border-red-300 text-red-700 px-3 py-2 rounded text-xs max-w-xs shadow-lg">
+          <div className="font-medium mb-1">Save Error:</div>
+          <div className="break-words">{lastSaveError}</div>
+          <div className="mt-2 text-xs opacity-75">
+            Try saving again with Cmd+S
+          </div>
+        </div>
+      )}
+
       <Editor
         key={retryCount} // Remove fileId from key to prevent re-mounting
         theme={theme === 'dark' ? 'velocity-dark' : 'velocity-light'}
