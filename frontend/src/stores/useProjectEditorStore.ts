@@ -1,3 +1,6 @@
+// @deprecated This store is deprecated in favor of useUnifiedEditorStore.
+// The new unified store eliminates the race condition bug in the autosave functionality.
+// Use useUnifiedEditorStore for all new development.
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { supabase } from '../lib/supabase';

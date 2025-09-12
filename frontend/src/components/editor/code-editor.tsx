@@ -3,7 +3,7 @@ import Editor, { loader } from '@monaco-editor/react'
 import type { Monaco, OnMount } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
 import { useTheme } from '@/components/theme-provider'
-import { useEditorStore } from '@/stores/useEditorStore'
+// Note: This component now relies on props from the unified store rather than importing it directly
 import { configureMonaco, MONACO_OPTIONS } from './monaco-config'
 import { cn } from '@/lib/utils'
 
@@ -36,7 +36,7 @@ export function CodeEditor({
   const [isLoading, setIsLoading] = useState(true)
   const [retryCount, setRetryCount] = useState(0)
   
-  const { updateTabContent } = useEditorStore()
+  // Tab content updates are now handled by the parent component via onChange prop
   
   // Configure Monaco loader on first mount
   useEffect(() => {
@@ -60,10 +60,7 @@ export function CodeEditor({
   const handleChange = useCallback((value: string | undefined) => {
     if (!value) return
     
-    // Update tab content in store
-    updateTabContent(fileId, value)
-    
-    // Call onChange immediately
+    // Call onChange immediately to update unified store
     onChange?.(value)
     
     // Debounce auto-save
@@ -76,7 +73,7 @@ export function CodeEditor({
         onSave(value)
       }, 500) as unknown as NodeJS.Timeout
     }
-  }, [fileId, onChange, onSave, updateTabContent])
+  }, [onChange, onSave])
 
   const handleEditorDidMount: OnMount = useCallback((editor, monaco) => {
     console.log('Monaco Editor mounted successfully')

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, Navigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
-import { useProjectEditorStore } from '../stores/useProjectEditorStore';
+import { useUnifiedEditorStore } from '../stores/useUnifiedEditorStore';
 import { toast } from 'sonner';
 import { Loader2, Settings, Eye, Code, MessageSquare, FileText as LogsIcon, Terminal, Play, Square } from 'lucide-react';
 import { usePreviewSession } from '../hooks/usePreviewSession';
@@ -18,7 +18,8 @@ import {
   DropdownMenuTrigger 
 } from '../components/ui/dropdown-menu';
 import { FullStackFileExplorer } from '../components/editor/FullStackFileExplorer';
-import { EnhancedEditorContainer } from '../components/editor/EnhancedEditorContainer';
+import { CodeEditor } from '../components/editor/code-editor';
+import { EditorTabs } from '../components/editor/editor-tabs';
 import { FullStackPreviewPanelContainer } from '../components/preview/FullStackPreviewPanelContainer';
 import { EnhancedChatInterface } from '@/components/chat/enhanced-chat-interface';
 import { VerticalCollapsiblePanel } from '../components/layout/vertical-collapsible-panel';
@@ -50,10 +51,17 @@ function ProjectEditorCore({
     isLoading,
     deploymentUrl,
     isSupabaseConnected,
-    initializeProject,
+    files,
+    activeFile,
+    openTabs,
+    initializeProjectFiles,
     generateProjectStructure,
-    deployProject
-  } = useProjectEditorStore();
+    deployProject,
+    openFile,
+    closeFile,
+    updateFileContent,
+    saveFile
+  } = useUnifiedEditorStore();
 
   const [isBottomPanelOpen, setIsBottomPanelOpen] = useState(false);
   const [activeBottomTab, setActiveBottomTab] = useState<'logs' | 'terminal'>('logs');
@@ -187,8 +195,8 @@ function ProjectEditorCore({
     }
     
     if (projectId && effectiveUser && !isInitialized) {
-      console.log('[ProjectEditor] Calling initializeProject for:', projectId);
-      initializeProject(projectId)
+      console.log('[ProjectEditor] Calling initializeProjectFiles for:', projectId);
+      initializeProjectFiles(projectId)
         .then(() => {
           console.log('[ProjectEditor] Project initialized successfully');
           setIsInitialized(true);
@@ -203,7 +211,7 @@ function ProjectEditorCore({
           }
         });
     }
-  }, [projectId, effectiveUser, initializeProject, isInitialized, skipInitialization, isDevelopment]);
+  }, [projectId, effectiveUser, initializeProjectFiles, isInitialized, skipInitialization, isDevelopment]);
 
   // Auto-start preview session when project is initialized
   useEffect(() => {
@@ -472,13 +480,42 @@ function ProjectEditorCore({
             <ResizableHandle withHandle />
             
             {/* Editor */}
-            <ResizablePanel defaultSize={75} minSize={60}>
-              <EnhancedEditorContainer
-                projectId={currentProjectId}
-                projectType={isSupabaseConnected ? 'full-stack' : 'frontend-only'}
-                onFileSave={securityMonitoring.onFileSave}
-                onFileOpen={securityMonitoring.onFileOpen}
+            <ResizablePanel defaultSize={75} minSize={60} className="flex flex-col">
+              {/* Render Editor Tabs */}
+              <EditorTabs
+                tabs={openTabs}
+                activeTab={activeFile}
+                onTabClick={openFile}
+                onTabClose={closeFile}
+                files={files}
               />
+
+              {/* Render the Active Editor */}
+              <div className="flex-1">
+                {activeFile && files[activeFile] && (
+                  <CodeEditor
+                    key={activeFile} // Important: force re-mount when file changes
+                    fileId={activeFile}
+                    filePath={activeFile}
+                    initialValue={files[activeFile].content}
+                    language={files[activeFile].type}
+                    onChange={(newContent) => {
+                      updateFileContent(activeFile, newContent);
+                      securityMonitoring.onFileOpen(activeFile, newContent);
+                    }}
+                    onSave={(content) => {
+                      saveFile(activeFile).then(() => {
+                        securityMonitoring.onFileSave(activeFile, content);
+                      });
+                    }}
+                  />
+                )}
+                {!activeFile && (
+                  <div className="h-full flex items-center justify-center bg-card text-muted-foreground">
+                    Select a file to begin editing.
+                  </div>
+                )}
+              </div>
             </ResizablePanel>
           </ResizablePanelGroup>
         ) : (

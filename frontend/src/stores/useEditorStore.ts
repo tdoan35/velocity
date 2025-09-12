@@ -1,3 +1,5 @@
+// @deprecated This store is deprecated in favor of useUnifiedEditorStore.
+// Use useUnifiedEditorStore for all new development.
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 import type { EditorTab } from '@/types/store'

@@ -1,3 +1,6 @@
+// @deprecated This component is deprecated in favor of the unified editor architecture.
+// Use CodeEditor component with useUnifiedEditorStore instead.
+// This component has a known autosave race condition bug that was fixed in the new architecture.
 import React, { useEffect, useRef } from 'react';
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
 import { useProjectEditorStore } from '../../stores/useProjectEditorStore';
