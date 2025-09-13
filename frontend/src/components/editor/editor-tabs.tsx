@@ -1,34 +1,38 @@
 import { X, FileCode, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import type { EditorTab } from '@/types/store'
+import type { EditorFile } from '@/stores/useUnifiedEditorStore'
 
 interface EditorTabsProps {
-  tabs: EditorTab[]
-  activeTabId: string | null
-  onTabClick: (tabId: string) => void
-  onTabClose: (tabId: string) => void
-  saving?: string | null
+  tabs: string[]
+  activeTab: string | null
+  onTabClick: (filePath: string) => void
+  onTabClose: (filePath: string) => void
+  files: Record<string, EditorFile>
 }
 
 export function EditorTabs({
   tabs,
-  activeTabId,
+  activeTab,
   onTabClick,
   onTabClose,
-  saving,
+  files,
 }: EditorTabsProps) {
+  if (tabs.length === 0) return null;
+
   return (
     <div className="flex border-b bg-background">
       <div className="flex flex-1 overflow-x-auto">
-        {tabs.map((tab) => {
-          const isActive = tab.id === activeTabId
-          const isSaving = saving === tab.id
-          const fileName = tab.filePath.split('/').pop() || 'untitled'
+        {tabs.map((filePath) => {
+          const isActive = filePath === activeTab
+          const file = files[filePath]
+          const isSaving = file?.isSaving || false
+          const isDirty = file?.isDirty || false
+          const fileName = filePath.split('/').pop() || 'untitled'
           
           return (
             <div
-              key={tab.id}
+              key={filePath}
               className={cn(
                 'group flex items-center border-r px-3 py-2 text-sm',
                 isActive
@@ -38,11 +42,11 @@ export function EditorTabs({
             >
               <button
                 className="flex items-center gap-2"
-                onClick={() => onTabClick(tab.id)}
+                onClick={() => onTabClick(filePath)}
               >
                 <FileCode className="h-4 w-4" />
                 <span className="max-w-[150px] truncate">{fileName}</span>
-                {tab.isDirty && !isSaving && (
+                {isDirty && !isSaving && (
                   <span className="ml-1 h-2 w-2 rounded-full bg-primary" />
                 )}
                 {isSaving && (
@@ -55,7 +59,7 @@ export function EditorTabs({
                 className="ml-2 h-5 w-5 opacity-0 group-hover:opacity-100"
                 onClick={(e) => {
                   e.stopPropagation()
-                  onTabClose(tab.id)
+                  onTabClose(filePath)
                 }}
               >
                 <X className="h-3 w-3" />

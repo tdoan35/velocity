@@ -4,10 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Velocity** is an AI-powered mobile app development platform that transforms natural language descriptions into production-ready React Native applications. This is a Taskmaster-managed project currently in the planning/setup phase.
+**Velocity** is an AI-powered app development platform that transforms natural language descriptions into production-ready React / React Native applications. This is a Taskmaster-managed project currently in the planning/setup phase.
 
 **Technology Stack**:
-- **Frontend**: React Native, Expo, Monaco Editor, Tailwind CSS  
+
+- **Frontend**: React, React Native, Expo, Monaco Editor, Tailwind CSS, Vite
 - **Backend**: Supabase (PostgreSQL + pgvector), Edge Functions
 - **AI**: Claude AI (Anthropic), vector similarity search
 - **Mobile**: Fly.io containers for previews, EAS Build for compilation
@@ -21,11 +22,13 @@ This project is in the **initial implementation phase**. Development follows a s
 ## Development Commands
 
 ### Supabase Edge Functions
+
 - **List edge functions**: Use `npx supabase functions list` instead of the MCP tool `mcp__supabase__list_edge_functions` as it exceeds token limits
 - **Deploy edge functions**: Use `npx supabase functions deploy <function-name>` instead of the MCP tool `mcp__supabase__deploy_edge_function` as it fails with internal errors
 
 ### Taskmaster Management
-- **List tasks**: `task-master list` 
+
+- **List tasks**: `task-master list`
 - **Show next task**: `task-master next`
 - **View task details**: `task-master show <id>`
 - **Break down complex tasks**: `task-master expand --id=<id> --research --force`
@@ -34,6 +37,7 @@ This project is in the **initial implementation phase**. Development follows a s
 - **Update tasks with changes**: `task-master update --from=<id> --prompt="<changes>" --research`
 
 ### Configuration
+
 - **View/set AI models**: `task-master models`
 - **Interactive setup**: `task-master models --setup`
 - **Analyze task complexity**: `task-master analyze-complexity --research`
@@ -75,6 +79,7 @@ This project is in the **initial implementation phase**. Development follows a s
 ## Architecture Insights
 
 Based on the PRD analysis:
+
 - **Cloud-first architecture** with Supabase backend
 - **Real-time collaboration** via Supabase Realtime
 - **AI-driven code generation** with Claude integration

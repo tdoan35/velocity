@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, Navigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
-import { useProjectEditorStore } from '../stores/useProjectEditorStore';
+import { useUnifiedEditorStore } from '../stores/useUnifiedEditorStore';
 import { toast } from 'sonner';
-import { Loader2, Settings, Eye, Code,  MessageSquare, FileText as LogsIcon, Terminal } from 'lucide-react';
+import { Loader2, Settings, Eye, Code, MessageSquare, FileText as LogsIcon, Terminal, Play, Square } from 'lucide-react';
+import { usePreviewSession } from '../hooks/usePreviewSession';
+import type { PreviewStatus } from '../hooks/usePreviewSession';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../components/ui/resizable';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -16,7 +18,8 @@ import {
   DropdownMenuTrigger 
 } from '../components/ui/dropdown-menu';
 import { FullStackFileExplorer } from '../components/editor/FullStackFileExplorer';
-import { EnhancedEditorContainer } from '../components/editor/EnhancedEditorContainer';
+import { CodeEditor } from '../components/editor/code-editor';
+import { EditorTabs } from '../components/editor/editor-tabs';
 import { FullStackPreviewPanelContainer } from '../components/preview/FullStackPreviewPanelContainer';
 import { EnhancedChatInterface } from '@/components/chat/enhanced-chat-interface';
 import { VerticalCollapsiblePanel } from '../components/layout/vertical-collapsible-panel';
@@ -48,16 +51,133 @@ function ProjectEditorCore({
     isLoading,
     deploymentUrl,
     isSupabaseConnected,
-    initializeProject,
+    files,
+    activeFile,
+    openTabs,
+    initializeProjectFiles,
     generateProjectStructure,
-    deployProject
-  } = useProjectEditorStore();
+    deployProject,
+    openFile,
+    closeFile,
+    updateFileContent,
+    saveFile
+  } = useUnifiedEditorStore();
 
   const [isBottomPanelOpen, setIsBottomPanelOpen] = useState(false);
   const [activeBottomTab, setActiveBottomTab] = useState<'logs' | 'terminal'>('logs');
   const [isInitialized, setIsInitialized] = useState(false);
   const [activeView, setActiveView] = useState<'preview' | 'code'>('preview');
   const [isAIChatPanelVisible, setIsAIChatPanelVisible] = useState(true);
+  
+  // Preview session management at project level
+  const [selectedDevice, setSelectedDevice] = useState<'mobile' | 'tablet' | 'desktop'>('mobile');
+  const [autoStartAttempted, setAutoStartAttempted] = useState(false);
+  const autoStartTimerRef = useRef<number | null>(null);
+  const idleTimeoutRef = useRef<number | null>(null);
+  const lastActivityRef = useRef<number>(Date.now());
+  
+  // Initialize preview session at project level
+  const previewSession = usePreviewSession({
+    projectId: projectId || '',
+    onError: (error) => {
+      console.error('[ProjectEditor] Preview session error:', error);
+      toast.error('Preview session error: ' + error.message);
+    },
+    onStatusChange: (status) => {
+      console.log('[ProjectEditor] Preview session status changed:', status);
+      // Reset idle timer on session activity
+      if (status === 'running' || status === 'starting') {
+        resetIdleTimer();
+      }
+    }
+  });
+
+  // Idle timer management (15 minutes)
+  const IDLE_TIMEOUT = 15 * 60 * 1000; // 15 minutes in milliseconds
+  
+  // Enhanced status dot renderer (moved from PreviewHeader)
+  const renderStatusDot = (status: PreviewStatus) => {
+    const dotClass = "w-2 h-2 rounded-full";
+    
+    // Map PreviewStatus to PreviewHeader status types
+    const getPreviewHeaderStatus = (previewStatus: PreviewStatus): 'connecting' | 'error' | 'connected' | 'preparing' | 'idle' | 'retrying' => {
+      switch (previewStatus) {
+        case 'running':
+          return 'connected';
+        case 'starting':
+          return 'connecting';
+        case 'error':
+          return 'error';
+        case 'stopping':
+          return 'preparing';
+        default:
+          return 'idle';
+      }
+    };
+    
+    const headerStatus = getPreviewHeaderStatus(status);
+    
+    switch (headerStatus) {
+      case 'connecting':
+        return <div className={`${dotClass} bg-yellow-500 animate-pulse`} title="Connecting..." />;
+      case 'retrying':
+        return <div className={`${dotClass} bg-orange-500`} title="Connection Issue" />;
+      case 'error':
+        return <div className={`${dotClass} bg-red-500`} title="Error" />;
+      case 'connected':
+        return <div className={`${dotClass} bg-green-500`} title="Connected" />;
+      case 'preparing':
+        return <div className={`${dotClass} bg-blue-500 animate-pulse`} title="Initializing Preview" />;
+      default:
+        return <div className={`${dotClass} bg-gray-400`} title="Idle" />;
+    }
+  };
+
+  const resetIdleTimer = useCallback(() => {
+    lastActivityRef.current = Date.now();
+    
+    if (idleTimeoutRef.current) {
+      clearTimeout(idleTimeoutRef.current);
+    }
+    
+    // Only set idle timer if session is running
+    if (previewSession.status === 'running') {
+      idleTimeoutRef.current = window.setTimeout(() => {
+        console.log('[ProjectEditor] Session idle timeout - stopping preview');
+        previewSession.stopSession().catch(console.error);
+        toast.info('Preview session stopped due to inactivity');
+      }, IDLE_TIMEOUT);
+    }
+  }, [previewSession.status, previewSession.stopSession]);
+
+  // Track user activity to reset idle timer
+  const handleUserActivity = useCallback(() => {
+    resetIdleTimer();
+  }, [resetIdleTimer]);
+
+  // Preview session control functions
+  const handleStartPreview = useCallback(async () => {
+    try {
+      await previewSession.startSession(selectedDevice);
+      resetIdleTimer();
+    } catch (error) {
+      console.error('Failed to start preview:', error);
+      toast.error('Failed to start preview');
+    }
+  }, [previewSession.startSession, selectedDevice, resetIdleTimer]);
+
+  const handleStopPreview = useCallback(async () => {
+    try {
+      await previewSession.stopSession();
+      if (idleTimeoutRef.current) {
+        clearTimeout(idleTimeoutRef.current);
+        idleTimeoutRef.current = null;
+      }
+    } catch (error) {
+      console.error('Failed to stop preview:', error);
+      toast.error('Failed to stop preview');
+    }
+  }, [previewSession.stopSession]);
 
   useEffect(() => {
     console.log('[ProjectEditor] useEffect triggered', {
@@ -75,8 +195,8 @@ function ProjectEditorCore({
     }
     
     if (projectId && effectiveUser && !isInitialized) {
-      console.log('[ProjectEditor] Calling initializeProject for:', projectId);
-      initializeProject(projectId)
+      console.log('[ProjectEditor] Calling initializeProjectFiles for:', projectId);
+      initializeProjectFiles(projectId)
         .then(() => {
           console.log('[ProjectEditor] Project initialized successfully');
           setIsInitialized(true);
@@ -91,7 +211,54 @@ function ProjectEditorCore({
           }
         });
     }
-  }, [projectId, effectiveUser, initializeProject, isInitialized, skipInitialization, isDevelopment]);
+  }, [projectId, effectiveUser, initializeProjectFiles, isInitialized, skipInitialization, isDevelopment]);
+
+  // Auto-start preview session when project is initialized
+  useEffect(() => {
+    if (projectId && isInitialized && !autoStartAttempted && !autoStartTimerRef.current) {
+      setAutoStartAttempted(true);
+      
+      autoStartTimerRef.current = window.setTimeout(() => {
+        console.log('[ProjectEditor] Auto-starting preview session...');
+        autoStartTimerRef.current = null;
+        handleStartPreview().catch((error) => {
+          console.warn('[ProjectEditor] Auto-start preview failed:', error);
+        });
+      }, 1500);
+      
+      console.log('[ProjectEditor] Auto-start timer set:', autoStartTimerRef.current);
+    }
+  }, [projectId, isInitialized, autoStartAttempted, handleStartPreview]);
+
+  // Activity tracking for idle timeout
+  useEffect(() => {
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
+    
+    events.forEach(event => {
+      document.addEventListener(event, handleUserActivity, { passive: true });
+    });
+    
+    return () => {
+      events.forEach(event => {
+        document.removeEventListener(event, handleUserActivity);
+      });
+    };
+  }, [handleUserActivity]);
+
+  // Cleanup on unmount (project exit)
+  useEffect(() => {
+    return () => {
+      if (autoStartTimerRef.current) {
+        clearTimeout(autoStartTimerRef.current);
+        autoStartTimerRef.current = null;
+      }
+      if (idleTimeoutRef.current) {
+        clearTimeout(idleTimeoutRef.current);
+        idleTimeoutRef.current = null;
+      }
+      // Preview session will be cleaned up by usePreviewSession hook
+    };
+  }, []);
 
   // ProjectContext automatically handles currentProject syncing based on route changes
 
@@ -212,7 +379,7 @@ function ProjectEditorCore({
               <header className="px-4 py-2 flex items-center justify-between border-b border-gray-300 dark:border-gray-700/50">
 
         {/* View Toggle */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-3">
           <Button
             variant={isAIChatPanelVisible ? "outline" : "ghost"}
             size="sm"
@@ -221,28 +388,52 @@ function ProjectEditorCore({
           >
             <MessageSquare className="h-4 w-4" />
           </Button>
-          <ButtonGroup
-            options={[
-              {
-                value: 'preview',
-                label: 'Preview',
-                icon: <Eye className="h-4 w-4" />
-              },
-              {
-                value: 'code',
-                label: 'Code',
-                icon: <Code className="h-4 w-4" />
-              }
-            ]}
-            value={activeView}
-            onValueChange={(value) => setActiveView(value as 'preview' | 'code')}
-            size="sm"
-            variant="default"
-          />
+          
+          <div className="flex items-center space-x-2">
+            <ButtonGroup
+              options={[
+                {
+                  value: 'preview',
+                  label: 'Preview',
+                  icon: <Eye className="h-4 w-4" />
+                },
+                {
+                  value: 'code',
+                  label: 'Code',
+                  icon: <Code className="h-4 w-4" />
+                }
+              ]}
+              value={activeView}
+              onValueChange={(value) => setActiveView(value as 'preview' | 'code')}
+              size="sm"
+              variant="default"
+            />
+            
+            {/* Preview Session Status Indicator */}
+            <div className="flex items-center space-x-2 pl-1">
+              {renderStatusDot(previewSession.status)}
+            </div>
+          </div>
         </div>
 
         {/* Actions */}
         <div className="flex items-center space-x-2">
+          {/* Preview Control */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={previewSession.status === 'running' ? handleStopPreview : handleStartPreview}
+            disabled={previewSession.status === 'starting' || previewSession.status === 'stopping'}
+            className="h-7 px-2 bg-transparent"
+            title={previewSession.status === 'running' ? 'Stop Preview' : 'Start Preview'}
+          >
+            {previewSession.status === 'running' ? (
+              <Square className="h-4 w-4" />
+            ) : (
+              <Play className="h-4 w-4" />
+            )}
+          </Button>
+          
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="h-7 px-2 bg-transparent">
@@ -289,19 +480,50 @@ function ProjectEditorCore({
             <ResizableHandle withHandle />
             
             {/* Editor */}
-            <ResizablePanel defaultSize={75} minSize={60}>
-              <EnhancedEditorContainer
-                projectId={currentProjectId}
-                projectType={isSupabaseConnected ? 'full-stack' : 'frontend-only'}
-                onFileSave={securityMonitoring.onFileSave}
-                onFileOpen={securityMonitoring.onFileOpen}
+            <ResizablePanel defaultSize={75} minSize={60} className="flex flex-col">
+              {/* Render Editor Tabs */}
+              <EditorTabs
+                tabs={openTabs}
+                activeTab={activeFile}
+                onTabClick={openFile}
+                onTabClose={closeFile}
+                files={files}
               />
+
+              {/* Render the Active Editor */}
+              <div className="flex-1">
+                {activeFile && files[activeFile] && (
+                  <CodeEditor
+                    fileId={activeFile}
+                    filePath={activeFile}
+                    initialValue={files[activeFile].content}
+                    language={files[activeFile].type}
+                    onChange={(newContent) => {
+                      updateFileContent(activeFile, newContent);
+                      securityMonitoring.onFileOpen(activeFile, newContent);
+                    }}
+                    onSave={(content) => {
+                      saveFile(activeFile).then(() => {
+                        securityMonitoring.onFileSave(activeFile, content);
+                      });
+                    }}
+                  />
+                )}
+                {!activeFile && (
+                  <div className="h-full flex items-center justify-center bg-card text-muted-foreground">
+                    Select a file to begin editing.
+                  </div>
+                )}
+              </div>
             </ResizablePanel>
           </ResizablePanelGroup>
         ) : (
           <div className="h-full">
             <FullStackPreviewPanelContainer
               projectId={currentProjectId}
+              previewSession={previewSession}
+              selectedDevice={selectedDevice}
+              onDeviceChange={setSelectedDevice}
             />
           </div>
         )}

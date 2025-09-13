@@ -28,7 +28,7 @@ export class TemplateService {
   private getReactTemplate(): TemplateFile[] {
     return [
       {
-        file_path: 'src/App.jsx',
+        file_path: 'frontend/src/App.jsx',
         content: `import { useState } from 'react'
 import './App.css'
 
@@ -37,8 +37,8 @@ function App() {
 
   return (
     <div className="App">
-      <h1>Welcome to Velocity Preview!</h1>
-      <p>This is a demo React application running in a preview container.</p>
+      <h1>Welcome to Your React App!</h1>
+      <p>This is your React application running in a preview container.</p>
       <p>Start editing your code and see changes instantly with hot reload.</p>
       
       <div className="card">
@@ -66,7 +66,7 @@ export default App`,
         file_type: 'javascript'
       },
       {
-        file_path: 'src/main.jsx',
+        file_path: 'frontend/src/main.jsx',
         content: `import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
@@ -80,7 +80,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         file_type: 'javascript'
       },
       {
-        file_path: 'src/App.css',
+        file_path: 'frontend/src/App.css',
         content: `.App {
   max-width: 800px;
   margin: 0 auto;
@@ -193,7 +193,7 @@ button:active {
         file_type: 'css'
       },
       {
-        file_path: 'src/index.css',
+        file_path: 'frontend/src/index.css',
         content: `:root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -255,7 +255,7 @@ body {
         file_type: 'css'
       },
       {
-        file_path: 'index.html',
+        file_path: 'frontend/index.html',
         content: `<!doctype html>
 <html lang="en">
   <head>
@@ -272,7 +272,7 @@ body {
         file_type: 'html'
       },
       {
-        file_path: 'package.json',
+        file_path: 'frontend/package.json',
         content: JSON.stringify({
           "name": "velocity-preview-react",
           "private": true,
@@ -302,7 +302,7 @@ body {
         file_type: 'json'
       },
       {
-        file_path: 'vite.config.js',
+        file_path: 'frontend/vite.config.js',
         content: `import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -327,7 +327,7 @@ export default defineConfig({
         file_type: 'javascript'
       },
       {
-        file_path: 'README.md',
+        file_path: 'frontend/README.md',
         content: `# Velocity Preview - React Application
 
 This is a demo React application running in a Velocity preview container.
@@ -377,7 +377,7 @@ This project is automatically set up in your Velocity preview container with:
   private getReactNativeTemplate(): TemplateFile[] {
     return [
       {
-        file_path: 'App.js',
+        file_path: 'frontend/App.tsx',
         content: `import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
 
@@ -386,7 +386,7 @@ export default function App() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Welcome to Velocity Preview!</Text>
+      <Text style={styles.title}>Welcome to Your React Native App!</Text>
       <Text style={styles.subtitle}>React Native Development Environment</Text>
       
       <View style={styles.card}>
@@ -482,10 +482,10 @@ const styles = StyleSheet.create({
     marginVertical: 2,
   },
 });`,
-        file_type: 'javascript'
+        file_type: 'typescript'
       },
       {
-        file_path: 'package.json',
+        file_path: 'frontend/package.json',
         content: JSON.stringify({
           "name": "velocity-preview-react-native",
           "version": "0.0.1",
@@ -523,6 +523,40 @@ const styles = StyleSheet.create({
           }
         }, null, 2),
         file_type: 'json'
+      },
+      {
+        file_path: 'frontend/app.json',
+        content: JSON.stringify({
+          "expo": {
+            "name": "Velocity React Native App",
+            "slug": "velocity-react-native-app",
+            "version": "1.0.0",
+            "orientation": "portrait",
+            "icon": "./assets/icon.png",
+            "userInterfaceStyle": "light",
+            "splash": {
+              "image": "./assets/splash.png",
+              "resizeMode": "contain",
+              "backgroundColor": "#ffffff"
+            },
+            "assetBundlePatterns": [
+              "**/*"
+            ],
+            "ios": {
+              "supportsTablet": true
+            },
+            "android": {
+              "adaptiveIcon": {
+                "foregroundImage": "./assets/adaptive-icon.png",
+                "backgroundColor": "#FFFFFF"
+              }
+            },
+            "web": {
+              "favicon": "./assets/favicon.png"
+            }
+          }
+        }, null, 2),
+        file_type: 'json'
       }
     ];
   }
@@ -533,7 +567,7 @@ const styles = StyleSheet.create({
   private getNextTemplate(): TemplateFile[] {
     return [
       {
-        file_path: 'pages/index.js',
+        file_path: 'frontend/pages/index.js',
         content: `import Head from 'next/head'
 import { useState } from 'react'
 import styles from '../styles/Home.module.css'
@@ -551,7 +585,7 @@ export default function Home() {
 
       <main className={styles.main}>
         <h1 className={styles.title}>
-          Welcome to Velocity Preview!
+          Welcome to Your Next.js App!
         </h1>
 
         <p className={styles.description}>
@@ -596,7 +630,7 @@ export default function Home() {
         file_type: 'javascript'
       },
       {
-        file_path: 'package.json',
+        file_path: 'frontend/package.json',
         content: JSON.stringify({
           "name": "velocity-preview-nextjs",
           "version": "0.1.0",
@@ -628,10 +662,10 @@ export default function Home() {
   private getVueTemplate(): TemplateFile[] {
     return [
       {
-        file_path: 'src/App.vue',
+        file_path: 'frontend/src/App.vue',
         content: `<template>
   <div id="app">
-    <h1>Welcome to Velocity Preview!</h1>
+    <h1>Welcome to Your Vue App!</h1>
     <p>Your Vue.js development environment is ready</p>
     
     <div class="card">
@@ -721,7 +755,7 @@ button:hover {
   private getSvelteTemplate(): TemplateFile[] {
     return [
       {
-        file_path: 'src/App.svelte',
+        file_path: 'frontend/src/App.svelte',
         content: `<script>
   let count = 0;
   
@@ -731,7 +765,7 @@ button:hover {
 </script>
 
 <main>
-  <h1>Welcome to Velocity Preview!</h1>
+  <h1>Welcome to Your Svelte App!</h1>
   <p>Your Svelte development environment is ready</p>
   
   <div class="card">

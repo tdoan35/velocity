@@ -107,7 +107,8 @@
       "Bash(git check-ignore:*)",
       "Bash(fly deploy:*)",
       "Bash(fly auth:*)",
-      "Read(//Users/tythanhdoan/**)"
+      "Read(//Users/tythanhdoan/**)",
+      "mcp__supabase__get_anon_key"
     ],
     "defaultMode": "acceptEdits",
     "additionalDirectories": []
@@ -172,5 +173,6 @@
       }
     ]
   },
+  "disableAllHooks": false,
   "outputStyle": "tts-engineer"
 }

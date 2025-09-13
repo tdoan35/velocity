@@ -1,7 +1,32 @@
+/**
+ * @deprecated This store is DEPRECATED and should not be used in new development.
+ * 
+ * MIGRATION COMPLETE: All components have been migrated to useUnifiedEditorStore.
+ * This store is kept temporarily for backwards compatibility only.
+ * 
+ * Issues with this store:
+ * - Causes file sync issues between file explorer and preview container
+ * - Has known autosave race condition bugs
+ * - Uses outdated file structure (separate arrays vs unified Record)
+ * - Not compatible with the new orchestrator template file creation
+ * 
+ * Migration Guide:
+ * - Replace `useProjectEditorStore()` with `useUnifiedEditorStore()`
+ * - Change `frontendFiles`, `backendFiles`, `sharedFiles` to unified `files` structure
+ * - Update file path handling to use normalized paths (frontend/, backend/, shared/)
+ * - Replace `saveFile(path, content)` with `updateFileContent(path, content)` + `saveFile(path)`
+ * 
+ * REMOVAL PLANNED: This store will be removed in the next major version.
+ * 
+ * @see useUnifiedEditorStore for the replacement
+ * @see .docs/issues/CLAUDE-file-explorer-preview-sync-issue.md for context
+ */
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { supabase } from '../lib/supabase';
 import { getDefaultFrontendFiles, getDefaultBackendFiles, getDefaultSharedFiles } from '../utils/defaultProjectFiles';
+import { isFeatureEnabled, FSYNC_FLAGS } from '../utils/featureFlags';
+import { withRateLimitRetry, withFileOperationRetry } from '../utils/retryUtils';
 import type { FileTree, FileContent, ProjectData, SupabaseProject, BuildStatus, DeploymentStatus } from '../types/editor';
 
 export interface ProjectEditorState {
@@ -45,6 +70,44 @@ export interface ProjectEditorState {
   reset: () => void;
 }
 
+// Helper function to normalize file paths to canonical format
+function normalizeFilePath(originalPath: string): string {
+  // If already has a valid prefix, return as-is
+  if (originalPath.startsWith('frontend/') || 
+      originalPath.startsWith('backend/') || 
+      originalPath.startsWith('shared/')) {
+    return originalPath;
+  }
+
+  // Determine appropriate prefix based on file type and location
+  const lowerPath = originalPath.toLowerCase();
+  
+  // Backend files - SQL, server-related files
+  if (lowerPath.includes('.sql') || 
+      lowerPath.includes('supabase') || 
+      lowerPath.includes('migration') ||
+      lowerPath.includes('function') ||
+      lowerPath.includes('server')) {
+    return `backend/${originalPath}`;
+  }
+  
+  // Frontend files - common frontend patterns
+  if (lowerPath.includes('component') ||
+      lowerPath.includes('src/') ||
+      lowerPath.includes('.tsx') ||
+      lowerPath.includes('.jsx') ||
+      lowerPath.includes('app.') ||
+      lowerPath.includes('index.') ||
+      lowerPath.includes('package.json') ||
+      lowerPath.includes('tsconfig') ||
+      lowerPath.includes('tailwind')) {
+    return `frontend/${originalPath}`;
+  }
+  
+  // Default to shared for ambiguous files
+  return `shared/${originalPath}`;
+}
+
 const initialState = {
   projectId: null,
   projectData: null,
@@ -64,6 +127,9 @@ const initialState = {
   error: null,
 };
 
+/**
+ * @deprecated Use useUnifiedEditorStore instead. This store will be removed in the next major version.
+ */
 export const useProjectEditorStore = create<ProjectEditorState>()(
   devtools(
     (set, get) => ({
@@ -164,11 +230,43 @@ export const useProjectEditorStore = create<ProjectEditorState>()(
           // Load existing files if any (handle missing table gracefully)
           let files = null;
           try {
-            const { data } = await supabase
-              .from('project_files')
-              .select('*')
-              .eq('project_id', projectId);
-            files = data;
+            // Check if we should use new RPC functions
+            const useRPC = await isFeatureEnabled(FSYNC_FLAGS.USE_RPC);
+            console.log('[ProjectEditor] Using RPC path:', useRPC);
+            
+            if (useRPC) {
+              // Use the new list_current_files RPC function
+              const { data, error } = await supabase.rpc('list_current_files', {
+                project_uuid: projectId
+              });
+              
+              if (error) {
+                console.log('RPC list_current_files failed, falling back to direct query:', error);
+                // Fallback to direct query
+                const fallbackResult = await supabase
+                  .from('project_files')
+                  .select('*')
+                  .eq('project_id', projectId)
+                  .eq('is_current_version', true);
+                files = fallbackResult.data;
+              } else {
+                // Convert RPC response to expected format
+                files = data?.map((file: any) => ({
+                  ...file,
+                  project_id: projectId,
+                  path: file.file_path,
+                  type: file.file_type,
+                  // RPC already filters current versions
+                })) || [];
+              }
+            } else {
+              // Legacy path - direct database operations  
+              const { data } = await supabase
+                .from('project_files')
+                .select('*')
+                .eq('project_id', projectId);
+              files = data;
+            }
           } catch (err: any) {
             console.log('project_files table not found, will create default files');
             files = null;
@@ -197,9 +295,9 @@ export const useProjectEditorStore = create<ProjectEditorState>()(
             const allDefaultFiles = { ...frontendFiles, ...backendFiles, ...sharedFiles };
             const fileInserts = Object.values(allDefaultFiles).map(file => ({
               project_id: projectId,
-              path: file.path,
+              file_path: file.path,
               content: file.content,
-              type: file.type === 'typescript' ? 'typescript' : 
+              file_type: file.type === 'typescript' ? 'typescript' : 
                     file.type === 'javascript' ? 'javascript' :
                     file.type === 'json' ? 'json' :
                     file.type === 'sql' ? 'sql' :
@@ -225,22 +323,41 @@ export const useProjectEditorStore = create<ProjectEditorState>()(
           } else {
             // Load existing files
             files.forEach((file) => {
+              // Apply path normalization for legacy files
+              const normalizedPath = normalizeFilePath(file.path);
+              const shouldUpdatePath = normalizedPath !== file.path;
+              
               const fileContent: FileContent = {
-                path: file.path,
+                path: normalizedPath, // Use normalized path in memory
                 content: file.content,
                 type: file.type,
                 lastModified: new Date(file.updated_at),
+                version: file.version,
+                contentHash: file.content_hash,
               };
 
-              if (file.path.startsWith('frontend/')) {
-                frontendFiles[file.path] = fileContent;
-              } else if (file.path.startsWith('backend/')) {
-                backendFiles[file.path] = fileContent;
+              if (normalizedPath.startsWith('frontend/')) {
+                frontendFiles[normalizedPath] = fileContent;
+              } else if (normalizedPath.startsWith('backend/')) {
+                backendFiles[normalizedPath] = fileContent;
               } else {
-                sharedFiles[file.path] = fileContent;
+                sharedFiles[normalizedPath] = fileContent;
+              }
+              
+              // Log path normalization for debugging
+              if (shouldUpdatePath) {
+                console.log(`[ProjectEditor] Normalized path: ${file.path} -> ${normalizedPath}`);
               }
             });
           }
+
+          // Log file distribution for debugging
+          console.log('[ProjectEditor] File distribution:', {
+            frontend: Object.keys(frontendFiles).length,
+            backend: Object.keys(backendFiles).length,
+            shared: Object.keys(sharedFiles).length,
+            totalFiles: files?.length || 0
+          });
 
           // Set initial active file if none exists
           const allFiles = { ...frontendFiles, ...backendFiles, ...sharedFiles };
@@ -307,34 +424,79 @@ export const useProjectEditorStore = create<ProjectEditorState>()(
 
           const generatedFiles = await response.json();
 
-          // Save files to database and update store
-          const filePromises = Object.entries(generatedFiles).map(async ([path, content]) => {
-            const fileType = path.endsWith('.tsx') || path.endsWith('.ts') ? 'typescript' :
-                            path.endsWith('.js') || path.endsWith('.jsx') ? 'javascript' :
-                            path.endsWith('.sql') ? 'sql' :
-                            path.endsWith('.json') ? 'json' : 'text';
+          // Check if we should use bulk RPC functions
+          const useBulkRPC = await isFeatureEnabled(FSYNC_FLAGS.BULK_GENERATION);
+          
+          if (useBulkRPC) {
+            // Use bulk RPC function for atomic operation
+            const filesArray = Object.entries(generatedFiles).map(([path, content]) => {
+              const fileType = path.endsWith('.tsx') || path.endsWith('.ts') ? 'typescript' :
+                              path.endsWith('.js') || path.endsWith('.jsx') ? 'javascript' :
+                              path.endsWith('.sql') ? 'sql' :
+                              path.endsWith('.json') ? 'json' :
+                              path.endsWith('.md') ? 'markdown' : 'text';
 
-            await supabase
-              .from('project_files')
-              .upsert({
-                project_id: projectId,
-                path,
+              return {
+                file_path: path,
+                file_type: fileType,
                 content: content as string,
-                type: fileType,
-              });
+              };
+            });
 
-            return {
-              path,
+            const { data, error } = await withRateLimitRetry(
+              () => supabase.rpc('bulk_upsert_project_files', {
+                project_uuid: projectId,
+                files: filesArray
+              }),
+              'Bulk file creation'
+            );
+
+            if (error) {
+              throw new Error(`Bulk file creation failed: ${error.message}`);
+            }
+
+            // Convert bulk response to savedFiles format
+            const savedFiles = data.files.map((file: any) => ({
+              path: file.file_path,
               content: {
-                path,
-                content: content as string,
-                type: fileType,
+                path: file.file_path,
+                content: filesArray.find(f => f.file_path === file.file_path)?.content || '',
+                type: filesArray.find(f => f.file_path === file.file_path)?.file_type || 'text',
                 lastModified: new Date(),
+                version: file.version,
+                contentHash: file.content_hash,
               } as FileContent,
-            };
-          });
+            }));
+          } else {
+            // Legacy path - individual operations
+            const filePromises = Object.entries(generatedFiles).map(async ([path, content]) => {
+              const fileType = path.endsWith('.tsx') || path.endsWith('.ts') ? 'typescript' :
+                              path.endsWith('.js') || path.endsWith('.jsx') ? 'javascript' :
+                              path.endsWith('.sql') ? 'sql' :
+                              path.endsWith('.json') ? 'json' : 'text';
 
-          const savedFiles = await Promise.all(filePromises);
+              await supabase
+                .from('project_files')
+                .upsert({
+                  project_id: projectId,
+                  file_path: path,
+                  content: content as string,
+                  file_type: fileType,
+                });
+
+              return {
+                path,
+                content: {
+                  path,
+                  content: content as string,
+                  type: fileType,
+                  lastModified: new Date(),
+                } as FileContent,
+              };
+            });
+
+            var savedFiles = await Promise.all(filePromises);
+          }
 
           // Organize files by directory
           const frontendFiles = { ...get().frontendFiles };
@@ -445,18 +607,20 @@ export const useProjectEditorStore = create<ProjectEditorState>()(
       },
 
       openFile: (filePath: string) => {
+        const normalizedPath = normalizeFilePath(filePath);
         const { openTabs } = get();
-        if (!openTabs.includes(filePath)) {
-          set({ openTabs: [...openTabs, filePath], activeFile: filePath });
+        if (!openTabs.includes(normalizedPath)) {
+          set({ openTabs: [...openTabs, normalizedPath], activeFile: normalizedPath });
         } else {
-          set({ activeFile: filePath });
+          set({ activeFile: normalizedPath });
         }
       },
 
       closeFile: (filePath: string) => {
+        const normalizedPath = normalizeFilePath(filePath);
         const { openTabs, activeFile } = get();
-        const newTabs = openTabs.filter(tab => tab !== filePath);
-        const newActiveFile = activeFile === filePath ? 
+        const newTabs = openTabs.filter(tab => tab !== normalizedPath);
+        const newActiveFile = activeFile === normalizedPath ? 
           (newTabs.length > 0 ? newTabs[newTabs.length - 1] : null) : 
           activeFile;
         
@@ -464,48 +628,120 @@ export const useProjectEditorStore = create<ProjectEditorState>()(
       },
 
       saveFile: async (filePath: string, content: string) => {
-        const { projectId } = get();
+        const { projectId, frontendFiles, backendFiles, sharedFiles } = get();
         if (!projectId) return;
 
+        // Apply path normalization
+        const normalizedPath = normalizeFilePath(filePath);
+
         try {
-          // Save to database
-          await supabase
-            .from('project_files')
-            .upsert({
-              project_id: projectId,
-              path: filePath,
+          // Determine file type from extension
+          const fileType = normalizedPath.endsWith('.tsx') || normalizedPath.endsWith('.ts') ? 'typescript' :
+                          normalizedPath.endsWith('.js') || normalizedPath.endsWith('.jsx') ? 'javascript' :
+                          normalizedPath.endsWith('.sql') ? 'sql' :
+                          normalizedPath.endsWith('.json') ? 'json' :
+                          normalizedPath.endsWith('.md') ? 'markdown' :
+                          normalizedPath.endsWith('.toml') ? 'toml' : 'text';
+
+          // Check if we should use new RPC functions
+          const useRPC = await isFeatureEnabled(FSYNC_FLAGS.USE_RPC);
+          
+          if (useRPC) {
+            // Get current file version for optimistic concurrency control
+            const currentFiles = { ...frontendFiles, ...backendFiles, ...sharedFiles };
+            const existingFile = currentFiles[normalizedPath];
+            const expectedVersion = existingFile?.version;
+
+            // Use the new RPC function with retry logic
+            const { data, error } = await withFileOperationRetry(
+              () => supabase.rpc('upsert_project_file', {
+                project_uuid: projectId,
+                p_file_path: normalizedPath,
+                p_content: content,
+                p_file_type: fileType,
+                expected_version: expectedVersion || null
+              }),
+              normalizedPath
+            );
+
+            if (error) {
+              console.error('RPC upsert_project_file failed:', error);
+              throw new Error(`Failed to save file: ${error.message}`);
+            }
+
+            // Update local state with RPC response data
+            const fileContent: FileContent = {
+              path: normalizedPath,
               content,
-            });
+              type: fileType,
+              lastModified: new Date(data.updated_at),
+              version: data.version,
+              contentHash: data.content_hash,
+            };
 
-          // Update local state
-          const fileContent: FileContent = {
-            path: filePath,
-            content,
-            type: filePath.split('.').pop() || 'text',
-            lastModified: new Date(),
-          };
-
-          if (filePath.startsWith('frontend/')) {
-            set(state => ({
-              frontendFiles: {
-                ...state.frontendFiles,
-                [filePath]: fileContent,
-              },
-            }));
-          } else if (filePath.startsWith('backend/')) {
-            set(state => ({
-              backendFiles: {
-                ...state.backendFiles,
-                [filePath]: fileContent,
-              },
-            }));
+            if (normalizedPath.startsWith('frontend/')) {
+              set(state => ({
+                frontendFiles: {
+                  ...state.frontendFiles,
+                  [normalizedPath]: fileContent,
+                },
+              }));
+            } else if (normalizedPath.startsWith('backend/')) {
+              set(state => ({
+                backendFiles: {
+                  ...state.backendFiles,
+                  [normalizedPath]: fileContent,
+                },
+              }));
+            } else {
+              set(state => ({
+                sharedFiles: {
+                  ...state.sharedFiles,
+                  [normalizedPath]: fileContent,
+                },
+              }));
+            }
           } else {
-            set(state => ({
-              sharedFiles: {
-                ...state.sharedFiles,
-                [filePath]: fileContent,
-              },
-            }));
+            // Legacy path - direct database operations
+            await supabase
+              .from('project_files')
+              .upsert({
+                project_id: projectId,
+                file_path: normalizedPath,
+                content,
+                file_type: fileType,
+              });
+
+            // Update local state
+            const fileContent: FileContent = {
+              path: normalizedPath,
+              content,
+              type: fileType,
+              lastModified: new Date(),
+            };
+
+            if (normalizedPath.startsWith('frontend/')) {
+              set(state => ({
+                frontendFiles: {
+                  ...state.frontendFiles,
+                  [normalizedPath]: fileContent,
+                },
+              }));
+            } else if (normalizedPath.startsWith('backend/')) {
+              set(state => ({
+                backendFiles: {
+                  ...state.backendFiles,
+                  [normalizedPath]: fileContent,
+                },
+              }));
+            } else {
+              set(state => ({
+                sharedFiles: {
+                  ...state.sharedFiles,
+                  [normalizedPath]: fileContent,
+                },
+              }));
+            }
           }
         } catch (error: any) {
           set({ error: error.message });
@@ -514,42 +750,68 @@ export const useProjectEditorStore = create<ProjectEditorState>()(
       },
 
       createFile: async (filePath: string, content = '') => {
-        await get().saveFile(filePath, content);
-        get().openFile(filePath);
+        const normalizedPath = normalizeFilePath(filePath);
+        await get().saveFile(normalizedPath, content);
+        get().openFile(normalizedPath);
       },
 
       deleteFile: async (filePath: string) => {
-        const { projectId } = get();
+        const { projectId, frontendFiles, backendFiles, sharedFiles } = get();
         if (!projectId) return;
 
+        // Apply path normalization
+        const normalizedPath = normalizeFilePath(filePath);
+
         try {
-          // Delete from database
-          await supabase
-            .from('project_files')
-            .delete()
-            .eq('project_id', projectId)
-            .eq('path', filePath);
+          // Check if we should use new RPC functions
+          const useRPC = await isFeatureEnabled(FSYNC_FLAGS.USE_RPC);
+          
+          if (useRPC) {
+            // Get current file version for optimistic concurrency control
+            const currentFiles = { ...frontendFiles, ...backendFiles, ...sharedFiles };
+            const existingFile = currentFiles[normalizedPath];
+            const expectedVersion = existingFile?.version;
+
+            // Use the new RPC function
+            const { error } = await supabase.rpc('delete_project_file', {
+              project_uuid: projectId,
+              p_file_path: normalizedPath,
+              expected_version: expectedVersion || null
+            });
+
+            if (error) {
+              console.error('RPC delete_project_file failed:', error);
+              throw new Error(`Failed to delete file: ${error.message}`);
+            }
+          } else {
+            // Legacy path - direct database operations
+            await supabase
+              .from('project_files')
+              .delete()
+              .eq('project_id', projectId)
+              .eq('file_path', normalizedPath);
+          }
 
           // Remove from local state
-          if (filePath.startsWith('frontend/')) {
+          if (normalizedPath.startsWith('frontend/')) {
             set(state => {
-              const { [filePath]: deleted, ...rest } = state.frontendFiles;
+              const { [normalizedPath]: deleted, ...rest } = state.frontendFiles;
               return { frontendFiles: rest };
             });
-          } else if (filePath.startsWith('backend/')) {
+          } else if (normalizedPath.startsWith('backend/')) {
             set(state => {
-              const { [filePath]: deleted, ...rest } = state.backendFiles;
+              const { [normalizedPath]: deleted, ...rest } = state.backendFiles;
               return { backendFiles: rest };
             });
           } else {
             set(state => {
-              const { [filePath]: deleted, ...rest } = state.sharedFiles;
+              const { [normalizedPath]: deleted, ...rest } = state.sharedFiles;
               return { sharedFiles: rest };
             });
           }
 
           // Close file if open
-          get().closeFile(filePath);
+          get().closeFile(normalizedPath);
         } catch (error: any) {
           set({ error: error.message });
           throw error;

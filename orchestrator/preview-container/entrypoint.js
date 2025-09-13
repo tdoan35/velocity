@@ -23,12 +23,48 @@ const { v4: uuidv4 } = require('uuid');
 const { detectProjectType, getDevCommand } = require('./detect-project-type');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const net = require('net');
+const { logger, metrics } = require('./logger');
+
+// Retry utility with exponential backoff
+async function withRetry(operation, options = {}) {
+  const {
+    maxAttempts = 3,
+    baseDelay = 1000,
+    maxDelay = 10000,
+    backoffFactor = 2,
+    operationName = 'Operation'
+  } = options;
+
+  let lastError;
+  
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      
+      if (attempt === maxAttempts) {
+        throw lastError;
+      }
+      
+      const delay = Math.min(baseDelay * Math.pow(backoffFactor, attempt - 1), maxDelay);
+      console.warn(`${operationName} failed (attempt ${attempt}/${maxAttempts}): ${error.message}. Retrying in ${delay}ms...`);
+      
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw lastError;
+}
 
 // Configuration from environment variables
 const PROJECT_ID = process.env.PROJECT_ID;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Phase 2: Snapshot hydration support
+const SNAPSHOT_URL = process.env.SNAPSHOT_URL;
+const REALTIME_TOKEN = process.env.REALTIME_TOKEN;
 const PORT = process.env.PORT || 8080;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
@@ -52,28 +88,82 @@ const PROJECT_DIR = '/app/project';
  */
 async function initialize() {
   try {
+    // Start total initialization timer
+    metrics.startTimer('container_init_total');
+    
     // Start health check server immediately
     startHealthServer();
 
-    console.log(`🚀 Velocity Preview Container starting for project: ${PROJECT_ID}`);
+    logger.info('Velocity Preview Container starting', {
+      project_id: PROJECT_ID,
+      container_id: process.env.FLY_MACHINE_ID,
+      region: process.env.FLY_REGION,
+      snapshot_mode: !!SNAPSHOT_URL
+    });
+    
+    logger.event('container_start', {
+      has_snapshot_url: !!SNAPSHOT_URL,
+      has_realtime_token: !!REALTIME_TOKEN,
+      has_service_role_key: !!SUPABASE_SERVICE_ROLE_KEY
+    });
     console.log(`📊 Environment: ${NODE_ENV}`);
     
     // Validate required environment variables
-    if (!PROJECT_ID || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      throw new Error('Missing required environment variables: PROJECT_ID, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY');
+    if (!PROJECT_ID || !SUPABASE_URL) {
+      throw new Error('Missing required environment variables: PROJECT_ID, SUPABASE_URL');
     }
 
-    // Initialize Supabase client
+    // Phase 2: Enhanced validation for snapshot hydration
+    const useSnapshotHydration = !!SNAPSHOT_URL;
+    if (useSnapshotHydration) {
+      console.log('📸 Snapshot hydration mode enabled');
+      if (!REALTIME_TOKEN) {
+        console.warn('⚠️ Snapshot mode enabled but no realtime token provided, using anon key');
+      }
+    } else {
+      console.log('📁 Legacy file sync mode');
+      if (!SUPABASE_SERVICE_ROLE_KEY) {
+        throw new Error('Missing required environment variable: SUPABASE_SERVICE_ROLE_KEY (required for legacy mode)');
+      }
+    }
+
+    // Initialize Supabase client with appropriate credentials
     console.log('🔌 Connecting to Supabase...');
-    supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    let supabaseKey;
+    if (useSnapshotHydration && REALTIME_TOKEN) {
+      // Decode the realtime token
+      try {
+        const tokenData = JSON.parse(Buffer.from(REALTIME_TOKEN, 'base64').toString());
+        supabaseKey = tokenData.token;
+        console.log('✅ Using scoped realtime token for project:', tokenData.scope);
+      } catch (error) {
+        console.warn('⚠️ Failed to decode realtime token, using anon key:', error.message);
+        supabaseKey = SUPABASE_ANON_KEY;
+      }
+    } else if (useSnapshotHydration) {
+      // Snapshot mode but no realtime token
+      supabaseKey = SUPABASE_ANON_KEY;
+      console.log('📸 Using anon key in snapshot mode');
+    } else {
+      // Legacy mode
+      supabaseKey = SUPABASE_SERVICE_ROLE_KEY;
+      console.log('🔑 Using service role key in legacy mode');
+    }
+    
+    supabase = createClient(SUPABASE_URL, supabaseKey);
     
     // Create project directory
     await fs.ensureDir(PROJECT_DIR);
     console.log(`📁 Created project directory: ${PROJECT_DIR}`);
 
-    // Initial file sync
-    console.log('📥 Performing initial file sync...');
-    await performInitialFileSync();
+    // Initial file sync - use snapshot if available, otherwise legacy
+    if (useSnapshotHydration) {
+      console.log('📸 Performing snapshot hydration...');
+      await hydrateFromSnapshot();
+    } else {
+      console.log('📥 Performing legacy file sync...');
+      await performInitialFileSync();
+    }
 
     // Start the development server
     console.log('🛠️ Starting development server...');
@@ -91,6 +181,121 @@ async function initialize() {
     console.error('❌ Initialization failed:', error);
     healthStatus = 'error';
     process.exit(1);
+  }
+}
+
+/**
+ * Hydrate project files from snapshot ZIP
+ * Phase 2: Snapshot hydration implementation
+ */
+async function hydrateFromSnapshot() {
+  try {
+    metrics.startTimer('snapshot_hydration_total');
+    
+    if (!SNAPSHOT_URL) {
+      logger.info('No snapshot URL provided, falling back to legacy sync');
+      logger.event('hydration_fallback', { reason: 'no_snapshot_url' });
+      await performInitialFileSync();
+      return;
+    }
+    
+    logger.event('hydration_start', { snapshot_url: SNAPSHOT_URL });
+
+    console.log('📥 Downloading snapshot from:', SNAPSHOT_URL);
+    
+    // Download the snapshot with retry logic
+    const { zipData } = await withRetry(async () => {
+      const response = await axios.get(SNAPSHOT_URL, {
+        responseType: 'arraybuffer',
+        timeout: 30000, // 30 second timeout for large snapshots
+        maxContentLength: 100 * 1024 * 1024, // 100MB max
+      });
+
+      if (response.status !== 200) {
+        throw new Error(`Failed to download snapshot: HTTP ${response.status}`);
+      }
+
+      const zipData = Buffer.from(response.data);
+      console.log(`✅ Snapshot downloaded: ${zipData.length} bytes`);
+      return { zipData };
+    }, {
+      maxAttempts: 5,
+      baseDelay: 2000,
+      maxDelay: 30000,
+      operationName: 'Snapshot download'
+    });
+
+    // Extract the ZIP using JSZip
+    console.log('📦 Extracting snapshot...');
+    const zip = new JSZip();
+    const zipContents = await zip.loadAsync(zipData);
+
+    let extractedFiles = 0;
+    const entries = Object.entries(zipContents.files);
+    
+    for (const [filename, zipEntry] of entries) {
+      // Skip directories
+      if (zipEntry.dir) {
+        continue;
+      }
+
+      // Get file content
+      const content = await zipEntry.async('text');
+      const localPath = path.join(PROJECT_DIR, filename);
+      
+      // Ensure directory exists
+      await fs.ensureDir(path.dirname(localPath));
+      
+      // Write file
+      await fs.writeFile(localPath, content, 'utf8');
+      extractedFiles++;
+      
+      console.log(`✅ Extracted: ${filename} (${content.length} bytes)`);
+    }
+
+    const hydrationTime = metrics.endTimer('snapshot_hydration_total');
+    metrics.setGauge('files_extracted', extractedFiles, 'count');
+    
+    logger.info('Snapshot hydration complete', {
+      files_extracted: extractedFiles,
+      hydration_time_ms: hydrationTime,
+      snapshot_size_mb: Math.round(zipData.length / 1024 / 1024 * 100) / 100
+    });
+    
+    logger.event('hydration_success', {
+      extracted_files: extractedFiles,
+      duration_ms: hydrationTime
+    });
+
+    // Verify critical files exist
+    const criticalFiles = ['package.json'];
+    let missingCriticalFiles = 0;
+    for (const file of criticalFiles) {
+      const exists = await fs.pathExists(path.join(PROJECT_DIR, file));
+      if (!exists) {
+        logger.warn(`Critical file missing after extraction: ${file}`, { file });
+        missingCriticalFiles++;
+      }
+    }
+    
+    metrics.setGauge('missing_critical_files', missingCriticalFiles, 'count');
+
+  } catch (error) {
+    const hydrationTime = metrics.endTimer('snapshot_hydration_total');
+    logger.error('Snapshot hydration failed', error, { 
+      duration_ms: hydrationTime,
+      fallback_action: 'legacy_sync'
+    });
+    
+    logger.event('hydration_failure', {
+      error_message: error.message,
+      duration_ms: hydrationTime
+    });
+    
+    metrics.incrementCounter('hydration_failures');
+    
+    // Fall back to legacy sync on failure
+    await performInitialFileSync();
   }
 }
 

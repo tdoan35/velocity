@@ -6,7 +6,10 @@ export declare class FlyIOService {
     /**
      * Create a new Fly machine for preview container
      */
-    createMachine(projectId: string, tierName?: string, customConfig?: Partial<FlyMachineConfig>, sessionId?: string): Promise<CreateMachineResponse>;
+    createMachine(projectId: string, tierName?: string, customConfig?: Partial<FlyMachineConfig> & {
+        snapshotUrl?: string;
+        realtimeToken?: string;
+    }, sessionId?: string): Promise<CreateMachineResponse>;
     /**
      * Destroy a Fly machine with retry logic and verification
      */

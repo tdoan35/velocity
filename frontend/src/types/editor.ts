@@ -3,6 +3,8 @@ export interface FileContent {
   content: string;
   type: string;
   lastModified: Date;
+  version?: number;
+  contentHash?: string;
 }
 
 export interface FileTree {

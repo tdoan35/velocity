@@ -1,5 +1,4 @@
 import { Button } from '../ui/button';
-import { Badge } from '../ui/badge';
 import { 
   Smartphone, 
   Share2, 
@@ -52,7 +51,6 @@ interface PreviewHeaderProps {
 
 export function PreviewHeader({
   mode,
-  status,
   selectedDevice = 'mobile',
   onDeviceChange,
   isPreviewRunning = false,
@@ -67,27 +65,6 @@ export function PreviewHeader({
   isStuck = false,
   sessionDisabled = false
 }: PreviewHeaderProps) {
-  
-  // Render status dot based on status
-  const renderStatusDot = () => {
-    const dotClass = "w-2 h-2 rounded-full";
-    
-    switch (status) {
-      case 'connecting':
-        return <div className={`${dotClass} bg-yellow-500 animate-pulse`} title="Connecting..." />;
-      case 'retrying':
-        return <div className={`${dotClass} bg-orange-500`} title="Connection Issue" />;
-      case 'error':
-        return <div className={`${dotClass} bg-red-500`} title="Error" />;
-      case 'connected':
-        return <div className={`${dotClass} bg-green-500`} title="Connected" />;
-      case 'preparing':
-        return <div className={`${dotClass} bg-blue-500 animate-pulse`} title="Initializing Preview" />;
-      default:
-        return <div className={`${dotClass} bg-gray-400`} title="Idle" />;
-    }
-  };
-
   const getDeviceIcon = () => {
     switch (selectedDevice) {
       case 'tablet':
@@ -137,8 +114,6 @@ export function PreviewHeader({
               {mode === 'live' ? 'Live Mode' : 'Demo Mode'}
             </span>
           </div>
-          
-          {renderStatusDot()}
         </div>
 
         <div className="flex items-center gap-2">
