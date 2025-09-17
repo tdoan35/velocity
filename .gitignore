@@ -27,6 +27,7 @@ node_modules/
 
 # MCPs
 .mcp.json
+.mcp.json.example
 settings.json
 .playwright-mcp
 settings.local.json

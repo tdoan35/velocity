@@ -122,56 +122,6 @@
     "github.com/upstash/context7-mcp"
   ],
   "hooks": {
-    "PreToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "uv run ~/.claude/hooks/voice_notifications/voice_handler.py --hook PreToolUse"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "uv run ~/.claude/hooks/voice_notifications/voice_handler.py --hook PostToolUse"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "uv run ~/.claude/hooks/voice_notifications/voice_handler.py --hook Stop"
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "uv run ~/.claude/hooks/voice_notifications/voice_handler.py --hook UserPromptSubmit"
-          }
-        ]
-      }
-    ],
-    "Notification": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "uv run ~/.claude/hooks/voice_notifications/voice_handler.py --hook Notification"
-          }
-        ]
-      }
-    ]
   },
   "disableAllHooks": false,
   "outputStyle": "tts-engineer"
