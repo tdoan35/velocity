@@ -31,16 +31,16 @@ Velocity is built on a distributed, cloud-first architecture with three main dec
 └────────┼────────┘
          │
     ┌────┼──────────────────────────┐
-    │    │                         │
-    │    ▼                         │
+    │    │                          │
+    │    ▼                          │
 ┌───┴─────────────────────────────────────────────────────────────────┐
-│                    SUPABASE PLATFORM                               │
+│                    SUPABASE PLATFORM                                │
 │                                                                     │
 │  ┌─────────────────┐              ┌─────────────────────────────┐   │
 │  │ Backend Logic   │              │      Data & State           │   │
 │  │                 │              │                             │   │
 │  │ ┌─────────────┐ │              │ ┌─────────────────────────┐ │   │
-│  │ │Edge Functions│◄┼──────────────┼─┤PostgreSQL (with pgvector)││   │
+│  │ │Edge Function│◄┼──────────────┼─┤PostgreSQL (w pgvector)  │ │   │
 │  │ │   (Deno)    │ │              │ └─────────────────────────┘ │   │
 │  │ └──────┬──────┘ │              │                             │   │
 │  └────────┼────────┘              │ ┌─────────────────────────┐ │   │
@@ -57,9 +57,9 @@ Velocity is built on a distributed, cloud-first architecture with three main dec
 │           │                       └─────────────────────────────┘   │
 └───────────┼─────────────────────────────────────────────────────────┘
             │
-         ┌──┼─────────┐
-         │  │         │
-         │  ▼         │
+         ┌──┼──────────┐
+         │  │          │
+         │  ▼          │
 ┌────────┴─────────────┴────────┐
 │          Fly.io               │
 │    ┌──────────────────┐       │
@@ -70,15 +70,15 @@ Velocity is built on a distributed, cloud-first architecture with three main dec
                │
                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                      EXTERNAL SERVICES                             │
+│                      EXTERNAL SERVICES                              │
 │                                                                     │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────┐ │
-│  │ Anthropic       │  │   GitHub API    │  │     EAS Build       │ │
-│  │  Claude AI      │  │                 │  │                     │ │
-│  └─────────▲───────┘  └─────────▲───────┘  └─────────────────────┘ │
-│            │                    │                                  │
-│  ┌─────────┴─────────────────────┴──────────────────────────────┐   │
-│  │        Preview Environment (Appetize.io/Fly.io)             │   │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────┐  │
+│  │ Anthropic       │  │   GitHub API    │  │     EAS Build       │  │
+│  │  Claude AI      │  │                 │  │                     │  │
+│  └─────────▲───────┘  └─────────▲───────┘  └─────────────────────┘  │
+│            │                    │                                   │
+│  ┌─────────┴────────────────────┴───────────────────────────────┐   │
+│  │        Preview Environment (Fly.io)                          │   │
 │  │                                                              │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────┘
@@ -110,7 +110,6 @@ Velocity is built on a distributed, cloud-first architecture with three main dec
 velocity/
 ├── .docs/                  # Project documentation
 ├── .github/               # CI/CD workflows
-├── .taskmaster/           # Task management configuration
 ├── frontend/              # React SPA source code
 ├── orchestrator/          # Node.js preview service
 ├── supabase/             # Backend configuration and functions
