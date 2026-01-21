@@ -124,7 +124,6 @@ velocity/
 - Node.js 18+
 - Deno (for Supabase Edge Functions)
 - Supabase CLI
-- Taskmaster CLI
 
 ### Environment Configuration
 
@@ -135,11 +134,6 @@ velocity/
    OPENAI_API_KEY=your_openai_key  # Optional fallback
    SUPABASE_URL=your_supabase_url
    SUPABASE_ANON_KEY=your_supabase_anon_key
-   ```
-
-2. Configure Taskmaster AI models:
-   ```bash
-   task-master models --setup
    ```
 
 ### Local Development
@@ -169,40 +163,6 @@ velocity/
    npm run dev
    ```
 
-## Task Management
-
-This project uses [Taskmaster](https://github.com/taskmaster-ai/taskmaster) for AI-powered task management:
-
-### Common Commands
-
-```bash
-# List current tasks
-task-master list
-
-# Show next available task
-task-master next
-
-# View task details
-task-master show <id>
-
-# Break down complex tasks
-task-master expand --id=<id> --research --force
-
-# Update task status
-task-master set-status --id=<id> --status=done
-
-# Add new tasks
-task-master add-task --prompt="<description>" --research
-```
-
-### Development Workflow
-
-1. Start with `task-master list` to see current tasks
-2. Use `task-master next` to identify dependency-ready tasks
-3. Get implementation details with `task-master show <id>`
-4. Break down complex tasks with `task-master expand`
-5. Log progress with `task-master update-subtask`
-6. Mark completed with `task-master set-status`
 
 ## Key Features
 
@@ -223,7 +183,7 @@ task-master add-task --prompt="<description>" --research
 
 ## Contributing
 
-This is a Taskmaster-managed project currently in the initial implementation phase. Development follows a structured, task-driven approach with AI assistance.
+This is a project currently in the initial implementation phase. Development follows a structured approach.
 
 ## Documentation
 

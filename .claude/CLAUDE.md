@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Velocity** is an AI-powered app development platform that transforms natural language descriptions into production-ready React / React Native applications. This is a Taskmaster-managed project currently in the planning/setup phase.
+**Velocity** is an AI-powered app development platform that transforms natural language descriptions into production-ready React / React Native applications. This project is currently in the planning/setup phase.
 
 **Technology Stack**:
 
@@ -17,7 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-This project is in the **initial implementation phase**. Development follows a structured task-driven approach managed by Taskmaster. There are 12 major high-complexity tasks (scores 6-9) identified for implementation.
+This project is in the **initial implementation phase**.
 
 ## Development Commands
 
@@ -26,45 +26,14 @@ This project is in the **initial implementation phase**. Development follows a s
 - **List edge functions**: Use `npx supabase functions list` instead of the MCP tool `mcp__supabase__list_edge_functions` as it exceeds token limits
 - **Deploy edge functions**: Use `npx supabase functions deploy <function-name>` instead of the MCP tool `mcp__supabase__deploy_edge_function` as it fails with internal errors
 
-### Taskmaster Management
-
-- **List tasks**: `task-master list`
-- **Show next task**: `task-master next`
-- **View task details**: `task-master show <id>`
-- **Break down complex tasks**: `task-master expand --id=<id> --research --force`
-- **Update task status**: `task-master set-status --id=<id> --status=done`
-- **Add new tasks**: `task-master add-task --prompt="<description>" --research`
-- **Update tasks with changes**: `task-master update --from=<id> --prompt="<changes>" --research`
-
-### Configuration
-
-- **View/set AI models**: `task-master models`
-- **Interactive setup**: `task-master models --setup`
-- **Analyze task complexity**: `task-master analyze-complexity --research`
-- **View complexity report**: `task-master complexity-report`
 
 ## Key Configuration Files
 
-- **`.taskmaster/config.json`**: AI model configuration (Claude Code, Perplexity, fallback models)
 - **`.env.example`**: API key template for AI providers (Anthropic, OpenAI, etc.)
-- **`.taskmaster/tasks/tasks.json`**: Main tasks file (28,093 tokens - very detailed)
-- **`.taskmaster/reports/task-complexity-report.json`**: Task complexity analysis
-- **`.taskmaster/templates/velocity_prd.md`**: Product Requirements Document
-
-## Development Workflow
-
-1. **Start coding sessions**: Run `task-master list` to see current tasks
-2. **Identify next work**: Use `task-master next` for dependency-ready tasks
-3. **Get task details**: Use `task-master show <id>` for implementation requirements
-4. **Break down complex tasks**: Use `task-master expand --id=<id> --research --force`
-5. **Log progress**: Use `task-master update-subtask --id=<id> --prompt="<findings>"`
-6. **Mark completed**: Use `task-master set-status --id=<id> --status=done`
 
 ## Important Notes
 
 - **No source code exists yet** - this is a planning/task definition phase
-- **Use the `--research` flag** extensively for AI-powered research and task generation
-- **All tasks are high complexity** (6-9 scores) - expect detailed breakdown requirements
 - **API keys required**: Set up `.env` file with Anthropic and other provider keys
 - **Tagged task lists**: Default "master" tag context, create feature branches as needed
 
