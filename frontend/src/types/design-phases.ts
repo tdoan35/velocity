@@ -1,0 +1,248 @@
+/**
+ * TypeScript Types for Design Phases
+ * Maps to database schema in supabase/migrations/20260125000001_create_design_phases_tables.sql
+ */
+
+// ============================================================================
+// Phase Names & Status
+// ============================================================================
+
+export type PhaseName =
+  | 'product-vision'
+  | 'product-roadmap'
+  | 'data-model'
+  | 'design-system'
+  | 'application-shell'
+  | 'section-details'
+  | 'export';
+
+export type SectionStatus = 'pending' | 'in-progress' | 'completed';
+
+// ============================================================================
+// Phase 1: Product Vision
+// ============================================================================
+
+export interface ProductProblem {
+  problem: string;
+  solution: string;
+}
+
+export interface ProductFeature {
+  title: string;
+  description: string;
+}
+
+export interface ProductOverview {
+  name: string;
+  description: string;
+  problems: ProductProblem[];
+  features: ProductFeature[];
+}
+
+// ============================================================================
+// Phase 2: Product Roadmap
+// ============================================================================
+
+export interface RoadmapSection {
+  id: string;
+  title: string;
+  description: string;
+  order: number;
+}
+
+export interface ProductRoadmap {
+  sections: RoadmapSection[];
+}
+
+// ============================================================================
+// Phase 3: Data Model
+// ============================================================================
+
+export interface DataModelField {
+  name: string;
+  type: string;
+  required: boolean;
+  description?: string;
+}
+
+export interface DataModelEntity {
+  name: string;
+  fields: DataModelField[];
+}
+
+export interface DataModelRelationship {
+  from: string;
+  to: string;
+  type: 'one-to-one' | 'one-to-many' | 'many-to-many';
+  label: string;
+}
+
+export interface DataModel {
+  entities: DataModelEntity[];
+  relationships: DataModelRelationship[];
+}
+
+// ============================================================================
+// Phase 4: Design System
+// ============================================================================
+
+export interface ColorDefinition {
+  name: string;
+  value: string;
+  description?: string;
+}
+
+export interface TypographyDefinition {
+  family: string;
+  weights: number[];
+  sizes?: Record<string, string>;
+}
+
+export interface DesignSystem {
+  colors: {
+    primary: ColorDefinition;
+    secondary: ColorDefinition;
+    neutral: ColorDefinition;
+    accent: ColorDefinition;
+    [key: string]: ColorDefinition;
+  };
+  typography: {
+    heading: TypographyDefinition;
+    body: TypographyDefinition;
+    mono: TypographyDefinition;
+    [key: string]: TypographyDefinition;
+  };
+  spacing?: Record<string, string>;
+  borderRadius?: Record<string, string>;
+}
+
+// ============================================================================
+// Phase 5: Application Shell
+// ============================================================================
+
+export interface NavigationItem {
+  label: string;
+  icon: string;
+  route: string;
+  sectionId: string;
+}
+
+export interface ShellSpec {
+  overview: string;
+  navigationItems: NavigationItem[];
+  layoutPattern: string;
+  raw: string;
+}
+
+// ============================================================================
+// Phase 6: Section Details
+// ============================================================================
+
+export interface SectionSpec {
+  overview: string;
+  keyFeatures: string[];
+  requirements: string[];
+  acceptance: string[];
+}
+
+export interface ScreenDesign {
+  id: string;
+  name: string;
+  description: string;
+  componentPath: string;
+}
+
+export interface Screenshot {
+  id: string;
+  name: string;
+  path: string;
+  createdAt: string;
+}
+
+// ============================================================================
+// Main Tables
+// ============================================================================
+
+export interface DesignPhase {
+  id: string;
+  project_id: string;
+  user_id: string;
+
+  // Phase tracking
+  current_phase: PhaseName;
+  phases_completed: PhaseName[];
+
+  // Phase data
+  product_overview?: ProductOverview;
+  product_roadmap?: ProductRoadmap;
+  data_model?: DataModel;
+  design_system?: DesignSystem;
+  shell_spec?: ShellSpec;
+
+  // Timestamps
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DesignSection {
+  id: string;
+  design_phase_id: string;
+  project_id: string;
+  user_id: string;
+
+  // Section identification
+  section_id: string;
+  title: string;
+  description?: string;
+  order_index: number;
+
+  // Section data
+  spec?: SectionSpec;
+  sample_data?: Record<string, any>;
+  types_definition?: string;
+  screen_designs: ScreenDesign[];
+  screenshots: Screenshot[];
+
+  // Status
+  status: SectionStatus;
+
+  // Timestamps
+  created_at: string;
+  updated_at: string;
+}
+
+// ============================================================================
+// Request/Response Types for API
+// ============================================================================
+
+export interface CreateDesignPhaseRequest {
+  project_id: string;
+}
+
+export interface UpdateDesignPhaseRequest {
+  current_phase?: PhaseName;
+  phases_completed?: PhaseName[];
+  product_overview?: ProductOverview;
+  product_roadmap?: ProductRoadmap;
+  data_model?: DataModel;
+  design_system?: DesignSystem;
+  shell_spec?: ShellSpec;
+}
+
+export interface CreateDesignSectionRequest {
+  design_phase_id: string;
+  project_id: string;
+  section_id: string;
+  title: string;
+  description?: string;
+  order_index: number;
+}
+
+export interface UpdateDesignSectionRequest {
+  spec?: SectionSpec;
+  sample_data?: Record<string, any>;
+  types_definition?: string;
+  screen_designs?: ScreenDesign[];
+  screenshots?: Screenshot[];
+  status?: SectionStatus;
+}
