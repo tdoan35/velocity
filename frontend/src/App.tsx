@@ -30,6 +30,11 @@ import { AuthenticatedLayout } from './components/AuthenticatedLayout'
 import { Dashboard } from './pages/Dashboard'
 import { ProjectDesign } from './pages/ProjectDesign'
 import { ProjectEditor } from './pages/ProjectEditor'
+import { DesignPhaseIndex } from './pages/design/DesignPhaseIndex'
+import { ProductVisionPage } from './pages/design/ProductVisionPage'
+import { ProductRoadmapPage } from './pages/design/ProductRoadmapPage'
+import { DataModelPage } from './pages/design/DataModelPage'
+import { DesignSystemPage } from './pages/design/DesignSystemPage'
 import { ProjectProvider, useProjectContext } from './contexts/ProjectContext'
 import { NavigationTracker } from './components/navigation/NavigationTracker'
 import { FullStackPreviewPanelTest } from './components/preview/FullStackPreviewPanelTest'
@@ -337,6 +342,17 @@ function App() {
                     <Routes>
                       <Route index element={<ProjectDesign />} />
                       <Route path="editor" element={<ProjectEditor />} />
+
+                      {/* Design Phase Routes - 7-phase workflow */}
+                      <Route path="design" element={<DesignPhaseIndex />} />
+                      <Route path="design/product-vision" element={<ProductVisionPage />} />
+                      <Route path="design/product-roadmap" element={<ProductRoadmapPage />} />
+                      <Route path="design/data-model" element={<DataModelPage />} />
+                      <Route path="design/design-system" element={<DesignSystemPage />} />
+                      <Route path="design/application-shell" element={<div>Application Shell Phase (TODO: Implement)</div>} />
+                      <Route path="design/section-details" element={<div>Section Details Phase (TODO: Implement)</div>} />
+                      <Route path="design/section-details/:sectionId" element={<div>Section Detail View (TODO: Implement)</div>} />
+                      <Route path="design/export" element={<div>Export Phase (TODO: Implement)</div>} />
                     </Routes>
                   </ProjectRouteWrapper>
                 } />

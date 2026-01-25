@@ -19,6 +19,78 @@ export type PhaseName =
 export type SectionStatus = 'pending' | 'in-progress' | 'completed';
 
 // ============================================================================
+// Phase Metadata
+// ============================================================================
+
+export interface DesignPhaseInfo {
+  id: PhaseName;
+  label: string;
+  description: string;
+  route: string;
+  required: boolean;
+  icon: string;
+}
+
+export const DESIGN_PHASES: DesignPhaseInfo[] = [
+  {
+    id: 'product-vision',
+    label: 'Product Vision',
+    description: 'Define your product name, description, problems, and features',
+    route: 'product-vision',
+    required: true,
+    icon: 'Lightbulb',
+  },
+  {
+    id: 'product-roadmap',
+    label: 'Product Roadmap',
+    description: 'Break down your product into sections for incremental development',
+    route: 'product-roadmap',
+    required: true,
+    icon: 'Map',
+  },
+  {
+    id: 'data-model',
+    label: 'Data Model',
+    description: 'Define entities and their relationships',
+    route: 'data-model',
+    required: false,
+    icon: 'Database',
+  },
+  {
+    id: 'design-system',
+    label: 'Design System',
+    description: 'Choose colors and typography for your app',
+    route: 'design-system',
+    required: false,
+    icon: 'Palette',
+  },
+  {
+    id: 'application-shell',
+    label: 'Application Shell',
+    description: 'Design navigation and layout structure',
+    route: 'application-shell',
+    required: false,
+    icon: 'Layout',
+  },
+  {
+    id: 'section-details',
+    label: 'Section Details',
+    description: 'Design individual feature sections with specs and screens',
+    route: 'section-details',
+    required: true,
+    icon: 'FileText',
+  },
+  {
+    id: 'export',
+    label: 'Export',
+    description: 'Review and generate AI-ready implementation artifacts',
+    route: 'export',
+    required: true,
+    icon: 'Download',
+  },
+];
+
+// ============================================================================
 // Phase 1: Product Vision
 // ============================================================================
 
