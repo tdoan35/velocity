@@ -1,12 +1,12 @@
 // Supabase Edge Function for multi-turn conversation management with structured responses
-import { createClient } from '@supabase/supabase-js'
-import { corsHeaders } from '../_shared/cors.ts'
-import { requireAuth } from '../_shared/auth.ts'
-import { rateLimiter } from '../_shared/rate-limiter.ts'
-import { logger } from '../_shared/logger.ts'
-import { createAnthropic } from '@ai-sdk/anthropic'
-import { streamObject } from 'ai'
-import { z } from 'zod'
+import { createClient } from '@supabase/supabase-js';
+import { corsHeaders } from '../_shared/cors.ts';
+import { requireAuth } from '../_shared/auth.ts';
+import { rateLimiter } from '../_shared/rate-limiter.ts';
+import { logger } from '../_shared/logger.ts';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { streamObject } from 'ai';
+import { z } from 'zod';
 
 // Zod schema for structured assistant responses
 const suggestedResponseSchema = z.object({
@@ -220,7 +220,7 @@ Deno.serve(async (req) => {
 
     // Use Vercel AI SDK's streamObject for structured responses
     const { partialObjectStream } = await streamObject({
-      model: anthropic('claude-3-5-sonnet-20241022'),
+      model: anthropic('claude-haiku-4-5-20251001'),
       schema: assistantResponseSchema,
       system: buildSystemPrompt(action, conversation.context, agentType, shouldGenerateTitle),
       messages: claudeMessages,
