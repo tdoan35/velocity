@@ -121,8 +121,7 @@
     "playwright",
     "github.com/upstash/context7-mcp"
   ],
-  "hooks": {
-  },
+  "hooks": {},
   "disableAllHooks": false,
   "outputStyle": "tts-engineer"
 }

@@ -22,6 +22,10 @@ node_modules/
 *.sln
 *.sw?
 
+#agents
+.claude
+.gemini
+
 # OS specific
 .DS_Store
 
