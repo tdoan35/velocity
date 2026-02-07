@@ -273,7 +273,7 @@ function ProjectDesignContent() {
         break
       case 'shape_section':
         if (activeSectionId) {
-          await updateSection(activeSectionId, { spec: output as SectionSpec })
+          await updateSection(activeSectionId, { spec: output as SectionSpec, status: 'in-progress' })
           if (projectId) await loadDesignPhase(projectId)
           setActivePhase('sections')
           toast({
@@ -900,16 +900,20 @@ function ProjectDesignContent() {
     const PhaseIcon = phaseConfig.icon
 
     const header = (
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-        <h2 className="text-lg font-semibold flex items-center gap-2">
-          <div className={cn('w-8 h-8 rounded-full flex items-center justify-center', colorClasses.bgIcon)}>
-            <PhaseIcon className={cn('w-4 h-4', colorClasses.text)} />
-          </div>
-          {phaseConfig.label}
-        </h2>
+      <div className="flex items-start gap-3 p-4 border-b border-gray-200 dark:border-gray-700">
+        <div className={cn('w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5', colorClasses.bgIcon)}>
+          <PhaseIcon className={cn('w-4 h-4', colorClasses.text)} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-lg font-semibold leading-tight">{phaseConfig.label}</h2>
+          <p className="text-sm text-muted-foreground">
+            {phaseConfig.description}
+          </p>
+        </div>
         <Button
           variant="ghost"
           size="sm"
+          className="flex-shrink-0"
           onClick={() => setActivePhase(null)}
         >
           <ArrowLeft className="w-4 h-4 mr-2" />

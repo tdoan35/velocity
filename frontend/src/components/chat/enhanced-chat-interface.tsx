@@ -358,10 +358,10 @@ export function EnhancedChatInterface({
       : (agentConfig[agentType as AgentType] || agentConfig.project_manager)
     
     // Check if this is the last assistant message and has suggested responses
-    const isLastAssistantMessage = isAssistant && 
-      index === messages.length - 1 && 
+    const isLastAssistantMessage = isAssistant &&
+      index === messages.length - 1 &&
       !isLoading &&
-      suggestedResponses.length > 0
+      Array.isArray(suggestedResponses) && suggestedResponses.length > 0
 
     return (
       <div key={message.id} className="space-y-2">

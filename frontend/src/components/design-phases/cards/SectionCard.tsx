@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { FileText, Clock, CheckCircle, Circle, Image as ImageIcon } from 'lucide-react';
+import { FileText, Clock, CheckCircle, Circle, Image as ImageIcon, ClipboardCheck, Database } from 'lucide-react';
 import type { DesignSection, SectionStatus } from '../../../types/design-phases';
 
 interface SectionCardProps {
@@ -74,6 +74,22 @@ export function SectionCard({ section, onClick }: SectionCardProps) {
               <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
                 {section.screenshots.length} screenshot{section.screenshots.length !== 1 ? 's' : ''}
               </p>
+            </div>
+          </div>
+        ) : section.spec ? (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-100 dark:from-emerald-900/20 dark:to-teal-900/20">
+            <div className="text-center">
+              <ClipboardCheck className="w-8 h-8 mx-auto text-emerald-400 dark:text-emerald-500" />
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
+                {section.sample_data ? 'Spec & Data Ready' : 'Spec Defined'}
+              </p>
+            </div>
+          </div>
+        ) : section.sample_data ? (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-cyan-50 to-blue-100 dark:from-cyan-900/20 dark:to-blue-900/20">
+            <div className="text-center">
+              <Database className="w-8 h-8 mx-auto text-cyan-400 dark:text-cyan-500" />
+              <p className="text-xs text-cyan-600 dark:text-cyan-400 mt-1">Data Ready</p>
             </div>
           </div>
         ) : (

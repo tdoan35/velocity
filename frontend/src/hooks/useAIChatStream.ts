@@ -99,7 +99,7 @@ export function useAIChatStream({
           .filter(m => m.role === 'assistant')
           .pop();
         
-        if (lastAssistantMessage?.metadata?.suggestedResponses) {
+        if (Array.isArray(lastAssistantMessage?.metadata?.suggestedResponses)) {
           setSuggestedResponses(lastAssistantMessage.metadata.suggestedResponses);
         } else {
           // Clear suggestions if none found
@@ -165,7 +165,7 @@ export function useAIChatStream({
             .filter(m => m.role === 'assistant')
             .pop();
           
-          if (lastAssistantMessage?.metadata?.suggestedResponses) {
+          if (Array.isArray(lastAssistantMessage?.metadata?.suggestedResponses)) {
             setSuggestedResponses(lastAssistantMessage.metadata.suggestedResponses);
           } else {
             setSuggestedResponses([]);
@@ -371,7 +371,7 @@ export function useAIChatStream({
                           metadata: {
                             ...newMessages[lastMessageIndex].metadata,
                             ...currentStructuredResponse.metadata,
-                            suggestedResponses: currentStructuredResponse.suggestedResponses,
+                            suggestedResponses: Array.isArray(currentStructuredResponse.suggestedResponses) ? currentStructuredResponse.suggestedResponses : [],
                           },
                         };
                       }
@@ -385,7 +385,7 @@ export function useAIChatStream({
                   }
                   
                   // Update suggested responses
-                  if (currentStructuredResponse.suggestedResponses) {
+                  if (Array.isArray(currentStructuredResponse.suggestedResponses)) {
                     setSuggestedResponses(currentStructuredResponse.suggestedResponses);
                   }
                 }
@@ -409,7 +409,7 @@ export function useAIChatStream({
                 
                 if (data.type === 'done' && data.done) {
                   // Clear suggested responses before setting new ones
-                  if (data.finalObject?.suggestedResponses) {
+                  if (Array.isArray(data.finalObject?.suggestedResponses)) {
                     setSuggestedResponses(data.finalObject.suggestedResponses);
                   }
 
