@@ -8,6 +8,7 @@ import { TypingIndicator } from './typing-indicator'
 import { SuggestedResponses } from './suggested-responses'
 import { useAIChatStream, type SuggestedResponse } from '@/hooks/useAIChatStream'
 import type { AgentType } from '@/types/ai'
+import type { DesignPhaseType } from '@/types/design-phases'
 import { cn } from '@/lib/utils'
 import type { ProjectContext } from '@/services/conversationService'
 import { conversationService } from '@/services/conversationService'
@@ -37,6 +38,20 @@ interface EnhancedChatInterfaceProps {
   initialMessage?: string
   projectContext?: ProjectContext
   onInitialMessageSent?: () => void
+  designPhase?: DesignPhaseType
+  onPhaseComplete?: (phase: DesignPhaseType, output: any) => void
+  phaseContext?: Record<string, any>
+  sectionId?: string
+}
+
+const phaseLabels: Record<DesignPhaseType, string> = {
+  product_vision: 'Product Vision',
+  product_roadmap: 'Product Roadmap',
+  data_model: 'Data Model',
+  design_tokens: 'Design Tokens',
+  design_shell: 'App Shell',
+  shape_section: 'Section Design',
+  sample_data: 'Sample Data',
 }
 
 const agentConfig: Record<AgentType, { label: string; icon: any; color: string }> = {
@@ -63,6 +78,10 @@ export function EnhancedChatInterface({
   initialMessage,
   projectContext,
   onInitialMessageSent,
+  designPhase,
+  onPhaseComplete,
+  phaseContext,
+  sectionId,
 }: EnhancedChatInterfaceProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -94,6 +113,10 @@ export function EnhancedChatInterface({
     projectId,
     initialAgent: activeAgent || 'project_manager',
     projectContext,
+    designPhase,
+    phaseContext,
+    sectionId,
+    onPhaseComplete,
     onStreamStart: () => {
       // Force auto-scroll when streaming starts
       setShouldAutoScroll(true)
@@ -138,6 +161,13 @@ export function EnhancedChatInterface({
   useEffect(() => {
     setTimeout(() => scrollToBottom(true), 100)
   }, [conversationId])
+
+  // Reset initial message guard when a new initial message arrives
+  useEffect(() => {
+    if (initialMessage) {
+      setHasSubmittedInitial(false)
+    }
+  }, [initialMessage])
 
   // Auto-submit initial message if provided and not already submitted
   useEffect(() => {
@@ -321,7 +351,9 @@ export function EnhancedChatInterface({
   const renderMessage = (message: any, index: number) => {
     const isAssistant = message.role === 'assistant'
     const agentType = message.metadata?.agentType || currentAgent
-    const agent = agentConfig[agentType as AgentType] || agentConfig.project_manager
+    const agent = designPhase
+      ? { label: phaseLabels[designPhase] || 'Design Phase', icon: '✨', color: 'bg-emerald-500' }
+      : (agentConfig[agentType as AgentType] || agentConfig.project_manager)
     
     // Check if this is the last assistant message and has suggested responses
     const isLastAssistantMessage = isAssistant && 
@@ -414,7 +446,9 @@ export function EnhancedChatInterface({
     }
   }
 
-  const agentInfo = getAgentInfo(activeAgent || currentAgent)
+  const agentInfo = designPhase
+    ? { icon: Sparkles, color: 'emerald', bgColor: 'bg-emerald-500/10', textColor: 'text-emerald-500', label: phaseLabels[designPhase] || 'Design Phase' }
+    : getAgentInfo(activeAgent || currentAgent)
   const AgentIcon = agentInfo.icon
 
   return (
@@ -525,50 +559,70 @@ export function EnhancedChatInterface({
           {messages.length === 0 ? (
             <div className="text-center text-muted-foreground py-8">
               <div className="space-y-4">
-                <Bot className="w-12 h-12 mx-auto opacity-50" />
-                <div>
-                  <p className="text-sm font-medium">
-                    Welcome to Velocity AI Assistant
-                  </p>
-                  <p className="text-xs mt-2">
-                    I can help you design, build, and deploy your mobile app
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2 justify-center mt-4">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setShouldAutoScroll(true)
-                      handleInputChange({ target: { value: 'Help me plan my app structure' } } as any)
-                      handleSubmit()
-                    }}
-                  >
-                    Plan Structure
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setShouldAutoScroll(true)
-                      handleInputChange({ target: { value: 'Suggest a UI design for my app' } } as any)
-                      handleSubmit()
-                    }}
-                  >
-                    Design UI
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setShouldAutoScroll(true)
-                      handleInputChange({ target: { value: 'Generate code for a login screen' } } as any)
-                      handleSubmit()
-                    }}
-                  >
-                    Generate Code
-                  </Button>
-                </div>
+                {designPhase ? (
+                  <>
+                    <Sparkles className="w-12 h-12 mx-auto opacity-50" />
+                    <div>
+                      <p className="text-sm font-medium">
+                        {phaseLabels[designPhase]}
+                      </p>
+                      <p className="text-xs mt-2">
+                        {designPhase === 'product_vision'
+                          ? 'Describe your app idea and I\'ll help you define the product vision.'
+                          : designPhase === 'product_roadmap'
+                          ? 'I\'ll help you break your product into development sections.'
+                          : 'Let\'s work on this design phase together.'}
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Bot className="w-12 h-12 mx-auto opacity-50" />
+                    <div>
+                      <p className="text-sm font-medium">
+                        Welcome to Velocity AI Assistant
+                      </p>
+                      <p className="text-xs mt-2">
+                        I can help you design, build, and deploy your mobile app
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2 justify-center mt-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setShouldAutoScroll(true)
+                          handleInputChange({ target: { value: 'Help me plan my app structure' } } as any)
+                          handleSubmit()
+                        }}
+                      >
+                        Plan Structure
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setShouldAutoScroll(true)
+                          handleInputChange({ target: { value: 'Suggest a UI design for my app' } } as any)
+                          handleSubmit()
+                        }}
+                      >
+                        Design UI
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setShouldAutoScroll(true)
+                          handleInputChange({ target: { value: 'Generate code for a login screen' } } as any)
+                          handleSubmit()
+                        }}
+                      >
+                        Generate Code
+                      </Button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           ) : (
@@ -615,7 +669,7 @@ export function EnhancedChatInterface({
           }}
           disabled={isLoading}
           isLoading={isLoading}
-          placeholder={`Ask ${agentConfig[currentAgent].label} anything...`}
+          placeholder={designPhase ? `Describe your ${phaseLabels[designPhase]?.toLowerCase() || 'idea'}...` : `Ask ${agentConfig[currentAgent].label} anything...`}
           submitIcon={Send}
           minHeight="60px"
           showAttachButton={false}

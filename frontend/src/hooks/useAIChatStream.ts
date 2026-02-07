@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { AgentType, ChatContext, AIMessage } from '../types/ai';
+import type { DesignPhaseType } from '../types/design-phases';
 import { conversationService, type ProjectContext } from '../services/conversationService';
 import { supabase, supabaseUrl } from '../lib/supabase';
 import { useToast } from './use-toast';
@@ -27,6 +28,12 @@ interface UseAIChatStreamOptions {
   projectId?: string;
   initialAgent?: AgentType;
   projectContext?: ProjectContext;
+  designPhase?: DesignPhaseType;
+  /** Additional context fields to send with each request (e.g., productOverview for roadmap phase) */
+  phaseContext?: Record<string, any>;
+  /** Section ID for section-level phases (shape_section, sample_data) */
+  sectionId?: string;
+  onPhaseComplete?: (phase: DesignPhaseType, output: any) => void;
   onStreamStart?: () => void;
   onStreamEnd?: (usage: any) => void;
   onConversationCreated?: (conversationId: string) => void;
@@ -38,6 +45,10 @@ export function useAIChatStream({
   projectId,
   initialAgent = 'project_manager',
   projectContext,
+  designPhase,
+  phaseContext,
+  sectionId,
+  onPhaseComplete,
   onStreamStart,
   onStreamEnd,
   onConversationCreated,
@@ -268,9 +279,12 @@ export function useAIChatStream({
           message: userMessage.content,
           context: {
             ...context,
+            ...(phaseContext || {}),
             projectContext: projectContext || undefined
           },
-          agentType: currentAgent,
+          designPhase: designPhase || undefined,
+          sectionId: sectionId || undefined,
+          agentType: designPhase ? undefined : currentAgent,
           action: 'continue',
           projectId: projectId || undefined,
         }),
@@ -385,7 +399,12 @@ export function useAIChatStream({
                   if (data.finalObject?.suggestedResponses) {
                     setSuggestedResponses(data.finalObject.suggestedResponses);
                   }
-                  
+
+                  // Detect phase completion
+                  if (data.finalObject?.phaseOutput && data.finalObject?.phaseComplete && designPhase) {
+                    onPhaseComplete?.(designPhase, data.finalObject.phaseOutput);
+                  }
+
                   // Update conversation tokens if available
                   if (data.usage?.totalTokens) {
                     await conversationService.updateConversationTokens(
@@ -393,7 +412,7 @@ export function useAIChatStream({
                       data.usage.totalTokens
                     );
                   }
-                  
+
                   onStreamEnd?.(data.usage);
                 }
               } catch (error) {
