@@ -90,6 +90,8 @@ export function EnhancedChatInterface({
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
   const [hasSubmittedInitial, setHasSubmittedInitial] = useState(false)
+  const onInitialMessageSentRef = useRef(onInitialMessageSent)
+  onInitialMessageSentRef.current = onInitialMessageSent
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [titleInput, setTitleInput] = useState("")
   const [isSavingTitle, setIsSavingTitle] = useState(false)
@@ -177,12 +179,12 @@ export function EnhancedChatInterface({
         console.log('Auto-submitting initial message:', initialMessage)
         handleSubmit(null, initialMessage)
         setHasSubmittedInitial(true)
-        onInitialMessageSent?.()
+        onInitialMessageSentRef.current?.()
       }, 1000)
-      
+
       return () => clearTimeout(timer)
     }
-  }, [initialMessage, hasSubmittedInitial, isLoading, isInitializing, conversationId, handleSubmit, onInitialMessageSent])
+  }, [initialMessage, hasSubmittedInitial, isLoading, isInitializing, conversationId, handleSubmit])
 
   // Ensure scroll to bottom on component mount (page reload)
   useEffect(() => {

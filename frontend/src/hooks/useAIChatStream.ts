@@ -66,6 +66,19 @@ export function useAIChatStream({
   const { toast } = useToast();
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Use refs for props that change every render (inline callbacks, objects)
+  // to keep handleSubmit stable and avoid infinite effect re-runs
+  const latestRef = useRef({
+    onStreamStart, onStreamEnd, onPhaseComplete,
+    onConversationCreated, onTitleGenerated,
+    designPhase, phaseContext, sectionId, projectContext,
+  });
+  latestRef.current = {
+    onStreamStart, onStreamEnd, onPhaseComplete,
+    onConversationCreated, onTitleGenerated,
+    designPhase, phaseContext, sectionId, projectContext,
+  };
+
   const loadConversationMessages = async (convId: string) => {
     try {
       setIsInitializing(true);
@@ -200,18 +213,18 @@ export function useAIChatStream({
           projectId,
           'Chat Conversation',
           currentAgent,
-          projectContext
+          latestRef.current.projectContext
         );
-        
+
         if (error || !conversation) {
           throw error || new Error('Failed to create conversation');
         }
-        
+
         actualConversationId = conversation.id;
         setConversationId(conversation.id);
-        
+
         // Notify parent component of the new conversation ID
-        onConversationCreated?.(conversation.id);
+        latestRef.current.onConversationCreated?.(conversation.id);
       } catch (error) {
         console.error('Error creating conversation:', error);
         toast({
@@ -246,13 +259,13 @@ export function useAIChatStream({
     abortControllerRef.current = new AbortController();
 
     try {
-      onStreamStart?.();
-      
+      latestRef.current.onStreamStart?.();
+
       // Debug: Log the project context being sent
       console.log('🔍 Project context being sent to API:', {
-        projectContext,
-        hasProjectContext: !!projectContext,
-        projectContextKeys: projectContext ? Object.keys(projectContext) : [],
+        projectContext: latestRef.current.projectContext,
+        hasProjectContext: !!latestRef.current.projectContext,
+        projectContextKeys: latestRef.current.projectContext ? Object.keys(latestRef.current.projectContext) : [],
       });
 
       // Save user message to database
@@ -279,12 +292,12 @@ export function useAIChatStream({
           message: userMessage.content,
           context: {
             ...context,
-            ...(phaseContext || {}),
-            projectContext: projectContext || undefined
+            ...(latestRef.current.phaseContext || {}),
+            projectContext: latestRef.current.projectContext || undefined
           },
-          designPhase: designPhase || undefined,
-          sectionId: sectionId || undefined,
-          agentType: designPhase ? undefined : currentAgent,
+          designPhase: latestRef.current.designPhase || undefined,
+          sectionId: latestRef.current.sectionId || undefined,
+          agentType: latestRef.current.designPhase ? undefined : currentAgent,
           action: 'continue',
           projectId: projectId || undefined,
         }),
@@ -367,8 +380,8 @@ export function useAIChatStream({
                   }
                   
                   // Handle conversation title (for new conversations)
-                  if (currentStructuredResponse.conversationTitle && onTitleGenerated) {
-                    onTitleGenerated(currentStructuredResponse.conversationTitle);
+                  if (currentStructuredResponse.conversationTitle && latestRef.current.onTitleGenerated) {
+                    latestRef.current.onTitleGenerated(currentStructuredResponse.conversationTitle);
                   }
                   
                   // Update suggested responses
@@ -401,8 +414,8 @@ export function useAIChatStream({
                   }
 
                   // Detect phase completion
-                  if (data.finalObject?.phaseOutput && data.finalObject?.phaseComplete && designPhase) {
-                    onPhaseComplete?.(designPhase, data.finalObject.phaseOutput);
+                  if (data.finalObject?.phaseOutput && data.finalObject?.phaseComplete && latestRef.current.designPhase) {
+                    latestRef.current.onPhaseComplete?.(latestRef.current.designPhase, data.finalObject.phaseOutput);
                   }
 
                   // Update conversation tokens if available
@@ -413,7 +426,7 @@ export function useAIChatStream({
                     );
                   }
 
-                  onStreamEnd?.(data.usage);
+                  latestRef.current.onStreamEnd?.(data.usage);
                 }
               } catch (error) {
                 // Only log if it's not an expected format
@@ -468,7 +481,7 @@ export function useAIChatStream({
       setIsLoading(false);
       abortControllerRef.current = null;
     }
-  }, [input, conversationId, currentAgent, context, onStreamStart, onStreamEnd, toast]);
+  }, [input, conversationId, currentAgent, context, toast, projectId]);
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setInput(e.target.value);

@@ -196,6 +196,7 @@ function ProjectDesignContent() {
     currentDesignPhase,
     isSaving,
     loadDesignPhase,
+    createDesignPhase,
     updateProductOverview,
     updateProductRoadmap,
     updateDataModel,
@@ -304,32 +305,26 @@ function ProjectDesignContent() {
   const startRoadmapPhase = async () => {
     if (!projectId) return
 
-    // Switch to chat with roadmap phase
-    setActivePhase(null)
-    setActiveDesignPhase('product_roadmap')
-
     // Build initial message from product overview
     const overview = currentDesignPhase?.product_overview
+    let msg: string | null = null
     if (overview) {
       const features = overview.features?.map(f => f.title).join(', ') || ''
-      const msg = `Here's my product overview for "${overview.name}": ${overview.description}. Key features: ${features}. Please help me break this into development sections.`
-      setPhaseInitialMessage(msg)
+      msg = `Here's my product overview for "${overview.name}": ${overview.description}. Key features: ${features}. Please help me break this into development sections.`
     }
 
-    // Check for existing roadmap conversation
+    // Do async conversation setup BEFORE showing the chat to avoid race conditions
     const { conversation: existingPhaseConv } = await conversationService.getPhaseConversation(projectId, 'product_roadmap')
 
     if (existingPhaseConv) {
-      // Resume existing conversation - don't send initial message if it already has messages
       setPhaseConversations(prev => ({ ...prev, product_roadmap: existingPhaseConv.id }))
       await createNewConversation(existingPhaseConv.title || 'Product Roadmap', existingPhaseConv.id)
 
       const { messages } = await conversationService.getConversationMessages(existingPhaseConv.id)
       if (messages.length > 0) {
-        setPhaseInitialMessage(null) // Don't re-send if conversation already has messages
+        msg = null // Don't re-send if conversation already has messages
       }
     } else {
-      // Create a new conversation for roadmap phase
       const { conversation: newConv } = await conversationService.createPhaseConversation(
         projectId,
         'product_roadmap',
@@ -354,27 +349,30 @@ function ProjectDesignContent() {
         })
       }
     }
+
+    // Show chat AFTER conversation is ready
+    setActiveDesignPhase('product_roadmap')
+    setPhaseInitialMessage(msg)
+    setActivePhase(null)
   }
 
   const startDataModelPhase = async () => {
     if (!projectId) return
-    setActivePhase(null)
-    setActiveDesignPhase('data_model')
 
     const overview = currentDesignPhase?.product_overview
     const roadmap = currentDesignPhase?.product_roadmap
     const sectionNames = roadmap?.sections?.map(s => s.title).join(', ') || ''
-    const msg = overview
+    let msg: string | null = overview
       ? `Here's my product: "${overview.name}" with sections: ${sectionNames}. Help me define the data model.`
       : 'Help me define the data model for my app.'
-    setPhaseInitialMessage(msg)
 
+    // Do async conversation setup BEFORE showing the chat
     const { conversation: existingPhaseConv } = await conversationService.getPhaseConversation(projectId, 'data_model')
     if (existingPhaseConv) {
       setPhaseConversations(prev => ({ ...prev, data_model: existingPhaseConv.id }))
       await createNewConversation(existingPhaseConv.title || 'Data Model', existingPhaseConv.id)
       const { messages } = await conversationService.getConversationMessages(existingPhaseConv.id)
-      if (messages.length > 0) setPhaseInitialMessage(null)
+      if (messages.length > 0) msg = null
     } else {
       const { conversation: newConv } = await conversationService.createPhaseConversation(
         projectId, 'data_model', 'Data Model',
@@ -385,25 +383,28 @@ function ProjectDesignContent() {
         setCurrentConversation({ id: newConv.id, title: 'Data Model', isLoading: false, activeAgent: 'project_manager', isTemporary: false })
       }
     }
+
+    // Show chat AFTER conversation is ready
+    setActiveDesignPhase('data_model')
+    setPhaseInitialMessage(msg)
+    setActivePhase(null)
   }
 
   const startDesignTokensPhase = async () => {
     if (!projectId) return
-    setActivePhase(null)
-    setActiveDesignPhase('design_tokens')
 
     const overview = currentDesignPhase?.product_overview
-    const msg = overview
+    let msg: string | null = overview
       ? `Help me choose colors and typography for "${overview.name}".`
       : 'Help me choose colors and typography for my app.'
-    setPhaseInitialMessage(msg)
 
+    // Do async conversation setup BEFORE showing the chat
     const { conversation: existingPhaseConv } = await conversationService.getPhaseConversation(projectId, 'design_tokens')
     if (existingPhaseConv) {
       setPhaseConversations(prev => ({ ...prev, design_tokens: existingPhaseConv.id }))
       await createNewConversation(existingPhaseConv.title || 'Design Tokens', existingPhaseConv.id)
       const { messages } = await conversationService.getConversationMessages(existingPhaseConv.id)
-      if (messages.length > 0) setPhaseInitialMessage(null)
+      if (messages.length > 0) msg = null
     } else {
       const { conversation: newConv } = await conversationService.createPhaseConversation(
         projectId, 'design_tokens', 'Design Tokens',
@@ -414,26 +415,29 @@ function ProjectDesignContent() {
         setCurrentConversation({ id: newConv.id, title: 'Design Tokens', isLoading: false, activeAgent: 'project_manager', isTemporary: false })
       }
     }
+
+    // Show chat AFTER conversation is ready
+    setActiveDesignPhase('design_tokens')
+    setPhaseInitialMessage(msg)
+    setActivePhase(null)
   }
 
   const startDesignShellPhase = async () => {
     if (!projectId) return
-    setActivePhase(null)
-    setActiveDesignPhase('design_shell')
 
     const overview = currentDesignPhase?.product_overview
     const sectionCount = currentDesignPhase?.product_roadmap?.sections?.length ?? 0
-    const msg = overview
+    let msg: string | null = overview
       ? `Help me design the navigation and layout for "${overview.name}" with ${sectionCount} sections.`
       : 'Help me design the navigation and layout for my app.'
-    setPhaseInitialMessage(msg)
 
+    // Do async conversation setup BEFORE showing the chat
     const { conversation: existingPhaseConv } = await conversationService.getPhaseConversation(projectId, 'design_shell')
     if (existingPhaseConv) {
       setPhaseConversations(prev => ({ ...prev, design_shell: existingPhaseConv.id }))
       await createNewConversation(existingPhaseConv.title || 'App Shell', existingPhaseConv.id)
       const { messages } = await conversationService.getConversationMessages(existingPhaseConv.id)
-      if (messages.length > 0) setPhaseInitialMessage(null)
+      if (messages.length > 0) msg = null
     } else {
       const { conversation: newConv } = await conversationService.createPhaseConversation(
         projectId, 'design_shell', 'App Shell',
@@ -444,23 +448,25 @@ function ProjectDesignContent() {
         setCurrentConversation({ id: newConv.id, title: 'App Shell', isLoading: false, activeAgent: 'project_manager', isTemporary: false })
       }
     }
+
+    // Show chat AFTER conversation is ready
+    setActiveDesignPhase('design_shell')
+    setPhaseInitialMessage(msg)
+    setActivePhase(null)
   }
 
   const startShapeSectionPhase = async (sectionId: string, section: { title: string; description?: string }) => {
     if (!projectId) return
-    setActivePhase(null)
-    setActiveDesignPhase('shape_section')
-    setActiveSectionId(sectionId)
 
-    const msg = `I'd like to shape the "${section.title}" section.${section.description ? ` Description: ${section.description}` : ''}`
-    setPhaseInitialMessage(msg)
+    let msg: string | null = `I'd like to shape the "${section.title}" section.${section.description ? ` Description: ${section.description}` : ''}`
 
+    // Do async conversation setup BEFORE showing the chat
     const { conversation: existingConv } = await conversationService.getSectionPhaseConversation(projectId, 'shape_section', sectionId)
     if (existingConv) {
       setPhaseConversations(prev => ({ ...prev, shape_section: existingConv.id }))
       await createNewConversation(existingConv.title || `Shape: ${section.title}`, existingConv.id)
       const { messages } = await conversationService.getConversationMessages(existingConv.id)
-      if (messages.length > 0) setPhaseInitialMessage(null)
+      if (messages.length > 0) msg = null
     } else {
       const { conversation: newConv } = await conversationService.createSectionPhaseConversation(
         projectId, 'shape_section', sectionId, `Shape: ${section.title}`,
@@ -471,23 +477,26 @@ function ProjectDesignContent() {
         setCurrentConversation({ id: newConv.id, title: `Shape: ${section.title}`, isLoading: false, activeAgent: 'project_manager', isTemporary: false })
       }
     }
+
+    // Show chat AFTER conversation is ready
+    setActiveDesignPhase('shape_section')
+    setActiveSectionId(sectionId)
+    setPhaseInitialMessage(msg)
+    setActivePhase(null)
   }
 
   const startSampleDataPhase = async (sectionId: string, section: { title: string; description?: string }) => {
     if (!projectId) return
-    setActivePhase(null)
-    setActiveDesignPhase('sample_data')
-    setActiveSectionId(sectionId)
 
-    const msg = `Generate sample data and types for the "${section.title}" section.`
-    setPhaseInitialMessage(msg)
+    let msg: string | null = `Generate sample data and types for the "${section.title}" section.`
 
+    // Do async conversation setup BEFORE showing the chat
     const { conversation: existingConv } = await conversationService.getSectionPhaseConversation(projectId, 'sample_data', sectionId)
     if (existingConv) {
       setPhaseConversations(prev => ({ ...prev, sample_data: existingConv.id }))
       await createNewConversation(existingConv.title || `Sample Data: ${section.title}`, existingConv.id)
       const { messages } = await conversationService.getConversationMessages(existingConv.id)
-      if (messages.length > 0) setPhaseInitialMessage(null)
+      if (messages.length > 0) msg = null
     } else {
       const { conversation: newConv } = await conversationService.createSectionPhaseConversation(
         projectId, 'sample_data', sectionId, `Sample Data: ${section.title}`,
@@ -498,6 +507,12 @@ function ProjectDesignContent() {
         setCurrentConversation({ id: newConv.id, title: `Sample Data: ${section.title}`, isLoading: false, activeAgent: 'project_manager', isTemporary: false })
       }
     }
+
+    // Show chat AFTER conversation is ready
+    setActiveDesignPhase('sample_data')
+    setActiveSectionId(sectionId)
+    setPhaseInitialMessage(msg)
+    setActivePhase(null)
   }
 
   // ============================================================================
@@ -781,8 +796,12 @@ function ProjectDesignContent() {
 
       setProject(loadedProject)
 
-      // Load design phase data
+      // Load design phase data (create if it doesn't exist yet)
       await loadDesignPhase(projectId)
+      const { currentDesignPhase: existingPhase } = useDesignPhaseStore.getState()
+      if (!existingPhase) {
+        await createDesignPhase({ project_id: projectId })
+      }
 
       // Extract initial prompt from app_config
       const initialPrompt = loadedProject.app_config?.initialPrompt

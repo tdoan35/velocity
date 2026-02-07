@@ -1409,7 +1409,7 @@ async function saveDesignPhaseOutput(
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   )
 
-  // Map phase to column name and next phase
+  // Map phase to column name (data only — phase advancement is handled by the client)
   const phaseColumnMap: Record<string, string> = {
     product_vision: 'product_overview',
     product_roadmap: 'product_roadmap',
@@ -1417,62 +1417,39 @@ async function saveDesignPhaseOutput(
     design_tokens: 'design_system',
     design_shell: 'shell_spec',
   }
-  const phaseToDbPhase: Record<string, string> = {
-    product_vision: 'product-vision',
-    product_roadmap: 'product-roadmap',
-    data_model: 'data-model',
-    design_tokens: 'design-system',
-    design_shell: 'application-shell',
-  }
-  const nextPhaseMap: Record<string, string> = {
-    product_vision: 'product-roadmap',
-    product_roadmap: 'data-model',
-    data_model: 'design-system',
-    design_tokens: 'application-shell',
-    design_shell: 'section-details',
-  }
 
   const column = phaseColumnMap[phase]
-  const dbPhase = phaseToDbPhase[phase]
-  const nextPhase = nextPhaseMap[phase]
 
   try {
     // Get existing design phase
     const { data: existingPhase } = await supabase
       .from('design_phases')
-      .select('id, phases_completed, current_phase')
+      .select('id')
       .eq('project_id', projectId)
       .eq('user_id', userId)
       .maybeSingle()
 
     if (existingPhase) {
-      // Update existing
-      const phasesCompleted = existingPhase.phases_completed || []
-      if (!phasesCompleted.includes(dbPhase)) {
-        phasesCompleted.push(dbPhase)
-      }
-
+      // Save phase data only — do NOT advance current_phase or phases_completed
+      // The client calls completePhase() after receiving the SSE done event,
+      // which is the sole mechanism for phase progression.
       await supabase
         .from('design_phases')
         .update({
           [column]: output,
-          current_phase: nextPhase,
-          phases_completed: phasesCompleted,
           updated_at: new Date().toISOString(),
         })
         .eq('id', existingPhase.id)
 
-      console.log(`Design phase output saved for ${phase}, advanced to ${nextPhase}`)
+      console.log(`Design phase output saved for ${phase}`)
     } else {
-      // Create new design phase
+      // Create new design phase with data only (phase starts at default 'product-vision')
       await supabase
         .from('design_phases')
         .insert({
           project_id: projectId,
           user_id: userId,
           [column]: output,
-          current_phase: nextPhase,
-          phases_completed: [dbPhase],
         })
 
       console.log(`Created new design phase with ${phase} output`)
