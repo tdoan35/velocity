@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { MessageSquarePlus, History, Bot, Settings, Send, Users, Sparkles, Code2, Plus, ArrowDown, Edit, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -84,10 +84,12 @@ export function EnhancedChatInterface({
   sectionId,
 }: EnhancedChatInterfaceProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  const viewportRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const isScrollingRef = useRef(false)
   const { toast } = useToast()
   const [hasSubmittedInitial, setHasSubmittedInitial] = useState(false)
   const onInitialMessageSentRef = useRef(onInitialMessageSent)
@@ -133,36 +135,55 @@ export function EnhancedChatInterface({
     onTitleGenerated,
   })
 
-  // Auto-scroll to bottom with smooth scrolling
-  const scrollToBottom = (force = false) => {
+  // Discover the actual scrollable viewport inside the Radix ScrollArea
+  useEffect(() => {
+    if (!scrollRef.current) return
+    viewportRef.current = scrollRef.current.querySelector<HTMLDivElement>(
+      '[data-radix-scroll-area-viewport]'
+    )
+  }, [])
+
+  // Auto-scroll to bottom — uses 'instant' to avoid animation-triggered scroll events
+  const scrollToBottom = useCallback((force = false) => {
     if (force || shouldAutoScroll) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+      isScrollingRef.current = true
+      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' as ScrollBehavior, block: 'end' })
+      requestAnimationFrame(() => { isScrollingRef.current = false })
     }
-  }
+  }, [shouldAutoScroll])
 
-  // Check if user is near bottom of scroll area
-  const checkIfNearBottom = () => {
-    if (scrollRef.current) {
-      const { scrollTop, scrollHeight, clientHeight } = scrollRef.current
-      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100
-      setShouldAutoScroll(isNearBottom)
-    }
-  }
+  // Handle scroll events — reads from the actual viewport element
+  const handleScroll = useCallback(() => {
+    if (isScrollingRef.current) return
+    const viewport = viewportRef.current
+    if (!viewport) return
+    const { scrollTop, scrollHeight, clientHeight } = viewport
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100
+    setShouldAutoScroll(prev => prev === isNearBottom ? prev : isNearBottom)
+  }, [])
 
-  // Handle scroll events to determine if we should auto-scroll
-  const handleScroll = () => {
-    checkIfNearBottom()
-  }
-
-  // Auto-scroll when messages change or loading state changes
+  // Scroll on content/loading changes
   useEffect(() => {
-    scrollToBottom()
-  }, [messages, isLoading])
+    if (messages.length === 0) return
+    if (isLoading) setShouldAutoScroll(true)
+    const timer = setTimeout(() => scrollToBottom(), 50)
+    return () => clearTimeout(timer)
+  }, [messages.length, isLoading])
 
-  // Force scroll on initial load and when conversation changes
+  // Scroll on conversation switch
   useEffect(() => {
-    setTimeout(() => scrollToBottom(true), 100)
+    setShouldAutoScroll(true)
+    const timer = setTimeout(() => scrollToBottom(true), 150)
+    return () => clearTimeout(timer)
   }, [conversationId])
+
+  // Attach scroll listener to the actual viewport element
+  useEffect(() => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+    viewport.addEventListener('scroll', handleScroll, { passive: true })
+    return () => viewport.removeEventListener('scroll', handleScroll)
+  }, [handleScroll])
 
   // Reset initial message guard when a new initial message arrives
   useEffect(() => {
@@ -185,61 +206,6 @@ export function EnhancedChatInterface({
       return () => clearTimeout(timer)
     }
   }, [initialMessage, hasSubmittedInitial, isLoading, isInitializing, conversationId, handleSubmit])
-
-  // Ensure scroll to bottom on component mount (page reload)
-  useEffect(() => {
-    // Wait for DOM to be ready and messages to render
-    const timer = setTimeout(() => {
-      setShouldAutoScroll(true)
-      scrollToBottom(true)
-    }, 200)
-    
-    return () => clearTimeout(timer)
-  }, []) // Empty dependency array - only runs on mount
-
-  // Scroll to bottom when messages are first loaded (after page reload)
-  useEffect(() => {
-    if (messages.length > 0 && !isInitializing) {
-      // This handles the case where messages are loaded from storage/API after mount
-      const isFirstLoad = scrollRef.current?.scrollTop === 0 && scrollRef.current?.scrollHeight > scrollRef.current?.clientHeight
-      if (isFirstLoad) {
-        setShouldAutoScroll(true)
-        setTimeout(() => scrollToBottom(true), 100)
-      }
-    }
-  }, [messages.length, isInitializing])
-
-  // Use MutationObserver to detect when content is added to ensure scroll on page reload
-  useEffect(() => {
-    if (!scrollRef.current) return
-
-    let hasScrolledOnLoad = false
-    const observer = new MutationObserver(() => {
-      if (!hasScrolledOnLoad && messages.length > 0) {
-        hasScrolledOnLoad = true
-        setShouldAutoScroll(true)
-        setTimeout(() => scrollToBottom(true), 50)
-      }
-    })
-
-    const scrollElement = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]')
-    if (scrollElement) {
-      observer.observe(scrollElement, {
-        childList: true,
-        subtree: true,
-      })
-    }
-
-    return () => observer.disconnect()
-  }, [messages.length])
-
-  // Force scroll when agent sends a message (streaming starts/ends)
-  useEffect(() => {
-    if (isLoading) {
-      setShouldAutoScroll(true)
-    }
-    scrollToBottom()
-  }, [isLoading])
 
   // Suggested responses are now provided by the hook via structured data
   // No need to extract from message text
@@ -269,18 +235,6 @@ export function EnhancedChatInterface({
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
-
-  // Handle errors
-  useEffect(() => {
-    if (error) {
-      toast({
-        title: 'Error',
-        description: error.message,
-        variant: 'destructive',
-      })
-    }
-  }, [error, toast])
-
 
   const handleSelectSuggestion = (suggestion: SuggestedResponse) => {
     // Set the input value to the suggestion text
@@ -552,10 +506,9 @@ export function EnhancedChatInterface({
       </div>
       
       {/* Messages */}
-      <ScrollArea 
-        ref={scrollRef} 
+      <ScrollArea
+        ref={scrollRef}
         className="flex-1 p-4 overflow-hidden"
-        onScroll={handleScroll}
       >
         <div className="space-y-4 w-full max-w-full overflow-wrap-anywhere">
           {messages.length === 0 ? (

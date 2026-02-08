@@ -23,6 +23,17 @@ export interface AssistantResponse {
   };
 }
 
+class RateLimitError extends Error {
+  retryAfter: number
+  constructor(retryAfter: number) {
+    const minutes = Math.ceil(retryAfter / 60)
+    const timeText = minutes > 1 ? `${minutes} minutes` : 'about a minute'
+    super(`You've hit the rate limit. Please wait ${timeText} and try again.`)
+    this.name = 'RateLimitError'
+    this.retryAfter = retryAfter
+  }
+}
+
 interface UseAIChatStreamOptions {
   conversationId?: string;
   projectId?: string;
@@ -305,6 +316,16 @@ export function useAIChatStream({
       });
 
       if (!response.ok) {
+        if (response.status === 429) {
+          let retryAfter = 60;
+          try {
+            const errorBody = await response.json();
+            if (typeof errorBody.retryAfter === 'number') {
+              retryAfter = errorBody.retryAfter;
+            }
+          } catch { /* use default */ }
+          throw new RateLimitError(retryAfter);
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
@@ -470,11 +491,15 @@ export function useAIChatStream({
         console.log('Stream aborted');
       } else {
         console.error('Error in chat stream:', error);
+        // Remove the user message from UI — it was added before the fetch
+        setMessages(prev => prev.filter(m => m.id !== userMessage.id));
         setError(error);
+        const isRateLimit = error instanceof RateLimitError;
         toast({
-          title: 'Error',
+          title: isRateLimit ? 'Rate Limit Reached' : 'Error',
           description: error.message || 'Failed to send message',
           variant: 'destructive',
+          duration: isRateLimit ? 8000 : undefined,
         });
       }
     } finally {
