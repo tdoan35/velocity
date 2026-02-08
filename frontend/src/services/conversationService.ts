@@ -321,6 +321,152 @@ export const conversationService = {
     }
   },
 
+  async getPhaseConversation(projectId: string, designPhase: string): Promise<{ conversation: Conversation | null; error: Error | null }> {
+    try {
+      const { data: conversation, error } = await supabase
+        .from('conversations')
+        .select('*')
+        .eq('project_id', projectId)
+        .eq('metadata->>designPhase', designPhase)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (error) {
+        console.error('Error fetching phase conversation:', error)
+        return { conversation: null, error: error as Error }
+      }
+
+      return { conversation, error: null }
+    } catch (error) {
+      console.error('Unexpected error fetching phase conversation:', error)
+      return { conversation: null, error: error as Error }
+    }
+  },
+
+  async createPhaseConversation(
+    projectId: string,
+    designPhase: string,
+    title: string,
+    projectContext?: ProjectContext
+  ): Promise<{ conversation: Conversation | null; error: Error | null }> {
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+      if (authError || !user) {
+        return { conversation: null, error: new Error('User not authenticated') }
+      }
+
+      const { data: conversation, error } = await supabase
+        .from('conversations')
+        .insert({
+          user_id: user.id,
+          project_id: projectId,
+          title,
+          context: {
+            type: 'design_phase',
+            designPhase,
+            projectContext: projectContext || undefined,
+          },
+          metadata: {
+            designPhase,
+            primaryAgent: 'design_phase',
+            agentsUsed: ['design_phase'],
+            lastAgent: 'design_phase',
+          }
+        })
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error creating phase conversation:', error)
+        return { conversation: null, error: error as Error }
+      }
+
+      return { conversation, error: null }
+    } catch (error) {
+      console.error('Unexpected error creating phase conversation:', error)
+      return { conversation: null, error: error as Error }
+    }
+  },
+
+  async getSectionPhaseConversation(
+    projectId: string,
+    designPhase: string,
+    sectionId: string
+  ): Promise<{ conversation: Conversation | null; error: Error | null }> {
+    try {
+      const { data: conversation, error } = await supabase
+        .from('conversations')
+        .select('*')
+        .eq('project_id', projectId)
+        .eq('metadata->>designPhase', designPhase)
+        .eq('metadata->>sectionId', sectionId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (error) {
+        console.error('Error fetching section phase conversation:', error)
+        return { conversation: null, error: error as Error }
+      }
+
+      return { conversation, error: null }
+    } catch (error) {
+      console.error('Unexpected error fetching section phase conversation:', error)
+      return { conversation: null, error: error as Error }
+    }
+  },
+
+  async createSectionPhaseConversation(
+    projectId: string,
+    designPhase: string,
+    sectionId: string,
+    title: string,
+    projectContext?: ProjectContext
+  ): Promise<{ conversation: Conversation | null; error: Error | null }> {
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+      if (authError || !user) {
+        return { conversation: null, error: new Error('User not authenticated') }
+      }
+
+      const { data: conversation, error } = await supabase
+        .from('conversations')
+        .insert({
+          user_id: user.id,
+          project_id: projectId,
+          title,
+          context: {
+            type: 'design_phase',
+            designPhase,
+            sectionId,
+            projectContext: projectContext || undefined,
+          },
+          metadata: {
+            designPhase,
+            sectionId,
+            primaryAgent: 'design_phase',
+            agentsUsed: ['design_phase'],
+            lastAgent: 'design_phase',
+          }
+        })
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error creating section phase conversation:', error)
+        return { conversation: null, error: error as Error }
+      }
+
+      return { conversation, error: null }
+    } catch (error) {
+      console.error('Unexpected error creating section phase conversation:', error)
+      return { conversation: null, error: error as Error }
+    }
+  },
+
   async deleteConversation(conversationId: string): Promise<{ error: Error | null }> {
     try {
       // First delete all messages associated with the conversation

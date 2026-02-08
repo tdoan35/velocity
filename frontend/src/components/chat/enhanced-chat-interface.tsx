@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { MessageSquarePlus, History, Bot, Settings, Send, Users, Sparkles, Code2, Plus, ArrowDown, Edit, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -8,6 +8,7 @@ import { TypingIndicator } from './typing-indicator'
 import { SuggestedResponses } from './suggested-responses'
 import { useAIChatStream, type SuggestedResponse } from '@/hooks/useAIChatStream'
 import type { AgentType } from '@/types/ai'
+import type { DesignPhaseType } from '@/types/design-phases'
 import { cn } from '@/lib/utils'
 import type { ProjectContext } from '@/services/conversationService'
 import { conversationService } from '@/services/conversationService'
@@ -37,6 +38,20 @@ interface EnhancedChatInterfaceProps {
   initialMessage?: string
   projectContext?: ProjectContext
   onInitialMessageSent?: () => void
+  designPhase?: DesignPhaseType
+  onPhaseComplete?: (phase: DesignPhaseType, output: any) => void
+  phaseContext?: Record<string, any>
+  sectionId?: string
+}
+
+const phaseLabels: Record<DesignPhaseType, string> = {
+  product_vision: 'Product Vision',
+  product_roadmap: 'Product Roadmap',
+  data_model: 'Data Model',
+  design_tokens: 'Design Tokens',
+  design_shell: 'App Shell',
+  shape_section: 'Section Design',
+  sample_data: 'Sample Data',
 }
 
 const agentConfig: Record<AgentType, { label: string; icon: any; color: string }> = {
@@ -63,14 +78,22 @@ export function EnhancedChatInterface({
   initialMessage,
   projectContext,
   onInitialMessageSent,
+  designPhase,
+  onPhaseComplete,
+  phaseContext,
+  sectionId,
 }: EnhancedChatInterfaceProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  const viewportRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const isScrollingRef = useRef(false)
   const { toast } = useToast()
   const [hasSubmittedInitial, setHasSubmittedInitial] = useState(false)
+  const onInitialMessageSentRef = useRef(onInitialMessageSent)
+  onInitialMessageSentRef.current = onInitialMessageSent
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [titleInput, setTitleInput] = useState("")
   const [isSavingTitle, setIsSavingTitle] = useState(false)
@@ -94,6 +117,10 @@ export function EnhancedChatInterface({
     projectId,
     initialAgent: activeAgent || 'project_manager',
     projectContext,
+    designPhase,
+    phaseContext,
+    sectionId,
+    onPhaseComplete,
     onStreamStart: () => {
       // Force auto-scroll when streaming starts
       setShouldAutoScroll(true)
@@ -108,36 +135,62 @@ export function EnhancedChatInterface({
     onTitleGenerated,
   })
 
-  // Auto-scroll to bottom with smooth scrolling
-  const scrollToBottom = (force = false) => {
+  // Discover the actual scrollable viewport inside the Radix ScrollArea
+  useEffect(() => {
+    if (!scrollRef.current) return
+    viewportRef.current = scrollRef.current.querySelector<HTMLDivElement>(
+      '[data-radix-scroll-area-viewport]'
+    )
+  }, [])
+
+  // Auto-scroll to bottom — uses 'instant' to avoid animation-triggered scroll events
+  const scrollToBottom = useCallback((force = false) => {
     if (force || shouldAutoScroll) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+      isScrollingRef.current = true
+      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' as ScrollBehavior, block: 'end' })
+      requestAnimationFrame(() => { isScrollingRef.current = false })
     }
-  }
+  }, [shouldAutoScroll])
 
-  // Check if user is near bottom of scroll area
-  const checkIfNearBottom = () => {
-    if (scrollRef.current) {
-      const { scrollTop, scrollHeight, clientHeight } = scrollRef.current
-      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100
-      setShouldAutoScroll(isNearBottom)
-    }
-  }
+  // Handle scroll events — reads from the actual viewport element
+  const handleScroll = useCallback(() => {
+    if (isScrollingRef.current) return
+    const viewport = viewportRef.current
+    if (!viewport) return
+    const { scrollTop, scrollHeight, clientHeight } = viewport
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100
+    setShouldAutoScroll(prev => prev === isNearBottom ? prev : isNearBottom)
+  }, [])
 
-  // Handle scroll events to determine if we should auto-scroll
-  const handleScroll = () => {
-    checkIfNearBottom()
-  }
-
-  // Auto-scroll when messages change or loading state changes
+  // Scroll on content/loading changes
   useEffect(() => {
-    scrollToBottom()
-  }, [messages, isLoading])
+    if (messages.length === 0) return
+    if (isLoading) setShouldAutoScroll(true)
+    const timer = setTimeout(() => scrollToBottom(), 50)
+    return () => clearTimeout(timer)
+  }, [messages.length, isLoading])
 
-  // Force scroll on initial load and when conversation changes
+  // Scroll on conversation switch
   useEffect(() => {
-    setTimeout(() => scrollToBottom(true), 100)
+    setShouldAutoScroll(true)
+    const timer = setTimeout(() => scrollToBottom(true), 150)
+    return () => clearTimeout(timer)
   }, [conversationId])
+
+  // Attach scroll listener to the actual viewport element
+  useEffect(() => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+    viewport.addEventListener('scroll', handleScroll, { passive: true })
+    return () => viewport.removeEventListener('scroll', handleScroll)
+  }, [handleScroll])
+
+  // Reset initial message guard when a new initial message arrives
+  useEffect(() => {
+    if (initialMessage) {
+      setHasSubmittedInitial(false)
+    }
+  }, [initialMessage])
 
   // Auto-submit initial message if provided and not already submitted
   useEffect(() => {
@@ -147,67 +200,12 @@ export function EnhancedChatInterface({
         console.log('Auto-submitting initial message:', initialMessage)
         handleSubmit(null, initialMessage)
         setHasSubmittedInitial(true)
-        onInitialMessageSent?.()
+        onInitialMessageSentRef.current?.()
       }, 1000)
-      
+
       return () => clearTimeout(timer)
     }
-  }, [initialMessage, hasSubmittedInitial, isLoading, isInitializing, conversationId, handleSubmit, onInitialMessageSent])
-
-  // Ensure scroll to bottom on component mount (page reload)
-  useEffect(() => {
-    // Wait for DOM to be ready and messages to render
-    const timer = setTimeout(() => {
-      setShouldAutoScroll(true)
-      scrollToBottom(true)
-    }, 200)
-    
-    return () => clearTimeout(timer)
-  }, []) // Empty dependency array - only runs on mount
-
-  // Scroll to bottom when messages are first loaded (after page reload)
-  useEffect(() => {
-    if (messages.length > 0 && !isInitializing) {
-      // This handles the case where messages are loaded from storage/API after mount
-      const isFirstLoad = scrollRef.current?.scrollTop === 0 && scrollRef.current?.scrollHeight > scrollRef.current?.clientHeight
-      if (isFirstLoad) {
-        setShouldAutoScroll(true)
-        setTimeout(() => scrollToBottom(true), 100)
-      }
-    }
-  }, [messages.length, isInitializing])
-
-  // Use MutationObserver to detect when content is added to ensure scroll on page reload
-  useEffect(() => {
-    if (!scrollRef.current) return
-
-    let hasScrolledOnLoad = false
-    const observer = new MutationObserver(() => {
-      if (!hasScrolledOnLoad && messages.length > 0) {
-        hasScrolledOnLoad = true
-        setShouldAutoScroll(true)
-        setTimeout(() => scrollToBottom(true), 50)
-      }
-    })
-
-    const scrollElement = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]')
-    if (scrollElement) {
-      observer.observe(scrollElement, {
-        childList: true,
-        subtree: true,
-      })
-    }
-
-    return () => observer.disconnect()
-  }, [messages.length])
-
-  // Force scroll when agent sends a message (streaming starts/ends)
-  useEffect(() => {
-    if (isLoading) {
-      setShouldAutoScroll(true)
-    }
-    scrollToBottom()
-  }, [isLoading])
+  }, [initialMessage, hasSubmittedInitial, isLoading, isInitializing, conversationId, handleSubmit])
 
   // Suggested responses are now provided by the hook via structured data
   // No need to extract from message text
@@ -237,18 +235,6 @@ export function EnhancedChatInterface({
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
-
-  // Handle errors
-  useEffect(() => {
-    if (error) {
-      toast({
-        title: 'Error',
-        description: error.message,
-        variant: 'destructive',
-      })
-    }
-  }, [error, toast])
-
 
   const handleSelectSuggestion = (suggestion: SuggestedResponse) => {
     // Set the input value to the suggestion text
@@ -321,13 +307,15 @@ export function EnhancedChatInterface({
   const renderMessage = (message: any, index: number) => {
     const isAssistant = message.role === 'assistant'
     const agentType = message.metadata?.agentType || currentAgent
-    const agent = agentConfig[agentType as AgentType] || agentConfig.project_manager
+    const agent = designPhase
+      ? { label: phaseLabels[designPhase] || 'Design Phase', icon: '✨', color: 'bg-emerald-500' }
+      : (agentConfig[agentType as AgentType] || agentConfig.project_manager)
     
     // Check if this is the last assistant message and has suggested responses
-    const isLastAssistantMessage = isAssistant && 
-      index === messages.length - 1 && 
+    const isLastAssistantMessage = isAssistant &&
+      index === messages.length - 1 &&
       !isLoading &&
-      suggestedResponses.length > 0
+      Array.isArray(suggestedResponses) && suggestedResponses.length > 0
 
     return (
       <div key={message.id} className="space-y-2">
@@ -414,7 +402,9 @@ export function EnhancedChatInterface({
     }
   }
 
-  const agentInfo = getAgentInfo(activeAgent || currentAgent)
+  const agentInfo = designPhase
+    ? { icon: Sparkles, color: 'emerald', bgColor: 'bg-emerald-500/10', textColor: 'text-emerald-500', label: phaseLabels[designPhase] || 'Design Phase' }
+    : getAgentInfo(activeAgent || currentAgent)
   const AgentIcon = agentInfo.icon
 
   return (
@@ -516,59 +506,78 @@ export function EnhancedChatInterface({
       </div>
       
       {/* Messages */}
-      <ScrollArea 
-        ref={scrollRef} 
+      <ScrollArea
+        ref={scrollRef}
         className="flex-1 p-4 overflow-hidden"
-        onScroll={handleScroll}
       >
         <div className="space-y-4 w-full max-w-full overflow-wrap-anywhere">
           {messages.length === 0 ? (
             <div className="text-center text-muted-foreground py-8">
               <div className="space-y-4">
-                <Bot className="w-12 h-12 mx-auto opacity-50" />
-                <div>
-                  <p className="text-sm font-medium">
-                    Welcome to Velocity AI Assistant
-                  </p>
-                  <p className="text-xs mt-2">
-                    I can help you design, build, and deploy your mobile app
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2 justify-center mt-4">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setShouldAutoScroll(true)
-                      handleInputChange({ target: { value: 'Help me plan my app structure' } } as any)
-                      handleSubmit()
-                    }}
-                  >
-                    Plan Structure
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setShouldAutoScroll(true)
-                      handleInputChange({ target: { value: 'Suggest a UI design for my app' } } as any)
-                      handleSubmit()
-                    }}
-                  >
-                    Design UI
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setShouldAutoScroll(true)
-                      handleInputChange({ target: { value: 'Generate code for a login screen' } } as any)
-                      handleSubmit()
-                    }}
-                  >
-                    Generate Code
-                  </Button>
-                </div>
+                {designPhase ? (
+                  <>
+                    <Sparkles className="w-12 h-12 mx-auto opacity-50" />
+                    <div>
+                      <p className="text-sm font-medium">
+                        {phaseLabels[designPhase]}
+                      </p>
+                      <p className="text-xs mt-2">
+                        {designPhase === 'product_vision'
+                          ? 'Describe your app idea and I\'ll help you define the product vision.'
+                          : designPhase === 'product_roadmap'
+                          ? 'I\'ll help you break your product into development sections.'
+                          : 'Let\'s work on this design phase together.'}
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Bot className="w-12 h-12 mx-auto opacity-50" />
+                    <div>
+                      <p className="text-sm font-medium">
+                        Welcome to Velocity AI Assistant
+                      </p>
+                      <p className="text-xs mt-2">
+                        I can help you design, build, and deploy your mobile app
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2 justify-center mt-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setShouldAutoScroll(true)
+                          handleInputChange({ target: { value: 'Help me plan my app structure' } } as any)
+                          handleSubmit()
+                        }}
+                      >
+                        Plan Structure
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setShouldAutoScroll(true)
+                          handleInputChange({ target: { value: 'Suggest a UI design for my app' } } as any)
+                          handleSubmit()
+                        }}
+                      >
+                        Design UI
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setShouldAutoScroll(true)
+                          handleInputChange({ target: { value: 'Generate code for a login screen' } } as any)
+                          handleSubmit()
+                        }}
+                      >
+                        Generate Code
+                      </Button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           ) : (
@@ -615,7 +624,7 @@ export function EnhancedChatInterface({
           }}
           disabled={isLoading}
           isLoading={isLoading}
-          placeholder={`Ask ${agentConfig[currentAgent].label} anything...`}
+          placeholder={designPhase ? `Describe your ${phaseLabels[designPhase]?.toLowerCase() || 'idea'}...` : `Ask ${agentConfig[currentAgent].label} anything...`}
           submitIcon={Send}
           minHeight="60px"
           showAttachButton={false}

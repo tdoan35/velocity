@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { AgentType, ChatContext, AIMessage } from '../types/ai';
+import type { DesignPhaseType } from '../types/design-phases';
 import { conversationService, type ProjectContext } from '../services/conversationService';
 import { supabase, supabaseUrl } from '../lib/supabase';
 import { useToast } from './use-toast';
@@ -22,11 +23,28 @@ export interface AssistantResponse {
   };
 }
 
+class RateLimitError extends Error {
+  retryAfter: number
+  constructor(retryAfter: number) {
+    const minutes = Math.ceil(retryAfter / 60)
+    const timeText = minutes > 1 ? `${minutes} minutes` : 'about a minute'
+    super(`You've hit the rate limit. Please wait ${timeText} and try again.`)
+    this.name = 'RateLimitError'
+    this.retryAfter = retryAfter
+  }
+}
+
 interface UseAIChatStreamOptions {
   conversationId?: string;
   projectId?: string;
   initialAgent?: AgentType;
   projectContext?: ProjectContext;
+  designPhase?: DesignPhaseType;
+  /** Additional context fields to send with each request (e.g., productOverview for roadmap phase) */
+  phaseContext?: Record<string, any>;
+  /** Section ID for section-level phases (shape_section, sample_data) */
+  sectionId?: string;
+  onPhaseComplete?: (phase: DesignPhaseType, output: any) => void;
   onStreamStart?: () => void;
   onStreamEnd?: (usage: any) => void;
   onConversationCreated?: (conversationId: string) => void;
@@ -38,6 +56,10 @@ export function useAIChatStream({
   projectId,
   initialAgent = 'project_manager',
   projectContext,
+  designPhase,
+  phaseContext,
+  sectionId,
+  onPhaseComplete,
   onStreamStart,
   onStreamEnd,
   onConversationCreated,
@@ -54,6 +76,19 @@ export function useAIChatStream({
   const [suggestedResponses, setSuggestedResponses] = useState<SuggestedResponse[]>([]);
   const { toast } = useToast();
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Use refs for props that change every render (inline callbacks, objects)
+  // to keep handleSubmit stable and avoid infinite effect re-runs
+  const latestRef = useRef({
+    onStreamStart, onStreamEnd, onPhaseComplete,
+    onConversationCreated, onTitleGenerated,
+    designPhase, phaseContext, sectionId, projectContext,
+  });
+  latestRef.current = {
+    onStreamStart, onStreamEnd, onPhaseComplete,
+    onConversationCreated, onTitleGenerated,
+    designPhase, phaseContext, sectionId, projectContext,
+  };
 
   const loadConversationMessages = async (convId: string) => {
     try {
@@ -75,7 +110,7 @@ export function useAIChatStream({
           .filter(m => m.role === 'assistant')
           .pop();
         
-        if (lastAssistantMessage?.metadata?.suggestedResponses) {
+        if (Array.isArray(lastAssistantMessage?.metadata?.suggestedResponses)) {
           setSuggestedResponses(lastAssistantMessage.metadata.suggestedResponses);
         } else {
           // Clear suggestions if none found
@@ -141,7 +176,7 @@ export function useAIChatStream({
             .filter(m => m.role === 'assistant')
             .pop();
           
-          if (lastAssistantMessage?.metadata?.suggestedResponses) {
+          if (Array.isArray(lastAssistantMessage?.metadata?.suggestedResponses)) {
             setSuggestedResponses(lastAssistantMessage.metadata.suggestedResponses);
           } else {
             setSuggestedResponses([]);
@@ -189,18 +224,18 @@ export function useAIChatStream({
           projectId,
           'Chat Conversation',
           currentAgent,
-          projectContext
+          latestRef.current.projectContext
         );
-        
+
         if (error || !conversation) {
           throw error || new Error('Failed to create conversation');
         }
-        
+
         actualConversationId = conversation.id;
         setConversationId(conversation.id);
-        
+
         // Notify parent component of the new conversation ID
-        onConversationCreated?.(conversation.id);
+        latestRef.current.onConversationCreated?.(conversation.id);
       } catch (error) {
         console.error('Error creating conversation:', error);
         toast({
@@ -235,13 +270,13 @@ export function useAIChatStream({
     abortControllerRef.current = new AbortController();
 
     try {
-      onStreamStart?.();
-      
+      latestRef.current.onStreamStart?.();
+
       // Debug: Log the project context being sent
       console.log('🔍 Project context being sent to API:', {
-        projectContext,
-        hasProjectContext: !!projectContext,
-        projectContextKeys: projectContext ? Object.keys(projectContext) : [],
+        projectContext: latestRef.current.projectContext,
+        hasProjectContext: !!latestRef.current.projectContext,
+        projectContextKeys: latestRef.current.projectContext ? Object.keys(latestRef.current.projectContext) : [],
       });
 
       // Save user message to database
@@ -268,9 +303,12 @@ export function useAIChatStream({
           message: userMessage.content,
           context: {
             ...context,
-            projectContext: projectContext || undefined
+            ...(latestRef.current.phaseContext || {}),
+            projectContext: latestRef.current.projectContext || undefined
           },
-          agentType: currentAgent,
+          designPhase: latestRef.current.designPhase || undefined,
+          sectionId: latestRef.current.sectionId || undefined,
+          agentType: latestRef.current.designPhase ? undefined : currentAgent,
           action: 'continue',
           projectId: projectId || undefined,
         }),
@@ -278,6 +316,16 @@ export function useAIChatStream({
       });
 
       if (!response.ok) {
+        if (response.status === 429) {
+          let retryAfter = 60;
+          try {
+            const errorBody = await response.json();
+            if (typeof errorBody.retryAfter === 'number') {
+              retryAfter = errorBody.retryAfter;
+            }
+          } catch { /* use default */ }
+          throw new RateLimitError(retryAfter);
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
@@ -344,7 +392,7 @@ export function useAIChatStream({
                           metadata: {
                             ...newMessages[lastMessageIndex].metadata,
                             ...currentStructuredResponse.metadata,
-                            suggestedResponses: currentStructuredResponse.suggestedResponses,
+                            suggestedResponses: Array.isArray(currentStructuredResponse.suggestedResponses) ? currentStructuredResponse.suggestedResponses : [],
                           },
                         };
                       }
@@ -353,12 +401,12 @@ export function useAIChatStream({
                   }
                   
                   // Handle conversation title (for new conversations)
-                  if (currentStructuredResponse.conversationTitle && onTitleGenerated) {
-                    onTitleGenerated(currentStructuredResponse.conversationTitle);
+                  if (currentStructuredResponse.conversationTitle && latestRef.current.onTitleGenerated) {
+                    latestRef.current.onTitleGenerated(currentStructuredResponse.conversationTitle);
                   }
                   
                   // Update suggested responses
-                  if (currentStructuredResponse.suggestedResponses) {
+                  if (Array.isArray(currentStructuredResponse.suggestedResponses)) {
                     setSuggestedResponses(currentStructuredResponse.suggestedResponses);
                   }
                 }
@@ -382,10 +430,15 @@ export function useAIChatStream({
                 
                 if (data.type === 'done' && data.done) {
                   // Clear suggested responses before setting new ones
-                  if (data.finalObject?.suggestedResponses) {
+                  if (Array.isArray(data.finalObject?.suggestedResponses)) {
                     setSuggestedResponses(data.finalObject.suggestedResponses);
                   }
-                  
+
+                  // Detect phase completion
+                  if (data.finalObject?.phaseOutput && data.finalObject?.phaseComplete && latestRef.current.designPhase) {
+                    latestRef.current.onPhaseComplete?.(latestRef.current.designPhase, data.finalObject.phaseOutput);
+                  }
+
                   // Update conversation tokens if available
                   if (data.usage?.totalTokens) {
                     await conversationService.updateConversationTokens(
@@ -393,8 +446,8 @@ export function useAIChatStream({
                       data.usage.totalTokens
                     );
                   }
-                  
-                  onStreamEnd?.(data.usage);
+
+                  latestRef.current.onStreamEnd?.(data.usage);
                 }
               } catch (error) {
                 // Only log if it's not an expected format
@@ -438,18 +491,22 @@ export function useAIChatStream({
         console.log('Stream aborted');
       } else {
         console.error('Error in chat stream:', error);
+        // Remove the user message from UI — it was added before the fetch
+        setMessages(prev => prev.filter(m => m.id !== userMessage.id));
         setError(error);
+        const isRateLimit = error instanceof RateLimitError;
         toast({
-          title: 'Error',
+          title: isRateLimit ? 'Rate Limit Reached' : 'Error',
           description: error.message || 'Failed to send message',
           variant: 'destructive',
+          duration: isRateLimit ? 8000 : undefined,
         });
       }
     } finally {
       setIsLoading(false);
       abortControllerRef.current = null;
     }
-  }, [input, conversationId, currentAgent, context, onStreamStart, onStreamEnd, toast]);
+  }, [input, conversationId, currentAgent, context, toast, projectId]);
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setInput(e.target.value);

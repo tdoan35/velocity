@@ -16,6 +16,16 @@ export type PhaseName =
   | 'section-details'
   | 'export';
 
+/** AI-facing phase identifiers used in the structured conversation flow */
+export type DesignPhaseType =
+  | 'product_vision'
+  | 'product_roadmap'
+  | 'data_model'
+  | 'design_tokens'
+  | 'design_shell'
+  | 'shape_section'
+  | 'sample_data';
+
 export type SectionStatus = 'pending' | 'in-progress' | 'completed';
 
 // ============================================================================
@@ -318,3 +328,21 @@ export interface UpdateDesignSectionRequest {
   screenshots?: Screenshot[];
   status?: SectionStatus;
 }
+
+// ============================================================================
+// Phase Output Types (AI conversation structured outputs)
+// ============================================================================
+
+export interface SampleDataOutput {
+  sampleData: Record<string, any>;
+  typesDefinition: string;
+}
+
+export type PhaseOutput =
+  | { phase: 'product_vision'; data: ProductOverview }
+  | { phase: 'product_roadmap'; data: ProductRoadmap }
+  | { phase: 'data_model'; data: DataModel }
+  | { phase: 'design_tokens'; data: DesignSystem }
+  | { phase: 'design_shell'; data: ShellSpec }
+  | { phase: 'shape_section'; data: SectionSpec }
+  | { phase: 'sample_data'; data: SampleDataOutput };

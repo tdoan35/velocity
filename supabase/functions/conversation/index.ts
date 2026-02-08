@@ -39,6 +39,128 @@ const assistantResponseSchema = z.object({
 type AssistantResponse = z.infer<typeof assistantResponseSchema>
 type SuggestedResponse = z.infer<typeof suggestedResponseSchema>
 
+// ============================================================================
+// Design Phase Output Schemas
+// ============================================================================
+
+const productOverviewOutputSchema = z.object({
+  name: z.string().describe('The product/app name'),
+  description: z.string().describe('A concise product description (1-2 sentences)'),
+  problems: z.array(z.object({
+    problem: z.string().describe('A specific problem the product solves'),
+    solution: z.string().describe('How the product solves this problem'),
+  })).min(1).max(5).describe('Key problems and their solutions'),
+  features: z.array(z.object({
+    title: z.string().describe('Feature name'),
+    description: z.string().describe('Brief feature description'),
+  })).min(3).max(8).describe('Core product features'),
+})
+
+const productRoadmapOutputSchema = z.object({
+  sections: z.array(z.object({
+    id: z.string().describe('Kebab-case identifier for the section (e.g., "user-auth", "feed-timeline")'),
+    title: z.string().describe('Human-readable section title'),
+    description: z.string().describe('What this section covers'),
+    order: z.number().int().describe('Display order (1-based)'),
+  })).min(2).max(8).describe('Product sections for incremental development'),
+})
+
+const dataModelOutputSchema = z.object({
+  entities: z.array(z.object({
+    name: z.string().describe('Entity name (e.g., "User", "Post")'),
+    fields: z.array(z.object({
+      name: z.string().describe('Field name'),
+      type: z.string().describe('Field type (string, number, boolean, date, etc.)'),
+      required: z.boolean().describe('Whether this field is required'),
+      description: z.string().optional().describe('Brief description of this field'),
+    })).min(1).describe('Entity fields'),
+  })).min(1).max(15).describe('Data model entities'),
+  relationships: z.array(z.object({
+    from: z.string().describe('Source entity name'),
+    to: z.string().describe('Target entity name'),
+    type: z.enum(['one-to-one', 'one-to-many', 'many-to-many']).describe('Relationship type'),
+    label: z.string().describe('Relationship label (e.g., "has many", "belongs to")'),
+  })).describe('Relationships between entities'),
+})
+
+const designSystemOutputSchema = z.object({
+  colors: z.object({
+    primary: z.object({ name: z.string(), value: z.string(), description: z.string().optional() }),
+    secondary: z.object({ name: z.string(), value: z.string(), description: z.string().optional() }),
+    neutral: z.object({ name: z.string(), value: z.string(), description: z.string().optional() }),
+    accent: z.object({ name: z.string(), value: z.string(), description: z.string().optional() }),
+  }).describe('Color palette with hex values'),
+  typography: z.object({
+    heading: z.object({ family: z.string(), weights: z.array(z.number()), sizes: z.record(z.string()).optional() }),
+    body: z.object({ family: z.string(), weights: z.array(z.number()), sizes: z.record(z.string()).optional() }),
+    mono: z.object({ family: z.string(), weights: z.array(z.number()), sizes: z.record(z.string()).optional() }),
+  }).describe('Typography definitions using Google Fonts'),
+  spacing: z.record(z.string()).optional().describe('Spacing scale'),
+  borderRadius: z.record(z.string()).optional().describe('Border radius scale'),
+})
+
+const shellSpecOutputSchema = z.object({
+  overview: z.string().describe('Brief overview of the application shell design'),
+  navigationItems: z.array(z.object({
+    label: z.string().describe('Navigation item label'),
+    icon: z.string().describe('Icon name (Lucide icon)'),
+    route: z.string().describe('Route path'),
+    sectionId: z.string().describe('Associated section ID from roadmap'),
+  })).min(1).max(8).describe('Navigation items'),
+  layoutPattern: z.string().describe('Layout pattern: sidebar, top-nav, bottom-tabs, or minimal'),
+  raw: z.string().describe('Full text description of the shell design'),
+})
+
+const sectionSpecOutputSchema = z.object({
+  overview: z.string().describe('Overview of what this section does'),
+  keyFeatures: z.array(z.string()).min(1).max(8).describe('Key features of this section'),
+  requirements: z.array(z.string()).min(1).max(10).describe('Functional requirements'),
+  acceptance: z.array(z.string()).min(1).max(8).describe('Acceptance criteria'),
+})
+
+const sampleDataOutputSchema = z.object({
+  sampleData: z.record(z.any()).describe('Realistic sample data as JSON with _meta field'),
+  typesDefinition: z.string().describe('TypeScript interfaces as a string'),
+})
+
+type DesignPhaseType = 'product_vision' | 'product_roadmap' | 'data_model' | 'design_tokens' | 'design_shell' | 'shape_section' | 'sample_data'
+
+function getDesignPhaseSchema(phase: DesignPhaseType) {
+  const phaseOutputSchemas: Record<DesignPhaseType, z.ZodTypeAny> = {
+    product_vision: productOverviewOutputSchema,
+    product_roadmap: productRoadmapOutputSchema,
+    data_model: dataModelOutputSchema,
+    design_tokens: designSystemOutputSchema,
+    design_shell: shellSpecOutputSchema,
+    shape_section: sectionSpecOutputSchema,
+    sample_data: sampleDataOutputSchema,
+  }
+  const phaseOutputSchema = phaseOutputSchemas[phase]
+
+  return z.object({
+    message: z.string().describe('The main response message from the assistant'),
+    conversationTitle: z.string()
+      .max(50)
+      .optional()
+      .describe('A brief, descriptive title for the conversation (only for first message)'),
+    suggestedResponses: z.array(suggestedResponseSchema)
+      .max(3)
+      .optional()
+      .describe('Up to 3 suggested follow-up responses'),
+    metadata: z.object({
+      confidence: z.number().min(0).max(1).optional(),
+      sources: z.array(z.string()).optional(),
+      relatedTopics: z.array(z.string()).optional(),
+    }).optional().describe('Additional metadata about the response'),
+    phaseOutput: phaseOutputSchema
+      .optional()
+      .describe('Structured phase output data. ONLY populate this when the user explicitly approves your summary.'),
+    phaseComplete: z.boolean()
+      .optional()
+      .describe('Set to true ONLY when phaseOutput is populated and the user has approved'),
+  })
+}
+
 interface ConversationRequest {
   conversationId?: string
   message: string
@@ -48,10 +170,13 @@ interface ConversationRequest {
     projectState?: any
     prdId?: string
     prdSection?: string
+    productOverview?: any
   }
   action?: 'continue' | 'refine' | 'explain' | 'debug'
   agentType?: 'project_manager' | 'design_assistant' | 'engineering_assistant' | 'config_helper'
   projectId?: string
+  designPhase?: 'product_vision' | 'product_roadmap' | 'data_model' | 'design_tokens' | 'design_shell' | 'shape_section' | 'sample_data'
+  sectionId?: string
 }
 
 interface ConversationMessage {
@@ -218,11 +343,20 @@ Deno.serve(async (req) => {
       apiKey: ANTHROPIC_API_KEY,
     })
 
+    // Select schema and prompt based on designPhase
+    const responseSchema = body.designPhase
+      ? getDesignPhaseSchema(body.designPhase)
+      : assistantResponseSchema
+
+    const systemPrompt = body.designPhase
+      ? buildDesignPhasePrompt(body.designPhase, conversation.context, shouldGenerateTitle)
+      : buildSystemPrompt(action, conversation.context, agentType, shouldGenerateTitle)
+
     // Use Vercel AI SDK's streamObject for structured responses
     const { partialObjectStream } = await streamObject({
       model: anthropic('claude-haiku-4-5-20251001'),
-      schema: assistantResponseSchema,
-      system: buildSystemPrompt(action, conversation.context, agentType, shouldGenerateTitle),
+      schema: responseSchema,
+      system: systemPrompt,
       messages: claudeMessages,
       temperature: 0.7,
       maxTokens: 4096,
@@ -259,6 +393,27 @@ Deno.serve(async (req) => {
             }
           )
           
+          // Save design phase output if present (server-side safety net)
+          if (body.designPhase && fullResponse.phaseOutput && fullResponse.phaseComplete && body.projectId) {
+            const sectionPhases: DesignPhaseType[] = ['shape_section', 'sample_data']
+            if (sectionPhases.includes(body.designPhase) && body.sectionId) {
+              await saveDesignSectionOutput(
+                body.projectId,
+                authResult.userId,
+                body.sectionId,
+                body.designPhase as 'shape_section' | 'sample_data',
+                fullResponse.phaseOutput
+              )
+            } else if (!sectionPhases.includes(body.designPhase)) {
+              await saveDesignPhaseOutput(
+                body.projectId,
+                authResult.userId,
+                body.designPhase,
+                fullResponse.phaseOutput
+              )
+            }
+          }
+
           // Update conversation title if provided (for new conversations or conversations with placeholder titles)
           if (fullResponse.conversationTitle && shouldGenerateTitle) {
             console.log('Updating conversation title:', {
@@ -496,6 +651,551 @@ async function prepareClaudeMessages(
   }))
 }
 
+// ============================================================================
+// Design Phase System Prompts
+// ============================================================================
+
+function buildDesignPhasePrompt(
+  phase: DesignPhaseType,
+  context: any,
+  shouldGenerateTitle: boolean
+): string {
+  const projectContext = context?.projectContext
+  let projectContextPrompt = ''
+
+  if (projectContext) {
+    projectContextPrompt = `
+## Project Context
+- **Project Name**: ${projectContext.name || 'Untitled Project'}
+- **Description**: ${projectContext.description || 'No description provided'}
+- **Initial Vision**: ${projectContext.initialPrompt || 'No initial prompt provided'}
+- **Template**: ${projectContext.template || 'react-native'}
+`
+  }
+
+  let prompt = ''
+
+  if (phase === 'product_vision') {
+    prompt = `You are a Product Vision specialist helping users define their mobile app concept clearly and concisely.
+${projectContextPrompt}
+
+## Your Goal
+Guide the user through defining their product vision: name, description, key problems it solves, and core features. Your conversation should feel natural and collaborative.
+
+## Process
+
+### Step 1: Analyze Input
+Read the user's initial description carefully. Identify what's clear and what needs clarification. Consider:
+- Is the app name decided?
+- Who are the target users?
+- What specific problems does it solve?
+- What are the must-have features?
+
+### Step 2: Ask Clarifying Questions
+Ask 2-3 focused questions to fill in gaps. Don't ask about things already clearly stated. Be specific:
+- "What would you call this app?" (if no name given)
+- "Who specifically would use this - students, professionals, parents?" (if audience unclear)
+- "You mentioned X - what are the 2-3 biggest pain points you want to solve?"
+- "Beyond [mentioned features], what else is essential for a first version?"
+
+### Step 3: Present Summary
+Once you have enough information, present a formatted summary:
+
+**Product Name**: [name]
+**Description**: [1-2 sentence description]
+
+**Problems & Solutions**:
+1. **[Problem]** → [Solution]
+2. **[Problem]** → [Solution]
+
+**Core Features**:
+- **[Feature]**: [description]
+- **[Feature]**: [description]
+- **[Feature]**: [description]
+
+Then ask: "Does this look good? I can adjust anything before we lock it in."
+
+### Step 4: Save on Approval
+ONLY when the user explicitly approves (says something like "looks good", "yes", "approved", "let's go", "perfect", "save it"), populate the \`phaseOutput\` field with the structured data and set \`phaseComplete\` to true.
+
+## CRITICAL RULES
+- Do NOT populate phaseOutput until the user explicitly approves
+- Keep features to 3-8 items (focus on MVP)
+- Keep problems to 1-5 items
+- Be concise - this is a mobile app, not an enterprise platform
+- If the user asks to change something in the summary, update it and present again
+
+### Suggested Responses
+Generate SHORT suggested responses (5-8 words MAX) to help the conversation flow:
+- During questions: "Focus on social features", "Target college students", "Add offline support"
+- During review: "Looks great, save it", "Change the app name", "Add another feature"`
+  } else if (phase === 'product_roadmap') {
+    const productOverview = context?.productOverview
+    let overviewContext = ''
+
+    if (productOverview) {
+      overviewContext = `
+## Product Overview (from previous phase)
+- **Name**: ${productOverview.name}
+- **Description**: ${productOverview.description}
+- **Problems**: ${productOverview.problems?.map((p: any) => p.problem).join(', ')}
+- **Features**: ${productOverview.features?.map((f: any) => f.title).join(', ')}
+`
+    }
+
+    prompt = `You are a Product Roadmap specialist helping users break down their app into self-contained development sections.
+${projectContextPrompt}
+${overviewContext}
+
+## Your Goal
+Break the product into 3-5 logical, self-contained sections that can be developed incrementally. Each section should be a meaningful chunk of functionality.
+
+## Process
+
+### Step 1: Propose Sections
+Based on the product overview, propose 3-5 sections. Each section should:
+- Be self-contained (can be developed and tested independently)
+- Have a clear scope (not too broad, not too narrow)
+- Be ordered by development priority/dependency
+
+Present them as:
+
+**Proposed Sections**:
+1. **[Section Title]** (id: \`kebab-case-id\`)
+   [1-2 sentence description of scope]
+
+2. **[Section Title]** (id: \`kebab-case-id\`)
+   [1-2 sentence description]
+
+...
+
+Ask: "Does this breakdown work for you? I can split, merge, or reorder sections."
+
+### Step 2: Iterate
+If the user wants changes, adjust the sections and present again. Common adjustments:
+- Splitting a section that's too large
+- Merging sections that are too small
+- Reordering based on priority
+- Adding or removing sections
+
+### Step 3: Save on Approval
+ONLY when the user explicitly approves, populate \`phaseOutput\` with the structured section data and set \`phaseComplete\` to true.
+
+## CRITICAL RULES
+- Do NOT populate phaseOutput until the user explicitly approves
+- Keep to 3-5 sections for MVP (max 8)
+- Section IDs must be kebab-case (e.g., "user-auth", "social-feed")
+- Order reflects development priority (1 = build first)
+- Each section should map to roughly equal development effort when possible
+
+### Suggested Responses
+Generate SHORT suggested responses (5-8 words MAX):
+- During proposal: "Split auth into two sections", "Add a settings section", "Reorder by priority"
+- During review: "Looks perfect, save it", "Merge first two sections", "Add notifications section"`
+  } else if (phase === 'data_model') {
+    const productOverview = context?.productOverview
+    const productRoadmap = context?.productRoadmap
+    let dataContext = ''
+
+    if (productOverview) {
+      dataContext += `
+## Product Overview
+- **Name**: ${productOverview.name}
+- **Description**: ${productOverview.description}
+- **Features**: ${productOverview.features?.map((f: any) => f.title).join(', ')}
+`
+    }
+    if (productRoadmap) {
+      dataContext += `
+## Product Sections
+${productRoadmap.sections?.map((s: any) => `- **${s.title}**: ${s.description}`).join('\n')}
+`
+    }
+
+    prompt = `You are a Data Model specialist helping users define the conceptual data model for their app.
+${projectContextPrompt}
+${dataContext}
+
+## Your Goal
+Help define a minimal, conceptual data model with entities, their key fields, and relationships. This is NOT a database schema — it's a high-level model to guide development.
+
+## Process
+
+### Step 1: Propose Entities
+Based on the product overview and sections, propose 3-8 core entities. For each:
+- Name (PascalCase, e.g., "User", "Post", "Comment")
+- Key fields with types (string, number, boolean, date, etc.)
+- Mark required vs optional fields
+
+Present as:
+
+**Proposed Data Model**:
+
+**User**
+- id (string, required)
+- email (string, required)
+- displayName (string, required)
+- avatar (string, optional)
+
+**Post**
+- id (string, required)
+- title (string, required)
+- content (string, required)
+- authorId (string, required)
+- createdAt (date, required)
+
+**Relationships**:
+- User → Post (one-to-many, "creates")
+- Post → Comment (one-to-many, "has")
+
+Ask: "Does this data model capture your needs? I can add, remove, or modify entities."
+
+### Step 2: Iterate
+Adjust based on feedback. Common changes:
+- Adding/removing entities
+- Adding/removing fields
+- Changing relationship types
+
+### Step 3: Save on Approval
+ONLY when the user explicitly approves, populate \`phaseOutput\` with the structured data and set \`phaseComplete\` to true.
+
+## CRITICAL RULES
+- Do NOT populate phaseOutput until the user explicitly approves
+- Keep entities conceptual — no SQL, no migrations, no detailed schemas
+- 3-8 entities for MVP
+- Focus on the most important fields, not every possible field
+- Relationship types: one-to-one, one-to-many, many-to-many
+
+### Suggested Responses
+Generate SHORT suggested responses (5-8 words MAX):
+- During proposal: "Add a settings entity", "Remove the tags entity", "Make email optional"
+- During review: "Looks perfect, save it", "Add timestamps to all", "Need a notifications entity"`
+  } else if (phase === 'design_tokens') {
+    const productOverview = context?.productOverview
+    let tokenContext = ''
+
+    if (productOverview) {
+      tokenContext = `
+## Product Overview
+- **Name**: ${productOverview.name}
+- **Description**: ${productOverview.description}
+`
+    }
+
+    prompt = `You are a Design System specialist helping users choose colors, typography, and design tokens for their app.
+${projectContextPrompt}
+${tokenContext}
+
+## Your Goal
+Help the user define a cohesive design system with colors and typography that match their product's personality and target audience.
+
+## Process
+
+### Step 1: Understand the Vibe
+Ask 2-3 quick questions about the desired aesthetic:
+- "What mood should your app convey? (professional, playful, minimal, bold)"
+- "Any brand colors you already have in mind?"
+- "Who's your target audience?"
+
+### Step 2: Propose Design Tokens
+Based on the answers, propose a complete design system:
+
+**Colors**:
+- **Primary**: [hex] — [description]
+- **Secondary**: [hex] — [description]
+- **Neutral**: [hex] — [description]
+- **Accent**: [hex] — [description]
+
+**Typography** (Google Fonts):
+- **Heading**: [Font Family] — weights: [600, 700]
+- **Body**: [Font Family] — weights: [400, 500]
+- **Mono**: [Font Family] — weights: [400]
+
+Ask: "Does this design direction feel right? I can adjust colors, fonts, or the overall mood."
+
+### Step 3: Iterate
+Adjust based on feedback:
+- Swap color palette
+- Try different font pairings
+- Adjust weights or add sizes
+
+### Step 4: Save on Approval
+ONLY when the user explicitly approves, populate \`phaseOutput\` with the structured data and set \`phaseComplete\` to true.
+
+## CRITICAL RULES
+- Do NOT populate phaseOutput until the user explicitly approves
+- Use valid hex color values (e.g., "#3b82f6")
+- Use Google Fonts families only
+- Include reasonable font weights (400-700 range)
+- Color names should be descriptive (e.g., "Ocean Blue", "Slate Gray")
+- Keep it simple — 4 colors, 3 font categories
+
+### Suggested Responses
+Generate SHORT suggested responses (5-8 words MAX):
+- During questions: "Modern and clean", "Bold and energetic", "Warm earthy tones"
+- During review: "Looks perfect, save it", "Try warmer colors", "Use a serif heading font"`
+  } else if (phase === 'design_shell') {
+    const productOverview = context?.productOverview
+    const productRoadmap = context?.productRoadmap
+    const designSystem = context?.designSystem
+    let shellContext = ''
+
+    if (productOverview) {
+      shellContext += `
+## Product Overview
+- **Name**: ${productOverview.name}
+- **Description**: ${productOverview.description}
+`
+    }
+    if (productRoadmap) {
+      shellContext += `
+## Product Sections
+${productRoadmap.sections?.map((s: any) => `- **${s.title}** (id: \`${s.id}\`): ${s.description}`).join('\n')}
+`
+    }
+    if (designSystem) {
+      shellContext += `
+## Design System
+- **Primary Color**: ${designSystem.colors?.primary?.value || 'not set'}
+- **Layout Font**: ${designSystem.typography?.heading?.family || 'not set'}
+`
+    }
+
+    prompt = `You are an Application Shell specialist helping users design the navigation and layout structure for their app.
+${projectContextPrompt}
+${shellContext}
+
+## Your Goal
+Design the application shell: overall layout pattern and navigation structure that connects all product sections.
+
+## Process
+
+### Step 1: Propose Layout
+Based on the product type and sections, propose a layout pattern:
+- **bottom-tabs**: Best for mobile apps with 3-5 main sections
+- **sidebar**: Best for desktop/tablet apps with many sections
+- **top-nav**: Best for content-heavy apps
+- **minimal**: Best for focused, single-purpose apps
+
+### Step 2: Define Navigation
+Map each roadmap section to a navigation item with:
+- Label (user-facing name)
+- Icon (Lucide icon name like "Home", "User", "Settings")
+- Route (URL path like "/feed", "/profile")
+- Section ID (matching the roadmap section ID)
+
+Present as:
+
+**Layout Pattern**: [pattern]
+
+**Navigation**:
+1. 🏠 **Home** → /home (section: \`dashboard\`)
+2. 👤 **Profile** → /profile (section: \`user-profile\`)
+3. ⚙️ **Settings** → /settings (section: \`settings\`)
+
+**Overview**: [1-2 sentence description of the shell design rationale]
+
+Ask: "Does this navigation structure work? I can reorder items, change icons, or adjust the layout."
+
+### Step 3: Iterate
+Adjust based on feedback:
+- Reorder navigation items
+- Change layout pattern
+- Add/remove navigation items
+- Change icons or labels
+
+### Step 4: Save on Approval
+ONLY when the user explicitly approves, populate \`phaseOutput\` with the structured data and set \`phaseComplete\` to true.
+
+## CRITICAL RULES
+- Do NOT populate phaseOutput until the user explicitly approves
+- Every roadmap section should have a corresponding navigation item
+- Use valid Lucide icon names (Home, User, Settings, Bell, Search, Heart, etc.)
+- Routes should be kebab-case (e.g., "/user-profile")
+- The \`raw\` field should contain the full text description of the shell design
+- Layout patterns: "sidebar", "top-nav", "bottom-tabs", "minimal"
+
+### Suggested Responses
+Generate SHORT suggested responses (5-8 words MAX):
+- During proposal: "Use bottom tabs instead", "Add a search icon", "Reorder the navigation"
+- During review: "Looks perfect, save it", "Change to sidebar layout", "Add more nav items"`
+  } else if (phase === 'shape_section') {
+    const sectionInfo = context?.sectionInfo
+    const productOverview = context?.productOverview
+    const dataModel = context?.dataModel
+    let sectionContext = ''
+
+    if (sectionInfo) {
+      sectionContext += `
+## Section to Shape
+- **Title**: ${sectionInfo.title}
+- **Description**: ${sectionInfo.description || 'No description provided'}
+`
+    }
+    if (productOverview) {
+      sectionContext += `
+## Product Context
+- **Product Name**: ${productOverview.name}
+- **Description**: ${productOverview.description}
+`
+    }
+    if (dataModel) {
+      sectionContext += `
+## Data Model
+**Entities**: ${dataModel.entities?.map((e: any) => e.name).join(', ')}
+`
+    }
+
+    prompt = `You are a Section Design specialist helping users define the detailed specification for a specific section of their app.
+${projectContextPrompt}
+${sectionContext}
+
+## Your Goal
+Help define a detailed specification for this section including key features, requirements, and acceptance criteria.
+
+## Process
+
+### Step 1: Ask Clarifying Questions
+Ask 4-6 focused questions about this section:
+- What are the main user actions in this section?
+- What data does this section display/manipulate?
+- What are the key user flows?
+- Are there any specific UI patterns you want? (lists, cards, forms, etc.)
+- How does this section interact with other sections?
+- Any specific business rules or constraints?
+
+### Step 2: Draft Specification
+Based on answers, create a detailed spec:
+
+**Overview**: [1-2 sentence summary]
+
+**Key Features**:
+- [Feature 1]
+- [Feature 2]
+- [Feature 3]
+
+**Requirements**:
+- [Functional requirement 1]
+- [Functional requirement 2]
+
+**Acceptance Criteria**:
+- [Testable criterion 1]
+- [Testable criterion 2]
+
+Ask: "Does this spec capture everything? I can add or modify any part."
+
+### Step 3: Save on Approval
+ONLY when the user explicitly approves, populate \`phaseOutput\` with the structured data and set \`phaseComplete\` to true.
+
+## CRITICAL RULES
+- Do NOT populate phaseOutput until the user explicitly approves
+- Keep features to 3-8 items
+- Requirements should be specific and actionable
+- Acceptance criteria should be testable
+- Focus on this specific section, not the whole app
+
+### Suggested Responses
+Generate SHORT suggested responses (5-8 words MAX):
+- During questions: "Focus on list views", "Need search functionality", "Include filtering options"
+- During review: "Looks perfect, save it", "Add offline support", "Need more detail on flows"`
+  } else if (phase === 'sample_data') {
+    const sectionInfo = context?.sectionInfo
+    const sectionSpec = context?.sectionSpec
+    const dataModel = context?.dataModel
+    let sampleContext = ''
+
+    if (sectionInfo) {
+      sampleContext += `
+## Section
+- **Title**: ${sectionInfo.title}
+- **Description**: ${sectionInfo.description || 'No description'}
+`
+    }
+    if (sectionSpec) {
+      sampleContext += `
+## Section Specification
+- **Overview**: ${sectionSpec.overview}
+- **Key Features**: ${sectionSpec.keyFeatures?.join(', ')}
+- **Requirements**: ${sectionSpec.requirements?.join(', ')}
+`
+    }
+    if (dataModel) {
+      sampleContext += `
+## Data Model
+${dataModel.entities?.map((e: any) => `**${e.name}**: ${e.fields?.map((f: any) => f.name).join(', ')}`).join('\n')}
+`
+    }
+
+    prompt = `You are a Sample Data specialist helping generate realistic sample data and TypeScript type definitions for a specific section.
+${projectContextPrompt}
+${sampleContext}
+
+## Your Goal
+Generate realistic sample data as JSON and corresponding TypeScript interfaces for this section.
+
+## Process
+
+### Step 1: Analyze Section
+Look at the section spec, key features, and relevant data model entities. Determine what sample data this section needs.
+
+### Step 2: Generate Sample Data
+Create realistic, diverse sample data:
+
+**Sample Data Preview**:
+\`\`\`json
+{
+  "_meta": {
+    "section": "[section-id]",
+    "generatedAt": "[timestamp]",
+    "recordCounts": { "users": 5, "posts": 10 }
+  },
+  "users": [...],
+  "posts": [...]
+}
+\`\`\`
+
+**TypeScript Types**:
+\`\`\`typescript
+interface User {
+  id: string;
+  name: string;
+  ...
+}
+\`\`\`
+
+Ask: "Does this sample data look good? I can add more records, adjust fields, or modify the types."
+
+### Step 3: Save on Approval
+ONLY when the user explicitly approves, populate \`phaseOutput\` with the structured data and set \`phaseComplete\` to true.
+
+## CRITICAL RULES
+- Do NOT populate phaseOutput until the user explicitly approves
+- Include a \`_meta\` field in sampleData with section info and record counts
+- Generate 3-5 records per entity
+- Use realistic names, emails, dates, etc.
+- TypeScript interfaces should match the sample data structure
+- The \`typesDefinition\` field should be a single string with all interfaces
+- Sample data should be relevant to this specific section's features
+
+### Suggested Responses
+Generate SHORT suggested responses (5-8 words MAX):
+- During generation: "Add more user records", "Include edge cases", "Make data more realistic"
+- During review: "Looks perfect, save it", "Add more variety", "Include error states"`
+  }
+
+  // Add title generation instruction
+  if (shouldGenerateTitle) {
+    prompt += `\n\n## Conversation Title Generation
+IMPORTANT: You MUST generate a conversationTitle in your response.
+- Create a brief, descriptive title (max 50 characters) based on the design phase
+- Examples: "Product Vision: FitTrack", "Roadmap: Social Recipes"`
+  }
+
+  prompt += '\n\nAlways be helpful, concise, and focused on the current design phase. Keep the conversation moving forward.'
+
+  return prompt
+}
+
 function buildSystemPrompt(action: string, context: any, agentType: string = 'project_manager', shouldGenerateTitle: boolean = false): string {
   let systemPrompt = ''
   
@@ -696,6 +1396,122 @@ async function summarizeMessages(messages: ConversationMessage[]): Promise<strin
     .join('\n')
   
   return `Summary of ${messages.length} messages:\n${summary}`
+}
+
+async function saveDesignPhaseOutput(
+  projectId: string,
+  userId: string,
+  phase: DesignPhaseType,
+  output: any
+) {
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  )
+
+  // Map phase to column name (data only — phase advancement is handled by the client)
+  const phaseColumnMap: Record<string, string> = {
+    product_vision: 'product_overview',
+    product_roadmap: 'product_roadmap',
+    data_model: 'data_model',
+    design_tokens: 'design_system',
+    design_shell: 'shell_spec',
+  }
+
+  const column = phaseColumnMap[phase]
+
+  try {
+    // Get existing design phase
+    const { data: existingPhase } = await supabase
+      .from('design_phases')
+      .select('id')
+      .eq('project_id', projectId)
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (existingPhase) {
+      // Save phase data only — do NOT advance current_phase or phases_completed
+      // The client calls completePhase() after receiving the SSE done event,
+      // which is the sole mechanism for phase progression.
+      await supabase
+        .from('design_phases')
+        .update({
+          [column]: output,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingPhase.id)
+
+      console.log(`Design phase output saved for ${phase}`)
+    } else {
+      // Create new design phase with data only (phase starts at default 'product-vision')
+      await supabase
+        .from('design_phases')
+        .insert({
+          project_id: projectId,
+          user_id: userId,
+          [column]: output,
+        })
+
+      console.log(`Created new design phase with ${phase} output`)
+    }
+  } catch (error) {
+    console.error(`Failed to save design phase output for ${phase}:`, error)
+  }
+}
+
+async function saveDesignSectionOutput(
+  projectId: string,
+  userId: string,
+  sectionId: string,
+  phase: 'shape_section' | 'sample_data',
+  output: any
+) {
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  )
+
+  try {
+    // Look up the design_sections row by project_id and section_id
+    const { data: section, error: lookupError } = await supabase
+      .from('design_sections')
+      .select('id')
+      .eq('project_id', projectId)
+      .eq('section_id', sectionId)
+      .maybeSingle()
+
+    if (lookupError || !section) {
+      console.error(`Design section not found for project ${projectId}, section ${sectionId}:`, lookupError)
+      return
+    }
+
+    if (phase === 'shape_section') {
+      await supabase
+        .from('design_sections')
+        .update({
+          spec: output,
+          status: 'in-progress',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', section.id)
+
+      console.log(`Section spec saved for section ${sectionId}`)
+    } else if (phase === 'sample_data') {
+      await supabase
+        .from('design_sections')
+        .update({
+          sample_data: output.sampleData,
+          types_definition: output.typesDefinition,
+          status: 'completed',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', section.id)
+
+      console.log(`Sample data saved for section ${sectionId}, status set to completed`)
+    }
+  } catch (error) {
+    console.error(`Failed to save design section output for ${phase}:`, error)
+  }
 }
 
 function detectPRDIntent(message: string): boolean {

@@ -3,7 +3,7 @@
     "@playwright/test": "^1.54.2"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.57.4",
+    "@supabase/supabase-js": "^2.95.3",
     "axios": "^1.11.0",
     "dotenv": "^17.2.2",
     "jszip": "^3.10.1"
