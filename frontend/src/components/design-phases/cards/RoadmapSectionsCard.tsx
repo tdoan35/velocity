@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ChevronDown, Pencil } from 'lucide-react'
@@ -60,13 +61,23 @@ export function RoadmapSectionsCard({ sections, onEdit }: RoadmapSectionsCardPro
                     strokeWidth={1.5}
                   />
                 </button>
-                {isExpanded && (
-                  <div className="px-6 pb-4 pl-16">
-                    <p className="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap">
-                      {section.description}
-                    </p>
-                  </div>
-                )}
+                <AnimatePresence initial={false}>
+                  {isExpanded && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2, ease: 'easeInOut' }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-6 pb-4 pl-16">
+                        <p className="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap">
+                          {section.description}
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </li>
             )
           })}

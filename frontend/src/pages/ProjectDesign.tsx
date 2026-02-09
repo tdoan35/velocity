@@ -29,6 +29,10 @@ import { DesignTokensEmptyState } from '@/components/design-phases/cards/DesignT
 import { DesignTokensSummaryCard } from '@/components/design-phases/cards/DesignTokensSummaryCard'
 import { ShellSpecEmptyState } from '@/components/design-phases/cards/ShellSpecEmptyState'
 import { ShellSpecSummaryCard } from '@/components/design-phases/cards/ShellSpecSummaryCard'
+import { CompactProductCard } from '@/components/design-phases/cards/CompactProductCard'
+import { CompactDataModelCard } from '@/components/design-phases/cards/CompactDataModelCard'
+import { CompactDesignCard } from '@/components/design-phases/cards/CompactDesignCard'
+import { CompactSectionsCard } from '@/components/design-phases/cards/CompactSectionsCard'
 import type { PhaseName, DesignPhaseType, ProductOverview, ProductRoadmap, DataModel, DesignSystem, ShellSpec, SectionSpec, SampleDataOutput, SectionStatus, DesignSection } from '@/types/design-phases'
 import {
   ArrowLeft,
@@ -48,6 +52,10 @@ import {
   Lock,
   Layers,
   CheckCircle2,
+  Circle,
+  Download,
+  Copy,
+  Sparkles,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { supabase } from '@/lib/supabase'
@@ -63,6 +71,8 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { Input } from '@/components/ui/input'
+import { Progress } from '@/components/ui/progress'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Label } from '@/components/ui/label'
 import {
   Dialog,
@@ -1358,21 +1368,169 @@ function ProjectDesignContent() {
           </div>
         )
       }
-      case 'build':
+      case 'build': {
+        const handleExportJson = () => {
+          const spec = {
+            product_overview: currentDesignPhase?.product_overview ?? null,
+            product_roadmap: currentDesignPhase?.product_roadmap ?? null,
+            data_model: currentDesignPhase?.data_model ?? null,
+            design_system: currentDesignPhase?.design_system ?? null,
+            shell_spec: currentDesignPhase?.shell_spec ?? null,
+            sections: sections.map(s => ({
+              title: s.title,
+              description: s.description,
+              spec: s.spec ?? null,
+              sample_data: s.sample_data ?? null,
+            })),
+          }
+          const blob = new Blob([JSON.stringify(spec, null, 2)], { type: 'application/json' })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `${currentDesignPhase?.product_overview?.name ?? 'design'}-spec.json`
+          a.click()
+          URL.revokeObjectURL(url)
+          toast({ title: 'Exported', description: 'Design spec downloaded as JSON.' })
+        }
+
+        const handleCopySpec = async () => {
+          const spec = {
+            product_overview: currentDesignPhase?.product_overview ?? null,
+            product_roadmap: currentDesignPhase?.product_roadmap ?? null,
+            data_model: currentDesignPhase?.data_model ?? null,
+            design_system: currentDesignPhase?.design_system ?? null,
+            shell_spec: currentDesignPhase?.shell_spec ?? null,
+            sections: sections.map(s => ({
+              title: s.title,
+              description: s.description,
+              spec: s.spec ?? null,
+              sample_data: s.sample_data ?? null,
+            })),
+          }
+          try {
+            await navigator.clipboard.writeText(JSON.stringify(spec, null, 2))
+            toast({ title: 'Copied', description: 'Design spec copied to clipboard.' })
+          } catch {
+            toast({ title: 'Error', description: 'Failed to copy to clipboard.', variant: 'destructive' })
+          }
+        }
+
+        const readinessItems = [
+          { label: 'Product', done: !!currentDesignPhase?.product_overview },
+          { label: 'Data Model', done: !!currentDesignPhase?.data_model },
+          { label: 'Design', done: !!(currentDesignPhase?.design_system || currentDesignPhase?.shell_spec) },
+          { label: 'Sections', done: sections.length > 0 && sections.every(s => s.spec && s.sample_data) },
+        ]
+        const completedCount = readinessItems.filter(r => r.done).length
+        const totalCount = readinessItems.length
+        const allReady = completedCount === totalCount
+        const progressValue = (completedCount / totalCount) * 100
+
         return (
           <div className="flex flex-col h-full">
             {header}
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="text-center py-12">
-                <Code2 className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium mb-2">Build & Export</h3>
-                <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                  Review your design and generate AI-ready implementation artifacts. This feature is coming soon.
-                </p>
+            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              {/* Readiness Banner */}
+              <Card className="bg-muted/30">
+                <CardContent className="p-4 space-y-3">
+                  <Progress
+                    value={progressValue}
+                    className={cn('h-2', allReady && '[&>div]:bg-green-500')}
+                  />
+                  <div className="flex items-center gap-4">
+                    {readinessItems.map((item) => (
+                      <div key={item.label} className="flex items-center gap-1.5">
+                        {item.done ? (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                        ) : (
+                          <Circle className="w-3.5 h-3.5 text-muted-foreground" />
+                        )}
+                        <span className={cn('text-xs', item.done ? 'text-foreground' : 'text-muted-foreground')}>
+                          {item.label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {allReady ? (
+                    <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                      <Sparkles className="w-3 h-3" />
+                      All phases complete — ready to generate!
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      {completedCount} of {totalCount} phases complete
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Design Overview */}
+              <div>
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Design Overview</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <CompactProductCard
+                    productOverview={currentDesignPhase?.product_overview}
+                    completed={!!currentDesignPhase?.product_overview}
+                    onClick={() => setActivePhase('product')}
+                  />
+                  <CompactDataModelCard
+                    dataModel={currentDesignPhase?.data_model}
+                    completed={!!currentDesignPhase?.data_model}
+                    onClick={() => setActivePhase('data-model')}
+                  />
+                  <CompactDesignCard
+                    designSystem={currentDesignPhase?.design_system}
+                    shellSpec={currentDesignPhase?.shell_spec}
+                    completed={!!(currentDesignPhase?.design_system || currentDesignPhase?.shell_spec)}
+                    onClick={() => setActivePhase('design')}
+                  />
+                  <CompactSectionsCard
+                    sections={sections}
+                    completed={sections.length > 0 && sections.every(s => s.spec && s.sample_data)}
+                    onClick={() => setActivePhase('sections')}
+                  />
+                </div>
               </div>
+
+              {/* Export */}
+              <div>
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Export</h3>
+                <div className="flex flex-col gap-2">
+                  <Button variant="outline" className="justify-start" onClick={handleExportJson}>
+                    <Download className="w-4 h-4 mr-2" />
+                    Export Spec as JSON
+                  </Button>
+                  <Button variant="outline" className="justify-start" onClick={handleCopySpec}>
+                    <Copy className="w-4 h-4 mr-2" />
+                    Copy Spec to Clipboard
+                  </Button>
+                </div>
+              </div>
+
+              {/* Primary CTA */}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div>
+                      <Button
+                        className="w-full bg-rose-600 hover:bg-rose-700 text-white"
+                        size="lg"
+                        disabled
+                      >
+                        <Sparkles className="w-4 h-4 mr-2" />
+                        Generate &amp; Open Editor
+                      </Button>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Code generation coming soon</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </div>
         )
+      }
       default:
         return null
     }

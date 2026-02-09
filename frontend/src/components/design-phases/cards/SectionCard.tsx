@@ -4,6 +4,7 @@
  */
 
 import { useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -36,7 +37,7 @@ export function SectionCard({ section, onEdit, onDefineSpec, onGenerateSampleDat
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5 min-w-0">
             <span className="shrink-0 w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs font-medium flex items-center justify-center">
-              {section.order_index + 1}
+              {section.order_index}
             </span>
             <CardTitle className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
               {section.title}
@@ -80,11 +81,11 @@ export function SectionCard({ section, onEdit, onDefineSpec, onGenerateSampleDat
 
         {/* Inline spec preview */}
         {hasSpec && section.spec && (
-          <details
-            open={specOpen}
-            onToggle={(e) => setSpecOpen((e.target as HTMLDetailsElement).open)}
-          >
-            <summary className="flex items-center justify-between w-full py-1.5 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+          <div>
+            <button
+              onClick={() => setSpecOpen(!specOpen)}
+              className="flex items-center justify-between w-full py-1.5 cursor-pointer"
+            >
               <span className="flex items-center gap-1.5 text-sm font-medium text-emerald-600 dark:text-emerald-400">
                 <ClipboardCheck className="w-3.5 h-3.5" />
                 Spec
@@ -96,67 +97,79 @@ export function SectionCard({ section, onEdit, onDefineSpec, onGenerateSampleDat
                 )}
                 strokeWidth={1.5}
               />
-            </summary>
-            <div className="pt-1.5 pb-1 space-y-2 text-sm">
-              {section.spec.overview && (
-                <p className="text-gray-600 dark:text-gray-400">{section.spec.overview}</p>
+            </button>
+            <AnimatePresence initial={false}>
+              {specOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2, ease: 'easeInOut' }}
+                  className="overflow-hidden"
+                >
+                  <div className="pt-1.5 pb-1 space-y-2 text-sm">
+                    {section.spec.overview && (
+                      <p className="text-gray-600 dark:text-gray-400">{section.spec.overview}</p>
+                    )}
+                    {section.spec.keyFeatures?.length > 0 && (
+                      <div>
+                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                          Key Features
+                        </span>
+                        <ul className="mt-1 space-y-0.5 ml-1">
+                          {section.spec.keyFeatures.map((f, i) => (
+                            <li key={i} className="flex items-start gap-2 text-gray-600 dark:text-gray-400">
+                              <span className="w-1 h-1 rounded-full bg-gray-400 dark:bg-gray-500 mt-2 shrink-0" />
+                              {f}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {section.spec.requirements?.length > 0 && (
+                      <div>
+                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                          Requirements
+                        </span>
+                        <ul className="mt-1 space-y-0.5 ml-1">
+                          {section.spec.requirements.map((r, i) => (
+                            <li key={i} className="flex items-start gap-2 text-gray-600 dark:text-gray-400">
+                              <span className="w-1 h-1 rounded-full bg-gray-400 dark:bg-gray-500 mt-2 shrink-0" />
+                              {r}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {section.spec.acceptance?.length > 0 && (
+                      <div>
+                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                          Acceptance Criteria
+                        </span>
+                        <ul className="mt-1 space-y-0.5 ml-1">
+                          {section.spec.acceptance.map((a, i) => (
+                            <li key={i} className="flex items-start gap-2 text-gray-600 dark:text-gray-400">
+                              <span className="w-1 h-1 rounded-full bg-gray-400 dark:bg-gray-500 mt-2 shrink-0" />
+                              {a}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
               )}
-              {section.spec.keyFeatures?.length > 0 && (
-                <div>
-                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                    Key Features
-                  </span>
-                  <ul className="mt-1 space-y-0.5 ml-1">
-                    {section.spec.keyFeatures.map((f, i) => (
-                      <li key={i} className="flex items-start gap-2 text-gray-600 dark:text-gray-400">
-                        <span className="w-1 h-1 rounded-full bg-gray-400 dark:bg-gray-500 mt-2 shrink-0" />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {section.spec.requirements?.length > 0 && (
-                <div>
-                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                    Requirements
-                  </span>
-                  <ul className="mt-1 space-y-0.5 ml-1">
-                    {section.spec.requirements.map((r, i) => (
-                      <li key={i} className="flex items-start gap-2 text-gray-600 dark:text-gray-400">
-                        <span className="w-1 h-1 rounded-full bg-gray-400 dark:bg-gray-500 mt-2 shrink-0" />
-                        {r}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {section.spec.acceptance?.length > 0 && (
-                <div>
-                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                    Acceptance Criteria
-                  </span>
-                  <ul className="mt-1 space-y-0.5 ml-1">
-                    {section.spec.acceptance.map((a, i) => (
-                      <li key={i} className="flex items-start gap-2 text-gray-600 dark:text-gray-400">
-                        <span className="w-1 h-1 rounded-full bg-gray-400 dark:bg-gray-500 mt-2 shrink-0" />
-                        {a}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          </details>
+            </AnimatePresence>
+          </div>
         )}
 
         {/* Inline sample data preview */}
         {hasSampleData && section.sample_data && (
-          <details
-            open={dataOpen}
-            onToggle={(e) => setDataOpen((e.target as HTMLDetailsElement).open)}
-          >
-            <summary className="flex items-center justify-between w-full py-1.5 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+          <div>
+            <button
+              onClick={() => setDataOpen(!dataOpen)}
+              className="flex items-center justify-between w-full py-1.5 cursor-pointer"
+            >
               <span className="flex items-center gap-1.5 text-sm font-medium text-blue-600 dark:text-blue-400">
                 <Database className="w-3.5 h-3.5" />
                 Sample Data
@@ -171,11 +184,23 @@ export function SectionCard({ section, onEdit, onDefineSpec, onGenerateSampleDat
                 )}
                 strokeWidth={1.5}
               />
-            </summary>
-            <pre className="pt-1.5 pb-1 text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded-md p-2 overflow-x-auto max-h-48 overflow-y-auto">
-              {JSON.stringify(section.sample_data, null, 2)}
-            </pre>
-          </details>
+            </button>
+            <AnimatePresence initial={false}>
+              {dataOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2, ease: 'easeInOut' }}
+                  className="overflow-hidden"
+                >
+                  <pre className="pt-1.5 pb-1 text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded-md p-2 overflow-x-auto max-h-48 overflow-y-auto">
+                    {JSON.stringify(section.sample_data, null, 2)}
+                  </pre>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         )}
 
         {/* Status indicators */}
