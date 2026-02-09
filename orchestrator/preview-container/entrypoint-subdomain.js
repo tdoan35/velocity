@@ -821,18 +821,27 @@ async function ensureProjectBootable() {
   console.log(`   package.json: ${hasPackageJson}, index.html: ${hasIndexHtml}, vite.config: ${hasViteConfig}`);
 
   // Find the main app component from synced files
-  let appImportPath = './src/App';
+  // Since main.jsx lives in src/, paths outside src/ need "../" prefix
+  let appImportPath = './App';
   const possibleAppFiles = [
-    'App.tsx', 'App.jsx', 'App.js',
-    'src/App.tsx', 'src/App.jsx', 'src/App.js',
-    'frontend/App.tsx', 'frontend/App.jsx', 'frontend/App.js',
+    // Files inside src/ (same directory as main.jsx) -> use "./"
+    { file: 'src/App.tsx', importPath: './App' },
+    { file: 'src/App.jsx', importPath: './App' },
+    { file: 'src/App.js', importPath: './App' },
+    // Files at project root -> use "../"
+    { file: 'App.tsx', importPath: '../App' },
+    { file: 'App.jsx', importPath: '../App' },
+    { file: 'App.js', importPath: '../App' },
+    // Files in frontend/ subdirectory -> use "../frontend/"
+    { file: 'frontend/App.tsx', importPath: '../frontend/App' },
+    { file: 'frontend/App.jsx', importPath: '../frontend/App' },
+    { file: 'frontend/App.js', importPath: '../frontend/App' },
   ];
 
   for (const candidate of possibleAppFiles) {
-    if (await fs.pathExists(path.join(PROJECT_DIR, candidate))) {
-      // Convert file path to import path (strip extension)
-      appImportPath = './' + candidate.replace(/\.(tsx?|jsx?)$/, '');
-      console.log(`   Found app component: ${candidate}`);
+    if (await fs.pathExists(path.join(PROJECT_DIR, candidate.file))) {
+      appImportPath = candidate.importPath;
+      console.log(`   Found app component: ${candidate.file} -> import "${appImportPath}"`);
       break;
     }
   }
