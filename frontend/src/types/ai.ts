@@ -2,6 +2,8 @@
 
 export type AgentType = 'project_manager' | 'design_assistant' | 'engineering_assistant' | 'config_helper';
 
+export type ChatStatus = 'ready' | 'submitted' | 'streaming' | 'error';
+
 export interface AIMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -11,6 +13,11 @@ export interface AIMessage {
     agentType?: AgentType;
     tokensUsed?: number;
     model?: string;
+    suggestedResponses?: Array<{
+      text: string;
+      category?: 'continuation' | 'clarification' | 'example';
+      section?: string;
+    }>;
   };
 }
 
