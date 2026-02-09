@@ -801,6 +801,133 @@ body {
 }
 
 /**
+ * Ensure the project has the minimum files needed for Vite to start.
+ * After syncing files from the DB or snapshot, the project may be missing
+ * Vite infrastructure (e.g. React Native projects, or files under a subdirectory prefix).
+ * This scaffolds the missing pieces without overwriting existing files.
+ */
+async function ensureProjectBootable() {
+  const hasPackageJson = await fs.pathExists(path.join(PROJECT_DIR, 'package.json'));
+  const hasIndexHtml = await fs.pathExists(path.join(PROJECT_DIR, 'index.html'));
+  const hasViteConfig = await fs.pathExists(path.join(PROJECT_DIR, 'vite.config.js')) ||
+                        await fs.pathExists(path.join(PROJECT_DIR, 'vite.config.ts'));
+
+  if (hasPackageJson && hasIndexHtml && hasViteConfig) {
+    console.log('✅ Project is bootable (package.json, index.html, vite.config found)');
+    return;
+  }
+
+  console.log('⚠️ Project missing Vite infrastructure, scaffolding...');
+  console.log(`   package.json: ${hasPackageJson}, index.html: ${hasIndexHtml}, vite.config: ${hasViteConfig}`);
+
+  // Find the main app component from synced files
+  let appImportPath = './src/App';
+  const possibleAppFiles = [
+    'App.tsx', 'App.jsx', 'App.js',
+    'src/App.tsx', 'src/App.jsx', 'src/App.js',
+    'frontend/App.tsx', 'frontend/App.jsx', 'frontend/App.js',
+  ];
+
+  for (const candidate of possibleAppFiles) {
+    if (await fs.pathExists(path.join(PROJECT_DIR, candidate))) {
+      // Convert file path to import path (strip extension)
+      appImportPath = './' + candidate.replace(/\.(tsx?|jsx?)$/, '');
+      console.log(`   Found app component: ${candidate}`);
+      break;
+    }
+  }
+
+  if (!hasPackageJson) {
+    console.log('   Scaffolding package.json with Vite deps...');
+    const packageJson = {
+      name: 'velocity-preview',
+      version: '1.0.0',
+      scripts: {
+        dev: `vite --host 0.0.0.0 --port ${VITE_PORT}`,
+        build: 'vite build',
+        preview: 'vite preview'
+      },
+      dependencies: {
+        'react': '^18.2.0',
+        'react-dom': '^18.2.0',
+        'react-native-web': '^0.19.0'
+      },
+      devDependencies: {
+        '@types/react': '^18.2.0',
+        '@types/react-dom': '^18.2.0',
+        '@vitejs/plugin-react': '^4.2.0',
+        'vite': '^5.0.0'
+      }
+    };
+    await fs.writeJSON(path.join(PROJECT_DIR, 'package.json'), packageJson, { spaces: 2 });
+  }
+
+  if (!hasViteConfig) {
+    console.log('   Scaffolding vite.config.js...');
+    const viteConfig = `import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    host: '0.0.0.0',
+    port: ${VITE_PORT},
+    strictPort: true,
+    hmr: {
+      protocol: 'wss',
+      host: '${PREVIEW_DOMAIN || 'localhost'}',
+      clientPort: 443
+    }
+  },
+  resolve: {
+    alias: {
+      'react-native': 'react-native-web'
+    },
+    extensions: ['.web.tsx', '.web.ts', '.web.jsx', '.web.js', '.tsx', '.ts', '.jsx', '.js']
+  }
+});`;
+    await fs.writeFile(path.join(PROJECT_DIR, 'vite.config.js'), viteConfig);
+  }
+
+  if (!hasIndexHtml) {
+    console.log('   Scaffolding index.html...');
+    const indexHtml = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Velocity Preview</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>`;
+    await fs.writeFile(path.join(PROJECT_DIR, 'index.html'), indexHtml);
+  }
+
+  // Always ensure src/main.jsx exists as the entry point
+  const hasMainEntry = await fs.pathExists(path.join(PROJECT_DIR, 'src', 'main.jsx')) ||
+                       await fs.pathExists(path.join(PROJECT_DIR, 'src', 'main.tsx'));
+  if (!hasMainEntry) {
+    console.log(`   Scaffolding src/main.jsx (importing from ${appImportPath})...`);
+    await fs.ensureDir(path.join(PROJECT_DIR, 'src'));
+    const mainJsx = `import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from '${appImportPath}';
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);`;
+    await fs.writeFile(path.join(PROJECT_DIR, 'src', 'main.jsx'), mainJsx);
+  }
+
+  console.log('✅ Vite infrastructure scaffolded');
+}
+
+/**
  * Install npm dependencies
  */
 async function installDependencies() {
@@ -908,6 +1035,9 @@ async function main() {
       console.log('📁 Performing legacy file sync...');
       await syncProjectFiles();
     }
+
+    // Ensure the project has Vite infrastructure (scaffolds missing files)
+    await ensureProjectBootable();
 
     // Install dependencies
     await installDependencies();
