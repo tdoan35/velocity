@@ -10,6 +10,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/componen
 import { motion, AnimatePresence } from 'motion/react'
 import { cn } from '@/lib/utils'
 import { useDesignPhase, useDesignSections, useDesignPhaseStore } from '@/stores/useDesignPhaseStore'
+import { useProjectContext } from '@/contexts/ProjectContext'
 import { ProductVisionForm } from '@/components/design-phases/forms/ProductVisionForm'
 import { RoadmapEditor } from '@/components/design-phases/forms/RoadmapEditor'
 import { DataModelEditor } from '@/components/design-phases/forms/DataModelEditor'
@@ -28,7 +29,7 @@ import { DesignTokensEmptyState } from '@/components/design-phases/cards/DesignT
 import { DesignTokensSummaryCard } from '@/components/design-phases/cards/DesignTokensSummaryCard'
 import { ShellSpecEmptyState } from '@/components/design-phases/cards/ShellSpecEmptyState'
 import { ShellSpecSummaryCard } from '@/components/design-phases/cards/ShellSpecSummaryCard'
-import type { PhaseName, DesignPhaseType, ProductOverview, ProductRoadmap, DataModel, DesignSystem, ShellSpec, SectionSpec, SampleDataOutput } from '@/types/design-phases'
+import type { PhaseName, DesignPhaseType, ProductOverview, ProductRoadmap, DataModel, DesignSystem, ShellSpec, SectionSpec, SampleDataOutput, SectionStatus, DesignSection } from '@/types/design-phases'
 import {
   ArrowLeft,
   ArrowRight,
@@ -131,6 +132,38 @@ const COLOR_CLASSES: Record<string, { bg: string; text: string; ring: string; bg
   purple: { bg: 'bg-purple-500/10', text: 'text-purple-500', ring: 'ring-purple-500', bgIcon: 'bg-purple-500/10' },
   orange: { bg: 'bg-orange-500/10', text: 'text-orange-500', ring: 'ring-orange-500', bgIcon: 'bg-orange-500/10' },
   rose: { bg: 'bg-rose-500/10', text: 'text-rose-500', ring: 'ring-rose-500', bgIcon: 'bg-rose-500/10' },
+  gray: { bg: 'bg-gray-500/10', text: 'text-gray-500', ring: 'ring-gray-500', bgIcon: 'bg-gray-500/10' },
+}
+
+// ============================================================================
+// Phase display info for conversation history labels
+// ============================================================================
+
+const PHASE_DISPLAY_INFO: Record<string, { label: string; icon: typeof MessageSquare; color: string }> = {
+  product_vision: { label: 'Product', icon: Lightbulb, color: 'emerald' },
+  product_roadmap: { label: 'Product', icon: Lightbulb, color: 'emerald' },
+  data_model: { label: 'Data Model', icon: Database, color: 'blue' },
+  design_tokens: { label: 'Design', icon: Palette, color: 'purple' },
+  design_shell: { label: 'Design', icon: Palette, color: 'purple' },
+  shape_section: { label: 'Section', icon: FileText, color: 'orange' },
+  sample_data: { label: 'Section', icon: FileText, color: 'orange' },
+}
+
+function getPhaseDisplayInfo(designPhase?: string) {
+  if (!designPhase || !PHASE_DISPLAY_INFO[designPhase]) {
+    return { label: null, icon: MessageSquare, color: 'gray' }
+  }
+  return PHASE_DISPLAY_INFO[designPhase]
+}
+
+// ============================================================================
+// Section status helper
+// ============================================================================
+
+function computeSectionStatus(section: DesignSection): SectionStatus {
+  if (section.spec && section.sample_data) return 'completed'
+  if (section.spec) return 'in-progress'
+  return 'pending'
 }
 
 // ============================================================================
@@ -156,6 +189,7 @@ function ProjectDesignContent() {
   const navigate = useNavigate()
   const { user, isAuthenticated, isLoading: authLoading } = useAuthStore()
   const { toast } = useToast()
+  const { updateProject: updateProjectInStore } = useProjectContext()
 
   const [project, setProject] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -167,10 +201,12 @@ function ProjectDesignContent() {
     title: string;
     created_at: string;
     message_count: number;
+    designPhase?: string;
     metadata?: {
       primaryAgent?: string;
       agentsUsed?: string[];
       lastAgent?: string;
+      designPhase?: string;
     }
   }>>([])
   const [initialPromptSubmitted, setInitialPromptSubmitted] = useState(false)
@@ -190,6 +226,7 @@ function ProjectDesignContent() {
   const [editingDataModel, setEditingDataModel] = useState(false)
   const [editingDesignSystem, setEditingDesignSystem] = useState(false)
   const [editingShellSpec, setEditingShellSpec] = useState(false)
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null)
 
   // Design phase store
   const {
@@ -219,10 +256,23 @@ function ProjectDesignContent() {
 
   const handlePhaseComplete = async (phase: DesignPhaseType, output: any) => {
     switch (phase) {
-      case 'product_vision':
-        await updateProductOverview(output as ProductOverview)
+      case 'product_vision': {
+        const overview = output as ProductOverview
+        await updateProductOverview(overview)
         await completePhase()
-        // Reload design phase data to get updated state
+
+        // Sync product name to project name
+        const newName = overview.name?.trim()
+        if (newName && projectId) {
+          try {
+            await projectService.updateProject(projectId, { name: newName })
+            updateProjectInStore(projectId, { name: newName })
+            setProject((prev: any) => prev ? { ...prev, name: newName } : prev)
+          } catch (err) {
+            console.warn('Failed to sync project name from product vision:', err)
+          }
+        }
+
         if (projectId) await loadDesignPhase(projectId)
         setActivePhase('product')
         toast({
@@ -230,6 +280,7 @@ function ProjectDesignContent() {
           description: 'Your product overview has been saved. You can view it in the Product phase.',
         })
         break
+      }
       case 'product_roadmap':
         await updateProductRoadmap(output as ProductRoadmap)
         await createSectionsFromRoadmap(output as ProductRoadmap)
@@ -732,11 +783,13 @@ function ProjectDesignContent() {
             .select('*', { count: 'exact', head: true })
             .eq('conversation_id', conv.id)
 
+          const convMetadata = conv.metadata as Record<string, any> | null
           return {
             id: conv.id,
             title: conv.title || 'Untitled Conversation',
             created_at: conv.created_at,
             message_count: count || 0,
+            designPhase: convMetadata?.designPhase as string | undefined,
             metadata: conv.metadata
           }
         }) || []
@@ -1010,6 +1063,7 @@ function ProjectDesignContent() {
                   <Button
                     onClick={() => setActivePhase('data-model')}
                     className="w-full"
+                    variant="outline"
                   >
                     <ArrowRight className="w-4 h-4 mr-2" />
                     Continue to Data Model
@@ -1083,7 +1137,7 @@ function ProjectDesignContent() {
 
               {hasDataModel && (
                 <StepIndicator step={2} status="current" isLast>
-                  <Button onClick={() => setActivePhase('design')} className="w-full">
+                  <Button onClick={() => setActivePhase('design')} className="w-full" variant="outline">
                     <ArrowRight className="w-4 h-4 mr-2" />
                     Continue to Design
                   </Button>
@@ -1159,7 +1213,7 @@ function ProjectDesignContent() {
               {/* Step 3: Continue to Sections */}
               {allDesignStepsComplete && (
                 <StepIndicator step={3} status="current" isLast>
-                  <Button onClick={() => setActivePhase('sections')} className="w-full">
+                  <Button onClick={() => setActivePhase('sections')} className="w-full" variant="outline">
                     <ArrowRight className="w-4 h-4 mr-2" />
                     Continue to Sections
                   </Button>
@@ -1242,77 +1296,68 @@ function ProjectDesignContent() {
           </div>
         )
       }
-      case 'sections':
+      case 'sections': {
+        const editingSection = editingSectionId ? sections.find(s => s.id === editingSectionId) ?? null : null
         return (
           <div className="flex flex-col h-full">
             {header}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {currentSection ? (
-                <div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setCurrentSection(null)}
-                    className="mb-3"
-                  >
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    Back to Sections
-                  </Button>
-                  <h3 className="text-sm font-medium mb-3">{currentSection.title}</h3>
-                  {currentSection.description && (
-                    <p className="text-sm text-muted-foreground mb-4">{currentSection.description}</p>
-                  )}
-
-                  {/* AI action buttons */}
-                  <div className="flex gap-2 mb-4">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => startShapeSectionPhase(currentSection.id, { title: currentSection.title, description: currentSection.description })}
-                      disabled={!!currentSection.spec}
-                    >
-                      <MessageSquare className="w-4 h-4 mr-2" />
-                      {currentSection.spec ? 'Spec Defined' : 'Shape Section with AI'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => startSampleDataPhase(currentSection.id, { title: currentSection.title, description: currentSection.description })}
-                      disabled={!currentSection.spec}
-                    >
-                      <Database className="w-4 h-4 mr-2" />
-                      {currentSection.sample_data ? 'Data Generated' : 'Generate Sample Data'}
-                    </Button>
-                  </div>
-
-                  {/* Section spec editor for manual editing */}
-                  <SectionSpecEditor
-                    spec={currentSection.spec ?? null}
-                    onChange={(spec) => updateSection(currentSection.id, { spec })}
-                    disabled={isSaving}
-                  />
+              {sections.length === 0 ? (
+                <div className="text-center py-8">
+                  <FileText className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+                  <p className="text-sm text-muted-foreground">No sections yet. Define your product roadmap first.</p>
                 </div>
               ) : (
-                <>
-                  {sections.length === 0 ? (
-                    <div className="text-center py-8">
-                      <FileText className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
-                      <p className="text-sm text-muted-foreground">No sections yet. Define your product roadmap first.</p>
-                    </div>
-                  ) : (
-                    sections.map((section) => (
-                      <SectionCard
-                        key={section.id}
-                        section={section}
-                        onClick={() => setCurrentSection(section)}
-                      />
-                    ))
-                  )}
-                </>
+                sections.map((section) => (
+                  <SectionCard
+                    key={section.id}
+                    section={section}
+                    onEdit={() => setEditingSectionId(section.id)}
+                    onDefineSpec={() => startShapeSectionPhase(section.id, { title: section.title, description: section.description })}
+                    onGenerateSampleData={() => startSampleDataPhase(section.id, { title: section.title, description: section.description })}
+                    isSaving={isSaving}
+                  />
+                ))
+              )}
+              {sections.length > 0 && sections.some(s => computeSectionStatus(s) === 'completed') && (
+                <div className="pt-4 border-t">
+                  <Button onClick={async () => {
+                    await completePhase()
+                    if (projectId) await loadDesignPhase(projectId)
+                    setActivePhase('build')
+                  }} className="w-full" variant="outline">
+                    <ArrowRight className="w-4 h-4 mr-2" />
+                    Continue to Build
+                  </Button>
+                </div>
               )}
             </div>
+
+            {/* Edit Section Spec Dialog */}
+            <Dialog open={!!editingSectionId} onOpenChange={(open) => { if (!open) setEditingSectionId(null) }}>
+              <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Edit Section: {editingSection?.title}</DialogTitle>
+                  <DialogDescription>Update the specification for this section.</DialogDescription>
+                </DialogHeader>
+                {editingSection && (
+                  <SectionSpecEditor
+                    spec={editingSection.spec ?? null}
+                    onChange={(spec) => updateSection(editingSection.id, {
+                      spec,
+                      status: spec && editingSection.sample_data ? 'completed' : spec ? 'in-progress' : 'pending'
+                    })}
+                    disabled={isSaving}
+                  />
+                )}
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setEditingSectionId(null)}>Close</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         )
+      }
       case 'build':
         return (
           <div className="flex flex-col h-full">
@@ -1404,7 +1449,7 @@ function ProjectDesignContent() {
                       isHistoryOpen={showHistory}
                       designPhase={activeDesignPhase || undefined}
                       onPhaseComplete={handlePhaseComplete}
-                      sectionId={(activeDesignPhase === 'shape_section' || activeDesignPhase === 'sample_data') ? activeSectionId || undefined : undefined}
+                      sectionId={(activeDesignPhase === 'shape_section' || activeDesignPhase === 'sample_data') ? sections.find(s => s.id === activeSectionId)?.section_id || undefined : undefined}
                       phaseContext={(() => {
                         if (!activeDesignPhase) return undefined
                         switch (activeDesignPhase) {
@@ -1526,28 +1571,60 @@ function ProjectDesignContent() {
           <div className="h-full p-2">
             <Card className="h-full flex flex-col bg-transparent border-gray-300 dark:border-gray-700/50">
               <CardHeader className="p-4 pl-5 border-b border-gray-300 dark:border-gray-700/50">
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={showHistory ? 'history' : 'phases'}
-                    className="flex items-center gap-2"
-                    initial={{ opacity: 0, x: showHistory ? 10 : -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: showHistory ? -10 : 10 }}
-                    transition={{ duration: 0.2, ease: "easeInOut" }}
-                  >
-                    {showHistory ? (
-                      <>
-                        <History className="w-5 h-5" />
-                        <CardTitle className="text-lg">Chat History</CardTitle>
-                      </>
-                    ) : (
-                      <>
-                        <Layers className="w-5 h-5" />
-                        <CardTitle className="text-lg">Phases</CardTitle>
-                      </>
-                    )}
-                  </motion.div>
-                </AnimatePresence>
+                <div className="flex items-center justify-between">
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={showHistory ? 'history' : 'phases'}
+                      className="flex items-center gap-2"
+                      initial={{ opacity: 0, x: showHistory ? 10 : -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: showHistory ? -10 : 10 }}
+                      transition={{ duration: 0.2, ease: "easeInOut" }}
+                    >
+                      {showHistory ? (
+                        <>
+                          <History className="w-5 h-5" />
+                          <CardTitle className="text-lg">Chats</CardTitle>
+                        </>
+                      ) : (
+                        <>
+                          <Layers className="w-5 h-5" />
+                          <CardTitle className="text-lg">Phases</CardTitle>
+                        </>
+                      )}
+                    </motion.div>
+                  </AnimatePresence>
+                  <div className="flex items-center bg-muted rounded-md p-0.5">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={cn(
+                        "h-7 px-2.5 text-xs font-medium rounded-sm transition-all",
+                        !showHistory
+                          ? "bg-background shadow-sm text-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                      onClick={() => setShowHistory(false)}
+                    >
+                      <Layers className="w-3.5 h-3.5 mr-1.5" />
+                      Phases
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={cn(
+                        "h-7 px-2.5 text-xs font-medium rounded-sm transition-all",
+                        showHistory
+                          ? "bg-background shadow-sm text-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                      onClick={() => setShowHistory(true)}
+                    >
+                      <History className="w-3.5 h-3.5 mr-1.5" />
+                      Chats
+                    </Button>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent className="p-4 flex-1 overflow-y-auto">
                 <AnimatePresence mode="wait">
@@ -1623,10 +1700,29 @@ function ProjectDesignContent() {
                                   await createNewConversation(conv.title, conv.id)
                                 }}
                               >
-                                <div className="w-8 h-8 rounded-full bg-gray-500/10 flex items-center justify-center flex-shrink-0">
-                                  <MessageSquare className="w-4 h-4 text-gray-500" />
-                                </div>
+                                {(() => {
+                                  const phaseInfo = getPhaseDisplayInfo(conv.designPhase)
+                                  const PhaseIcon = phaseInfo.icon
+                                  const colorClasses = COLOR_CLASSES[phaseInfo.color] || { bg: 'bg-gray-500/10', text: 'text-gray-500' }
+                                  return (
+                                    <div className={cn("w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0", colorClasses.bg)}>
+                                      <PhaseIcon className={cn("w-4 h-4", colorClasses.text)} />
+                                    </div>
+                                  )
+                                })()}
                                 <div className="flex-1 min-w-0">
+                                  {(() => {
+                                    const phaseInfo = getPhaseDisplayInfo(conv.designPhase)
+                                    if (phaseInfo.label) {
+                                      const colorClasses = COLOR_CLASSES[phaseInfo.color]
+                                      return (
+                                        <span className={cn("text-[10px] font-semibold uppercase tracking-wider", colorClasses?.text)}>
+                                          {phaseInfo.label}
+                                        </span>
+                                      )
+                                    }
+                                    return null
+                                  })()}
                                   <div className="flex items-center gap-2">
                                     {editingConversationId === conv.id ? (
                                       <Popover open={editingConversationId === conv.id} onOpenChange={(open) => !open && setEditingConversationId(null)}>

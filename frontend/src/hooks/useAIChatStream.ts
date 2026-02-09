@@ -219,13 +219,35 @@ export function useAIChatStream({
     let actualConversationId = conversationId;
     if (conversationId.startsWith('temp-')) {
       try {
-        // Create a real conversation with project context
-        const { conversation, error } = await conversationService.createConversation(
-          projectId,
-          'Chat Conversation',
-          currentAgent,
-          latestRef.current.projectContext
-        );
+        // Create a real conversation — use phase-aware creation if a designPhase is active
+        const activeDesignPhase = latestRef.current.designPhase;
+        const activeSectionId = latestRef.current.sectionId;
+        let conversation: Awaited<ReturnType<typeof conversationService.createConversation>>['conversation'];
+        let error: Awaited<ReturnType<typeof conversationService.createConversation>>['error'];
+
+        if (activeDesignPhase && activeSectionId) {
+          ({ conversation, error } = await conversationService.createSectionPhaseConversation(
+            projectId,
+            activeDesignPhase,
+            activeSectionId,
+            'Chat Conversation',
+            latestRef.current.projectContext
+          ));
+        } else if (activeDesignPhase) {
+          ({ conversation, error } = await conversationService.createPhaseConversation(
+            projectId,
+            activeDesignPhase,
+            'Chat Conversation',
+            latestRef.current.projectContext
+          ));
+        } else {
+          ({ conversation, error } = await conversationService.createConversation(
+            projectId,
+            'Chat Conversation',
+            currentAgent,
+            latestRef.current.projectContext
+          ));
+        }
 
         if (error || !conversation) {
           throw error || new Error('Failed to create conversation');

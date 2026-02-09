@@ -1,139 +1,223 @@
 /**
  * SectionCard Component
- * Card component for displaying section summary in the overview grid
+ * Card component for displaying section summary with inline actions
  */
 
-import React from 'react';
-import { FileText, Clock, CheckCircle, Circle, Image as ImageIcon, ClipboardCheck, Database } from 'lucide-react';
-import type { DesignSection, SectionStatus } from '../../../types/design-phases';
+import { useState } from 'react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { Pencil, ClipboardCheck, Database, Sparkles, ChevronDown } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import type { DesignSection } from '@/types/design-phases'
 
 interface SectionCardProps {
-  section: DesignSection;
-  onClick: () => void;
+  section: DesignSection
+  onEdit: () => void
+  onDefineSpec: () => void
+  onGenerateSampleData: () => void
+  isSaving?: boolean
 }
 
-// Status configuration for badge display
-const STATUS_CONFIG: Record<SectionStatus, { label: string; color: string; icon: React.ElementType }> = {
-  pending: {
-    label: 'Pending',
-    color: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
-    icon: Circle,
-  },
-  'in-progress': {
-    label: 'In Progress',
-    color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-    icon: Clock,
-  },
-  completed: {
-    label: 'Completed',
-    color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-    icon: CheckCircle,
-  },
-};
-
-export function SectionCard({ section, onClick }: SectionCardProps) {
-  const status = section.status || 'pending';
-  const statusConfig = STATUS_CONFIG[status];
-  const StatusIcon = statusConfig.icon;
-
-  // Get first screen design thumbnail if available
-  const thumbnail = section.screen_designs?.[0];
-  const hasScreenshot = section.screenshots?.length > 0;
+export function SectionCard({ section, onEdit, onDefineSpec, onGenerateSampleData, isSaving }: SectionCardProps) {
+  const hasSpec = !!section.spec
+  const hasSampleData = !!section.sample_data
+  const [specOpen, setSpecOpen] = useState(false)
+  const [dataOpen, setDataOpen] = useState(false)
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="
-        w-full text-left p-4 rounded-lg border
-        bg-white dark:bg-gray-800
-        border-gray-200 dark:border-gray-700
-        hover:border-blue-300 dark:hover:border-blue-600
-        hover:shadow-md
-        focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
-        dark:focus:ring-offset-gray-900
-        transition-all duration-200
-        group
-      "
-    >
-      {/* Thumbnail or Placeholder */}
-      <div className="mb-3 aspect-video rounded-md overflow-hidden bg-gray-100 dark:bg-gray-700">
-        {thumbnail ? (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-blue-900/20 dark:to-indigo-900/20">
-            <div className="text-center">
-              <FileText className="w-8 h-8 mx-auto text-blue-400 dark:text-blue-500" />
-              <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 truncate px-2">
-                {thumbnail.name}
-              </p>
-            </div>
+    <Card className="border-gray-200 dark:border-gray-700 shadow-sm">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="shrink-0 w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs font-medium flex items-center justify-center">
+              {section.order_index + 1}
+            </span>
+            <CardTitle className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+              {section.title}
+            </CardTitle>
           </div>
-        ) : hasScreenshot ? (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-50 to-pink-100 dark:from-purple-900/20 dark:to-pink-900/20">
-            <div className="text-center">
-              <ImageIcon className="w-8 h-8 mx-auto text-purple-400 dark:text-purple-500" />
-              <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
-                {section.screenshots.length} screenshot{section.screenshots.length !== 1 ? 's' : ''}
-              </p>
-            </div>
-          </div>
-        ) : section.spec ? (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-100 dark:from-emerald-900/20 dark:to-teal-900/20">
-            <div className="text-center">
-              <ClipboardCheck className="w-8 h-8 mx-auto text-emerald-400 dark:text-emerald-500" />
-              <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
-                {section.sample_data ? 'Spec & Data Ready' : 'Spec Defined'}
-              </p>
-            </div>
-          </div>
-        ) : section.sample_data ? (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-cyan-50 to-blue-100 dark:from-cyan-900/20 dark:to-blue-900/20">
-            <div className="text-center">
-              <Database className="w-8 h-8 mx-auto text-cyan-400 dark:text-cyan-500" />
-              <p className="text-xs text-cyan-600 dark:text-cyan-400 mt-1">Data Ready</p>
-            </div>
-          </div>
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <div className="text-center text-gray-400 dark:text-gray-500">
-              <FileText className="w-8 h-8 mx-auto" />
-              <p className="text-xs mt-1">No designs yet</p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Section Info */}
-      <div className="space-y-2">
-        {/* Title */}
-        <h3 className="font-medium text-gray-900 dark:text-gray-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-1">
-          {section.title}
-        </h3>
-
-        {/* Description */}
+          <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0" onClick={onEdit}>
+            <Pencil className="w-4 h-4" />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
         {section.description && (
           <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2">
             {section.description}
           </p>
         )}
 
-        {/* Status Badge */}
-        <div className="flex items-center justify-between pt-2">
-          <span
-            className={`
-              inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium
-              ${statusConfig.color}
-            `}
+        {/* AI action buttons */}
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onDefineSpec}
+            disabled={hasSpec || isSaving}
+            className="text-xs"
           >
-            <StatusIcon className="w-3 h-3" />
-            {statusConfig.label}
-          </span>
-
-          {/* Order indicator */}
-          <span className="text-xs text-gray-400 dark:text-gray-500">
-            #{section.order_index + 1}
-          </span>
+            <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+            Define Spec
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onGenerateSampleData}
+            disabled={!hasSpec || isSaving}
+            className="text-xs"
+          >
+            <Database className="w-3.5 h-3.5 mr-1.5" />
+            Generate Sample Data
+          </Button>
         </div>
-      </div>
-    </button>
-  );
+
+        {/* Inline spec preview */}
+        {hasSpec && section.spec && (
+          <details
+            open={specOpen}
+            onToggle={(e) => setSpecOpen((e.target as HTMLDetailsElement).open)}
+          >
+            <summary className="flex items-center justify-between w-full py-1.5 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+              <span className="flex items-center gap-1.5 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                <ClipboardCheck className="w-3.5 h-3.5" />
+                Spec
+              </span>
+              <ChevronDown
+                className={cn(
+                  'w-4 h-4 text-gray-400 dark:text-gray-500 transition-transform duration-200',
+                  specOpen && 'rotate-180'
+                )}
+                strokeWidth={1.5}
+              />
+            </summary>
+            <div className="pt-1.5 pb-1 space-y-2 text-sm">
+              {section.spec.overview && (
+                <p className="text-gray-600 dark:text-gray-400">{section.spec.overview}</p>
+              )}
+              {section.spec.keyFeatures?.length > 0 && (
+                <div>
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                    Key Features
+                  </span>
+                  <ul className="mt-1 space-y-0.5 ml-1">
+                    {section.spec.keyFeatures.map((f, i) => (
+                      <li key={i} className="flex items-start gap-2 text-gray-600 dark:text-gray-400">
+                        <span className="w-1 h-1 rounded-full bg-gray-400 dark:bg-gray-500 mt-2 shrink-0" />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {section.spec.requirements?.length > 0 && (
+                <div>
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                    Requirements
+                  </span>
+                  <ul className="mt-1 space-y-0.5 ml-1">
+                    {section.spec.requirements.map((r, i) => (
+                      <li key={i} className="flex items-start gap-2 text-gray-600 dark:text-gray-400">
+                        <span className="w-1 h-1 rounded-full bg-gray-400 dark:bg-gray-500 mt-2 shrink-0" />
+                        {r}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {section.spec.acceptance?.length > 0 && (
+                <div>
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                    Acceptance Criteria
+                  </span>
+                  <ul className="mt-1 space-y-0.5 ml-1">
+                    {section.spec.acceptance.map((a, i) => (
+                      <li key={i} className="flex items-start gap-2 text-gray-600 dark:text-gray-400">
+                        <span className="w-1 h-1 rounded-full bg-gray-400 dark:bg-gray-500 mt-2 shrink-0" />
+                        {a}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </details>
+        )}
+
+        {/* Inline sample data preview */}
+        {hasSampleData && section.sample_data && (
+          <details
+            open={dataOpen}
+            onToggle={(e) => setDataOpen((e.target as HTMLDetailsElement).open)}
+          >
+            <summary className="flex items-center justify-between w-full py-1.5 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+              <span className="flex items-center gap-1.5 text-sm font-medium text-blue-600 dark:text-blue-400">
+                <Database className="w-3.5 h-3.5" />
+                Sample Data
+                <span className="text-xs text-gray-400 dark:text-gray-500 font-normal">
+                  ({Object.keys(section.sample_data).length} {Object.keys(section.sample_data).length === 1 ? 'key' : 'keys'})
+                </span>
+              </span>
+              <ChevronDown
+                className={cn(
+                  'w-4 h-4 text-gray-400 dark:text-gray-500 transition-transform duration-200',
+                  dataOpen && 'rotate-180'
+                )}
+                strokeWidth={1.5}
+              />
+            </summary>
+            <pre className="pt-1.5 pb-1 text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded-md p-2 overflow-x-auto max-h-48 overflow-y-auto">
+              {JSON.stringify(section.sample_data, null, 2)}
+            </pre>
+          </details>
+        )}
+
+        {/* Status indicators */}
+        {(!hasSpec || !hasSampleData) && (
+          <div className="flex items-center justify-end gap-3">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center">
+                    <ClipboardCheck className={cn(
+                      'w-4 h-4',
+                      hasSpec
+                        ? 'text-emerald-500 dark:text-emerald-400'
+                        : 'text-gray-300 dark:text-gray-600'
+                    )} />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{hasSpec ? 'Spec defined' : 'No spec yet'}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center">
+                    <Database className={cn(
+                      'w-4 h-4',
+                      hasSampleData
+                        ? 'text-blue-500 dark:text-blue-400'
+                        : 'text-gray-300 dark:text-gray-600'
+                    )} />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{hasSampleData ? 'Sample data generated' : 'No sample data yet'}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
 }

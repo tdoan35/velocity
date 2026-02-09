@@ -2,6 +2,8 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { Edit, Palette } from 'lucide-react'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useCurrentProject } from '@/contexts/ProjectContext'
+import { useDesignPhase } from '@/stores/useDesignPhaseStore'
+import type { PhaseName } from '@/types/design-phases'
 import { ThemeToggle } from './ThemeToggle'
 import { NavbarAuth } from './NavbarAuth'
 import { NavbarMenu } from './NavbarMenu'
@@ -18,12 +20,22 @@ export function NavbarActions({ onOpenAuthModal, onLogout, showDemoMenu = false 
   const location = useLocation()
   const { isAuthenticated } = useAuthStore()
   const { currentProject } = useCurrentProject()
-  
+  const { currentDesignPhase } = useDesignPhase()
+
   const isProjectPage = location.pathname.startsWith('/project/')
   const isEditorPage = location.pathname.includes('/editor')
-  
+
   const currentValue = isEditorPage ? 'editor' : 'design'
-  
+
+  const ALL_PHASES: PhaseName[] = [
+    'product-vision', 'product-roadmap', 'data-model',
+    'design-system', 'application-shell', 'section-details', 'export'
+  ]
+
+  const allPhasesCompleted = currentDesignPhase
+    ? ALL_PHASES.every(p => currentDesignPhase.phases_completed.includes(p))
+    : false
+
   const viewOptions = [
     {
       value: 'design',
@@ -33,7 +45,8 @@ export function NavbarActions({ onOpenAuthModal, onLogout, showDemoMenu = false 
     {
       value: 'editor',
       label: 'Editor',
-      icon: <Edit className="w-3 h-3" />
+      icon: <Edit className="w-3 h-3" />,
+      disabled: !allPhasesCompleted
     }
   ]
 
