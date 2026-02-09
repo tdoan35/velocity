@@ -6,7 +6,7 @@ import { EnhancedTextarea } from '@/components/ui/enhanced-textarea'
 import { MarkdownMessage } from './markdown-message'
 import { TypingIndicator } from './typing-indicator'
 import { SuggestedResponses } from './suggested-responses'
-import { useAIChatStream, type SuggestedResponse } from '@/hooks/useAIChatStream'
+import { useVelocityChat, type SuggestedResponse } from '@/hooks/useVelocityChat'
 import type { AgentType } from '@/types/ai'
 import type { DesignPhaseType } from '@/types/design-phases'
 import { cn } from '@/lib/utils'
@@ -102,6 +102,7 @@ export function EnhancedChatInterface({
     messages,
     input,
     isLoading,
+    status,
     error,
     conversationId,
     currentAgent,
@@ -112,7 +113,8 @@ export function EnhancedChatInterface({
     reload,
     stop,
     switchAgent,
-  } = useAIChatStream({
+    setInput,
+  } = useVelocityChat({
     conversationId: initialConversationId,
     projectId,
     initialAgent: activeAgent || 'project_manager',
@@ -237,19 +239,9 @@ export function EnhancedChatInterface({
   }, [])
 
   const handleSelectSuggestion = (suggestion: SuggestedResponse) => {
-    // Set the input value to the suggestion text
-    handleInputChange({ target: { value: suggestion.text } } as any)
-    
-    // Suggestions will be cleared automatically by the hook after submission
-    
-    // Focus the input for any additional edits
+    setInput(suggestion.text)
     inputRef.current?.focus()
-    
-    // Ensure auto-scroll is enabled for the next message
     setShouldAutoScroll(true)
-    
-    // Optionally auto-submit (uncomment if desired)
-    // setTimeout(() => handleSubmit(), 100)
   }
 
   // Handle conversation title editing
@@ -547,8 +539,7 @@ export function EnhancedChatInterface({
                         size="sm"
                         onClick={() => {
                           setShouldAutoScroll(true)
-                          handleInputChange({ target: { value: 'Help me plan my app structure' } } as any)
-                          handleSubmit()
+                          handleSubmit(null, 'Help me plan my app structure')
                         }}
                       >
                         Plan Structure
@@ -558,8 +549,7 @@ export function EnhancedChatInterface({
                         size="sm"
                         onClick={() => {
                           setShouldAutoScroll(true)
-                          handleInputChange({ target: { value: 'Suggest a UI design for my app' } } as any)
-                          handleSubmit()
+                          handleSubmit(null, 'Suggest a UI design for my app')
                         }}
                       >
                         Design UI
@@ -569,8 +559,7 @@ export function EnhancedChatInterface({
                         size="sm"
                         onClick={() => {
                           setShouldAutoScroll(true)
-                          handleInputChange({ target: { value: 'Generate code for a login screen' } } as any)
-                          handleSubmit()
+                          handleSubmit(null, 'Generate code for a login screen')
                         }}
                       >
                         Generate Code
@@ -583,7 +572,10 @@ export function EnhancedChatInterface({
           ) : (
             <>
               {messages.map((message, index) => renderMessage(message, index))}
-              {isLoading && <TypingIndicator />}
+              {status === 'submitted' && (
+                <div className="text-xs text-muted-foreground px-2 py-1">Sending...</div>
+              )}
+              {status === 'streaming' && <TypingIndicator />}
             </>
           )}
           {/* Invisible element to mark the end of messages for scrolling */}
@@ -614,15 +606,12 @@ export function EnhancedChatInterface({
         <EnhancedTextarea
           ref={inputRef}
           value={input}
-          onChange={(value) => {
-            const event = { target: { value } } as React.ChangeEvent<HTMLTextAreaElement>
-            handleInputChange(event)
-          }}
+          onChange={(value) => setInput(value)}
           onSubmit={() => {
             setShouldAutoScroll(true)
             handleSubmit()
           }}
-          disabled={isLoading}
+          disabled={status !== 'ready'}
           isLoading={isLoading}
           placeholder={designPhase ? `Describe your ${phaseLabels[designPhase]?.toLowerCase() || 'idea'}...` : `Ask ${agentConfig[currentAgent].label} anything...`}
           submitIcon={Send}
