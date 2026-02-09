@@ -19,8 +19,6 @@ export function NavigationTracker({ children }: NavigationTrackerProps) {
       pageName = 'editor';
     } else if (pathname.match(/\/project\/[^/]+\/?$/)) {
       pageName = 'design';
-    } else if (pathname.includes('/dashboard')) {
-      pageName = 'dashboard';
     } else if (pathname === '/') {
       pageName = 'home';
     }

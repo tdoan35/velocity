@@ -27,7 +27,6 @@ import { PRDEditorDemo } from './pages/PRDEditorDemo'
 import { Modal } from './components/ui/modal'
 import { SignupForm } from './components/ui/signup-form'
 import { AuthenticatedLayout } from './components/AuthenticatedLayout'
-import { Dashboard } from './pages/Dashboard'
 import { ProjectDesign } from './pages/ProjectDesign'
 import { ProjectEditor } from './pages/ProjectEditor'
 import { DesignPhaseIndex } from './pages/design/DesignPhaseIndex'
@@ -375,7 +374,6 @@ function App() {
             {isAuthenticated && (
               <>
                 <Route index element={<HomePage />} />
-                <Route path="dashboard" element={<Dashboard />} />
                 <Route path="apps" element={<SnackProjects />} />
                 <Route path="project/:id/*" element={
                   <ProjectRouteWrapper>

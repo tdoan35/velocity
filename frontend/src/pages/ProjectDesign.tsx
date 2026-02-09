@@ -763,14 +763,14 @@ function ProjectDesignContent() {
     }
 
     if (!isAuthenticated || !user) {
-      console.log('Not authenticated, redirecting to dashboard')
-      navigate('/dashboard')
+      console.log('Not authenticated, redirecting to home')
+      navigate('/')
       return
     }
 
     if (!projectId) {
-      console.log('No project ID, redirecting to dashboard')
-      navigate('/dashboard')
+      console.log('No project ID, redirecting to home')
+      navigate('/')
       return
     }
 
@@ -783,7 +783,7 @@ function ProjectDesignContent() {
     try {
       setIsLoading(true)
 
-      // Step 1: Load the project itself — redirect to dashboard only if this fails
+      // Step 1: Load the project itself — redirect to home only if this fails
       const { project: loadedProject, error } = await projectService.getProject(projectId)
 
       if (error || !loadedProject) {
@@ -792,7 +792,7 @@ function ProjectDesignContent() {
           description: 'Failed to load project',
           variant: 'destructive',
         })
-        navigate('/dashboard')
+        navigate('/')
         return
       }
 
@@ -900,7 +900,7 @@ function ProjectDesignContent() {
         description: 'Failed to load project',
         variant: 'destructive',
       })
-      navigate('/dashboard')
+      navigate('/')
     } finally {
       setIsLoading(false)
     }
@@ -1346,9 +1346,9 @@ function ProjectDesignContent() {
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <p className="text-muted-foreground mb-4">Project not found</p>
-          <Button onClick={() => navigate('/dashboard')}>
+          <Button onClick={() => navigate('/')}>
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Dashboard
+            Back to Home
           </Button>
         </div>
       </div>

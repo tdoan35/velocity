@@ -7,7 +7,7 @@ interface MobileNavigationProps {
 }
 
 const tabs = [
-  { id: 'dashboard', label: 'Home', icon: Home },
+  { id: 'home', label: 'Home', icon: Home },
   { id: 'editor', label: 'Editor', icon: Code },
   { id: 'files', label: 'Files', icon: FileText },
   { id: 'packages', label: 'Packages', icon: Package },

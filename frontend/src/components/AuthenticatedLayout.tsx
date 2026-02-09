@@ -5,8 +5,6 @@ import { projectService } from "@/services/projectService";
 import {
   IconArrowLeft,
   IconSettings,
-  IconLayoutDashboard,
-  IconLayoutDashboardFilled,
   IconLayoutSidebarLeftExpand,
   IconLayoutSidebarLeftExpandFilled,
   IconSquareRoundedPlus,
@@ -186,7 +184,7 @@ export function AuthenticatedLayout() {
       
       // If we're currently viewing this project, navigate away
       if (currentProject?.id === selectedProject.id) {
-        navigate('/dashboard');
+        navigate('/');
       }
       
       setDeleteDialogOpen(false);
@@ -225,16 +223,6 @@ export function AuthenticatedLayout() {
       ),
       isActive: isActive("/")
     },
-    {
-      label: "Dashboard",
-      href: "/dashboard",
-      icon: isActive("/dashboard") ? (
-        <IconLayoutDashboardFilled className="h-5 w-5 shrink-0" />
-      ) : (
-        <IconLayoutDashboard className="h-5 w-5 shrink-0" />
-      ),
-      isActive: isActive("/dashboard")
-    }
   ];
 
   const logoutLink = {
