@@ -13,6 +13,8 @@ const { spawn } = require('child_process');
 const fs = require('fs-extra');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
+const axios = require('axios');
+const JSZip = require('jszip');
 
 // Configuration
 const PORT = 8080;
@@ -25,12 +27,19 @@ const PROJECT_ID = process.env.PROJECT_ID;
 const PREVIEW_DOMAIN = process.env.PREVIEW_DOMAIN;
 const USE_SUBDOMAIN = process.env.USE_SUBDOMAIN === 'true';
 const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SNAPSHOT_URL = process.env.SNAPSHOT_URL;
+const REALTIME_TOKEN = process.env.REALTIME_TOKEN;
 
 // Global state
 let viteProcess = null;
 let supabase = null;
 let viteReady = false;
+let realtimeChannel = null;
+let connectionRetryCount = 0;
+const maxRetryAttempts = 5;
+let reconnectTimer = null;
 
 // Express app
 const app = express();
@@ -179,20 +188,117 @@ app.use((req, res, next) => {
  */
 async function initSupabase() {
   console.log('🔌 Connecting to Supabase...');
-  supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+  const useSnapshotHydration = !!SNAPSHOT_URL;
+  let supabaseKey;
+
+  if (useSnapshotHydration && REALTIME_TOKEN) {
+    try {
+      const tokenData = JSON.parse(Buffer.from(REALTIME_TOKEN, 'base64').toString());
+      supabaseKey = tokenData.token;
+      console.log('✅ Using scoped realtime token for project:', tokenData.scope);
+    } catch (error) {
+      console.warn('⚠️ Failed to decode realtime token, using service role key:', error.message);
+      supabaseKey = SUPABASE_SERVICE_ROLE_KEY;
+    }
+  } else {
+    supabaseKey = SUPABASE_SERVICE_ROLE_KEY;
+  }
+
+  supabase = createClient(SUPABASE_URL, supabaseKey);
   console.log('✅ Supabase connected');
 }
 
 /**
- * Perform initial file sync from Supabase
+ * Hydrate project files from snapshot ZIP
+ */
+async function hydrateFromSnapshot() {
+  try {
+    if (!SNAPSHOT_URL) {
+      console.log('📁 No snapshot URL provided, falling back to legacy sync');
+      await syncProjectFiles();
+      return;
+    }
+
+    console.log('📥 Downloading snapshot from:', SNAPSHOT_URL);
+
+    // Download the snapshot with retry logic
+    let zipData;
+    let lastError;
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      try {
+        const response = await axios.get(SNAPSHOT_URL, {
+          responseType: 'arraybuffer',
+          timeout: 30000,
+          maxContentLength: 100 * 1024 * 1024,
+        });
+
+        if (response.status !== 200) {
+          throw new Error(`Failed to download snapshot: HTTP ${response.status}`);
+        }
+
+        zipData = Buffer.from(response.data);
+        console.log(`✅ Snapshot downloaded: ${zipData.length} bytes`);
+        break;
+      } catch (error) {
+        lastError = error;
+        if (attempt === 5) break;
+        const delay = Math.min(2000 * Math.pow(2, attempt - 1), 30000);
+        console.warn(`Snapshot download failed (attempt ${attempt}/5): ${error.message}. Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+
+    if (!zipData) {
+      throw lastError || new Error('Failed to download snapshot after 5 attempts');
+    }
+
+    // Extract the ZIP using JSZip
+    console.log('📦 Extracting snapshot...');
+    const zip = new JSZip();
+    const zipContents = await zip.loadAsync(zipData);
+
+    let extractedFiles = 0;
+    const entries = Object.entries(zipContents.files);
+
+    for (const [filename, zipEntry] of entries) {
+      if (zipEntry.dir) continue;
+
+      const content = await zipEntry.async('text');
+      const localPath = path.join(PROJECT_DIR, filename);
+
+      await fs.ensureDir(path.dirname(localPath));
+      await fs.writeFile(localPath, content, 'utf8');
+      extractedFiles++;
+
+      console.log(`✅ Extracted: ${filename} (${content.length} bytes)`);
+    }
+
+    console.log(`📸 Snapshot hydration complete: ${extractedFiles} files extracted`);
+
+    // Verify critical files exist
+    const packageJsonExists = await fs.pathExists(path.join(PROJECT_DIR, 'package.json'));
+    if (!packageJsonExists) {
+      console.warn('⚠️ Critical file missing after extraction: package.json');
+    }
+
+  } catch (error) {
+    console.error('❌ Snapshot hydration failed:', error.message);
+    console.log('📁 Falling back to legacy file sync...');
+    await syncProjectFiles();
+  }
+}
+
+/**
+ * Perform initial file sync from Supabase storage, with DB table fallback
  */
 async function syncProjectFiles() {
   try {
     console.log('📥 Syncing project files from Supabase...');
-    
+
     // Create project directory
     await fs.ensureDir(PROJECT_DIR);
-    
+
     // Check if there are files in storage
     const { data: files, error } = await supabase.storage
       .from('project-files')
@@ -203,17 +309,22 @@ async function syncProjectFiles() {
     }
 
     if (!files || files.length === 0) {
-      console.log('📄 No existing files found, creating default project...');
+      // Storage bucket is empty - try the project_files DB table via list_current_files RPC
+      console.log('📄 No files in storage bucket, querying project_files DB table...');
+      const filesFromDb = await syncFromDatabase();
+      if (filesFromDb) return;
+
+      console.log('📄 No files found in DB either, creating default project...');
       await createDefaultProject();
       return;
     }
 
-    console.log(`📦 Found ${files.length} files, downloading...`);
-    
+    console.log(`📦 Found ${files.length} files in storage, downloading...`);
+
     // Download all files
     for (const file of files) {
       if (file.name === '.emptyFolderPlaceholder') continue;
-      
+
       const filePath = `${PROJECT_ID}/${file.name}`;
       const { data, error: downloadError } = await supabase.storage
         .from('project-files')
@@ -226,10 +337,10 @@ async function syncProjectFiles() {
 
       const localPath = path.join(PROJECT_DIR, file.name);
       await fs.ensureDir(path.dirname(localPath));
-      
+
       const arrayBuffer = await data.arrayBuffer();
       await fs.writeFile(localPath, Buffer.from(arrayBuffer));
-      
+
       console.log(`✅ Downloaded: ${file.name}`);
     }
 
@@ -237,7 +348,197 @@ async function syncProjectFiles() {
 
   } catch (error) {
     console.error('❌ File sync failed:', error);
-    await createDefaultProject();
+    // Last resort: try DB before creating default project
+    const filesFromDb = await syncFromDatabase().catch(() => false);
+    if (!filesFromDb) {
+      await createDefaultProject();
+    }
+  }
+}
+
+/**
+ * Sync files from the project_files database table via list_current_files RPC
+ * Returns true if files were found and written, false otherwise
+ */
+async function syncFromDatabase() {
+  try {
+    const { data: dbFiles, error: dbError } = await supabase.rpc('list_current_files', {
+      project_uuid: PROJECT_ID
+    });
+
+    if (dbError) {
+      console.error('❌ list_current_files RPC failed:', dbError.message);
+      return false;
+    }
+
+    if (!dbFiles || dbFiles.length === 0) {
+      console.log('📄 No files found in project_files DB table');
+      return false;
+    }
+
+    console.log(`📦 Found ${dbFiles.length} files in DB, writing to disk...`);
+
+    let writtenCount = 0;
+    for (const file of dbFiles) {
+      if (!file.content) continue;
+
+      const localPath = path.join(PROJECT_DIR, file.file_path);
+      await fs.ensureDir(path.dirname(localPath));
+      await fs.writeFile(localPath, file.content, 'utf8');
+      writtenCount++;
+
+      console.log(`✅ Written from DB: ${file.file_path} (${file.content.length} bytes)`);
+    }
+
+    console.log(`📥 DB file sync completed: ${writtenCount} files written`);
+    return writtenCount > 0;
+
+  } catch (error) {
+    console.error('❌ DB file sync failed:', error);
+    return false;
+  }
+}
+
+/**
+ * Connect to Supabase realtime for live file sync
+ */
+async function connectToRealtime() {
+  try {
+    const channelName = `realtime:project:${PROJECT_ID}`;
+
+    // Clear any existing reconnect timer
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+
+    realtimeChannel = supabase.channel(channelName, {
+      config: {
+        presence: {
+          key: `container-${PROJECT_ID}`,
+        },
+      },
+    })
+      .on('broadcast', { event: 'file:update' }, async (payload) => {
+        console.log('📝 Received file update:', payload.payload);
+        await handleFileUpdate(payload.payload);
+      })
+      .on('broadcast', { event: 'file:delete' }, async (payload) => {
+        console.log('🗑️ Received file delete:', payload.payload);
+        await handleFileDelete(payload.payload);
+      })
+      .on('broadcast', { event: 'file:bulk-update' }, async (payload) => {
+        console.log('📦 Received bulk file update:', payload.payload);
+        await handleBulkFileUpdate(payload.payload);
+      })
+      .subscribe((status, error) => {
+        console.log(`⚡ Realtime connection status: ${status}`);
+
+        switch (status) {
+          case 'SUBSCRIBED':
+            console.log(`✅ Subscribed to channel: ${channelName}`);
+            connectionRetryCount = 0;
+            break;
+          case 'CHANNEL_ERROR':
+            console.error('❌ Channel error:', error);
+            scheduleReconnect();
+            break;
+          case 'TIMED_OUT':
+            console.warn('⏰ Connection timed out, reconnecting...');
+            scheduleReconnect();
+            break;
+          case 'CLOSED':
+            console.warn('🔌 Connection closed, reconnecting...');
+            scheduleReconnect();
+            break;
+        }
+      });
+
+    console.log(`🔄 Connecting to realtime channel: ${channelName}`);
+
+  } catch (error) {
+    console.error('❌ Failed to connect to realtime:', error);
+    scheduleReconnect();
+  }
+}
+
+/**
+ * Schedule reconnection with exponential backoff
+ */
+function scheduleReconnect() {
+  if (connectionRetryCount >= maxRetryAttempts) {
+    console.error(`❌ Max retry attempts (${maxRetryAttempts}) reached. Stopping reconnection.`);
+    return;
+  }
+
+  connectionRetryCount++;
+  const delayMs = Math.min(1000 * Math.pow(2, connectionRetryCount), 30000);
+
+  console.log(`🔄 Scheduling reconnection attempt ${connectionRetryCount}/${maxRetryAttempts} in ${delayMs}ms...`);
+
+  reconnectTimer = setTimeout(() => {
+    console.log(`🔄 Reconnection attempt ${connectionRetryCount}/${maxRetryAttempts}...`);
+    connectToRealtime();
+  }, delayMs);
+}
+
+/**
+ * Handle file update from realtime
+ */
+async function handleFileUpdate({ filePath, content, timestamp }) {
+  try {
+    const fullPath = path.join(PROJECT_DIR, filePath);
+    await fs.ensureDir(path.dirname(fullPath));
+    await fs.writeFile(fullPath, content, 'utf8');
+    console.log(`✅ Updated file: ${filePath} (${content.length} bytes)`);
+  } catch (error) {
+    console.error(`❌ Failed to update file ${filePath}:`, error);
+  }
+}
+
+/**
+ * Handle file deletion from realtime
+ */
+async function handleFileDelete({ filePath, timestamp }) {
+  try {
+    const fullPath = path.join(PROJECT_DIR, filePath);
+    if (await fs.pathExists(fullPath)) {
+      await fs.remove(fullPath);
+      console.log(`✅ Deleted file: ${filePath}`);
+    }
+  } catch (error) {
+    console.error(`❌ Failed to delete file ${filePath}:`, error);
+  }
+}
+
+/**
+ * Handle bulk file updates from realtime
+ */
+async function handleBulkFileUpdate({ files, timestamp }) {
+  try {
+    console.log(`📦 Processing bulk update of ${files.length} files...`);
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const file of files) {
+      try {
+        if (file.action === 'update') {
+          await handleFileUpdate({ filePath: file.filePath, content: file.content, timestamp });
+          successCount++;
+        } else if (file.action === 'delete') {
+          await handleFileDelete({ filePath: file.filePath, timestamp });
+          successCount++;
+        }
+      } catch (error) {
+        console.error(`❌ Failed to process file ${file.filePath}:`, error);
+        errorCount++;
+      }
+    }
+
+    console.log(`📦 Bulk update completed: ${successCount} success, ${errorCount} errors`);
+  } catch (error) {
+    console.error('❌ Failed to process bulk file update:', error);
   }
 }
 
@@ -569,21 +870,32 @@ async function main() {
     console.log(`📍 Project ID: ${PROJECT_ID}`);
     console.log(`🌐 Preview Domain: ${PREVIEW_DOMAIN}`);
     console.log(`🔧 Subdomain Mode: ${USE_SUBDOMAIN}`);
-    
+    console.log(`📸 Snapshot Mode: ${!!SNAPSHOT_URL}`);
+
     // Initialize Supabase
     await initSupabase();
-    
-    // Sync project files
-    await syncProjectFiles();
-    
+
+    // Sync project files - use snapshot if available, otherwise legacy
+    if (SNAPSHOT_URL) {
+      console.log('📸 Performing snapshot hydration...');
+      await hydrateFromSnapshot();
+    } else {
+      console.log('📁 Performing legacy file sync...');
+      await syncProjectFiles();
+    }
+
     // Install dependencies
     await installDependencies();
-    
+
     // Start Vite (don't wait for it to be fully ready)
     startVite().catch(err => {
       console.error('⚠️ Vite startup error (non-fatal):', err);
     });
-    
+
+    // Connect to realtime for live file sync (non-blocking)
+    console.log('⚡ Connecting to realtime updates...');
+    connectToRealtime();
+
     // Start Express server immediately
     app.listen(PORT, () => {
       console.log(`✅ Express server listening on port ${PORT}`);
@@ -601,21 +913,24 @@ async function main() {
 }
 
 // Handle graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('📛 SIGTERM received, shutting down gracefully...');
+function gracefulShutdown(signal) {
+  console.log(`📛 ${signal} received, shutting down gracefully...`);
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  if (realtimeChannel) {
+    realtimeChannel.unsubscribe();
+    console.log('✅ Unsubscribed from realtime channel');
+  }
   if (viteProcess) {
     viteProcess.kill();
   }
   process.exit(0);
-});
+}
 
-process.on('SIGINT', () => {
-  console.log('📛 SIGINT received, shutting down gracefully...');
-  if (viteProcess) {
-    viteProcess.kill();
-  }
-  process.exit(0);
-});
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Start the container
 main();
