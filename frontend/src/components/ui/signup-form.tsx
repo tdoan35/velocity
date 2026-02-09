@@ -97,7 +97,10 @@ export function SignupForm({ mode = 'signup', onClose, onModeSwitch }: SignupFor
             description: "Please check your email to verify your account.",
           });
           onClose?.();
-          navigate('/');
+          // Skip navigation if there's a pending prompt — PendingPromptHandler will navigate after creating the project
+          if (!sessionStorage.getItem('velocity_pending_prompt')) {
+            navigate('/');
+          }
         }
       } else {
         const { user, error } = await authService.login({
@@ -130,7 +133,10 @@ export function SignupForm({ mode = 'signup', onClose, onModeSwitch }: SignupFor
             description: "You have successfully logged in.",
           });
           onClose?.();
-          navigate('/');
+          // Skip navigation if there's a pending prompt — PendingPromptHandler will navigate after creating the project
+          if (!sessionStorage.getItem('velocity_pending_prompt')) {
+            navigate('/');
+          }
         }
       }
     } catch (error) {

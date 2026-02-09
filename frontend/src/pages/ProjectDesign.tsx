@@ -782,6 +782,8 @@ function ProjectDesignContent() {
 
     try {
       setIsLoading(true)
+
+      // Step 1: Load the project itself — redirect to dashboard only if this fails
       const { project: loadedProject, error } = await projectService.getProject(projectId)
 
       if (error || !loadedProject) {
@@ -796,11 +798,22 @@ function ProjectDesignContent() {
 
       setProject(loadedProject)
 
-      // Load design phase data (create if it doesn't exist yet)
-      await loadDesignPhase(projectId)
-      const { currentDesignPhase: existingPhase } = useDesignPhaseStore.getState()
-      if (!existingPhase) {
-        await createDesignPhase({ project_id: projectId })
+      // Step 2: Load design phase and conversation data
+      // Errors here should NOT redirect — the project exists, we just need to initialize its data
+      try {
+        await loadDesignPhase(projectId)
+        const { currentDesignPhase: existingPhase } = useDesignPhaseStore.getState()
+        if (!existingPhase) {
+          await createDesignPhase({ project_id: projectId })
+        }
+      } catch (phaseError) {
+        console.warn('Error loading/creating design phase (will retry):', phaseError)
+        // Try once more — race conditions with newly created projects can cause 409s
+        try {
+          await loadDesignPhase(projectId)
+        } catch {
+          // Proceed without design phase data — it will be created on first interaction
+        }
       }
 
       // Extract initial prompt from app_config
@@ -826,45 +839,58 @@ function ProjectDesignContent() {
         setActiveDesignPhase('product_vision')
       }
 
-      // Check for existing phase conversation first, then fall back to general conversation
-      const activePhaseKey = !hasOverview ? 'product_vision' : (!hasRoadmapData ? 'product_roadmap' : null)
+      // Step 3: Load conversation data — errors here should not redirect either
+      try {
+        const activePhaseKey = !hasOverview ? 'product_vision' : (!hasRoadmapData ? 'product_roadmap' : null)
 
-      if (activePhaseKey) {
-        const { conversation: phaseConv } = await conversationService.getPhaseConversation(projectId, activePhaseKey)
-        if (phaseConv) {
-          setPhaseConversations(prev => ({ ...prev, [activePhaseKey]: phaseConv.id }))
-          await createNewConversation(phaseConv.title || loadedProject.title, phaseConv.id)
+        if (activePhaseKey) {
+          const { conversation: phaseConv } = await conversationService.getPhaseConversation(projectId, activePhaseKey)
+          if (phaseConv) {
+            setPhaseConversations(prev => ({ ...prev, [activePhaseKey]: phaseConv.id }))
+            await createNewConversation(phaseConv.title || loadedProject.title, phaseConv.id)
 
-          const { messages } = await conversationService.getConversationMessages(phaseConv.id)
-          if (messages.length === 0 && initialPrompt && !initialPromptSubmitted) {
-            setIsFirstVisit(true)
-          }
-        } else {
-          // Check for any existing conversation (legacy or general)
-          const { conversation: existingConv } = await conversationService.getConversationByProjectId(projectId)
-
-          if (existingConv) {
-            await createNewConversation(existingConv.title || loadedProject.title, existingConv.id)
-
-            const { messages } = await conversationService.getConversationMessages(existingConv.id)
+            const { messages } = await conversationService.getConversationMessages(phaseConv.id)
             if (messages.length === 0 && initialPrompt && !initialPromptSubmitted) {
               setIsFirstVisit(true)
             }
           } else {
-            await createNewConversation(loadedProject.title || loadedProject.name)
-            if (initialPrompt && !initialPromptSubmitted) {
-              setIsFirstVisit(true)
+            // Check for any existing conversation (legacy or general)
+            const { conversation: existingConv } = await conversationService.getConversationByProjectId(projectId)
+
+            if (existingConv) {
+              await createNewConversation(existingConv.title || loadedProject.title, existingConv.id)
+
+              const { messages } = await conversationService.getConversationMessages(existingConv.id)
+              if (messages.length === 0 && initialPrompt && !initialPromptSubmitted) {
+                setIsFirstVisit(true)
+              }
+            } else {
+              await createNewConversation(loadedProject.title || loadedProject.name)
+              if (initialPrompt && !initialPromptSubmitted) {
+                setIsFirstVisit(true)
+              }
             }
           }
-        }
-      } else {
-        // No active design phase, load most recent conversation
-        const { conversation: existingConv } = await conversationService.getConversationByProjectId(projectId)
-
-        if (existingConv) {
-          await createNewConversation(existingConv.title || loadedProject.title, existingConv.id)
         } else {
+          // No active design phase, load most recent conversation
+          const { conversation: existingConv } = await conversationService.getConversationByProjectId(projectId)
+
+          if (existingConv) {
+            await createNewConversation(existingConv.title || loadedProject.title, existingConv.id)
+          } else {
+            await createNewConversation(loadedProject.title || loadedProject.name)
+          }
+        }
+      } catch (convError) {
+        console.warn('Error loading conversations:', convError)
+        // Create a fallback conversation so the page is still usable
+        try {
           await createNewConversation(loadedProject.title || loadedProject.name)
+          if (loadedProject.app_config?.initialPrompt && !initialPromptSubmitted) {
+            setIsFirstVisit(true)
+          }
+        } catch {
+          // Page will still render, just without conversation history
         }
       }
     } catch (error) {

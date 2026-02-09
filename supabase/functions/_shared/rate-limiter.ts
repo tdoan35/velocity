@@ -70,6 +70,12 @@ class RateLimiter {
         pro: { maxRequests: 500, windowMs: 3600000 }, // 500 per hour
         enterprise: { maxRequests: 2000, windowMs: 3600000 } // 2000 per hour
       },
+      'design-phase': {
+        free: { maxRequests: 80, windowMs: 3600000 }, // 80 per hour
+        basic: { maxRequests: 200, windowMs: 3600000 }, // 200 per hour
+        pro: { maxRequests: 500, windowMs: 3600000 }, // 500 per hour
+        enterprise: { maxRequests: 2000, windowMs: 3600000 } // 2000 per hour
+      },
       'ai-optimization': {
         free: { maxRequests: 10, windowMs: 3600000 },
         basic: { maxRequests: 50, windowMs: 3600000 },

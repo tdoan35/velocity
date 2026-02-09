@@ -219,21 +219,23 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Rate limiting
-    const rateLimitCheck = await rateLimiter.check(authResult.userId, 'ai-generation')
+    // Parse request body (before rate limiting so we can select the right bucket)
+    const body: ConversationRequest = await req.json()
+    const { conversationId, message, context, action = 'continue', agentType = 'project_manager', projectId } = body
+
+    // Rate limiting - use design-phase bucket for all project-related requests
+    // (designPhase may be undefined for initial/transitional messages within a project)
+    const rateLimitResource = (body.designPhase || body.projectId) ? 'design-phase' : 'ai-generation'
+    const rateLimitCheck = await rateLimiter.check(authResult.userId, rateLimitResource)
     if (!rateLimitCheck.allowed) {
-      return new Response(JSON.stringify({ 
+      return new Response(JSON.stringify({
         error: 'Rate limit exceeded',
-        retryAfter: rateLimitCheck.retryAfter 
+        retryAfter: rateLimitCheck.retryAfter
       }), {
         status: 429,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
-
-    // Parse request body
-    const body: ConversationRequest = await req.json()
-    const { conversationId, message, context, action = 'continue', agentType = 'project_manager', projectId } = body
 
     // Debug: Log the context being received
     console.log('🔍 Edge function received context:', {

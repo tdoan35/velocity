@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { initializeStoreSubscriptions } from './stores'
 import { useAuthStore } from './stores/useAuthStore'
@@ -112,6 +112,58 @@ function UnauthenticatedLayout() {
   )
 }
 
+// Handles recovering a pending prompt after authentication.
+// Lives at the Router level (not inside a route element) so it persists
+// across route swaps and its navigate() call isn't affected by the
+// UnauthenticatedLayout → AuthenticatedLayout transition.
+function PendingPromptHandler() {
+  const { isAuthenticated } = useAuthStore()
+  const { addProject } = useProjectContext()
+  const navigate = useNavigate()
+  const isProcessingRef = useRef(false)
+
+  useEffect(() => {
+    if (!isAuthenticated || isProcessingRef.current) return
+    const pendingPrompt = sessionStorage.getItem('velocity_pending_prompt')
+    if (!pendingPrompt?.trim()) return
+
+    isProcessingRef.current = true
+    sessionStorage.removeItem('velocity_pending_prompt')
+
+    const processPrompt = async () => {
+      try {
+        const projectName = pendingPrompt.split('.')[0].substring(0, 50) +
+          (pendingPrompt.length > 50 ? '...' : '')
+        const { project, error } = await projectService.createProject({
+          name: projectName,
+          description: pendingPrompt,
+          initialPrompt: pendingPrompt,
+          template: 'react-native'
+        })
+        if (error || !project) return
+        addProject({
+          id: project.id,
+          name: project.name || 'Untitled Project',
+          description: project.description || '',
+          createdAt: new Date(project.created_at || Date.now()),
+          updatedAt: new Date(project.updated_at || Date.now()),
+          template: project.template_type || 'react-native',
+          status: project.status || 'ready'
+        })
+        navigate(`/project/${project.id}`)
+      } catch (error) {
+        console.error('Error creating project from pending prompt:', error)
+      } finally {
+        isProcessingRef.current = false
+      }
+    }
+
+    processPrompt()
+  }, [isAuthenticated, addProject, navigate])
+
+  return null
+}
+
 function HomePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
   const [prompt, setPrompt] = useState('')
   const [mouseX, setMouseX] = useState(50) // percentage
@@ -122,56 +174,43 @@ function HomePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
   const navigate = useNavigate()
 
   const handleSubmit = async () => {
-    if (prompt.trim() && !isSubmitting) {
-      // Check if user is authenticated
-      if (!isAuthenticated) {
-        // Open auth modal instead of submitting
-        onAuthRequired?.()
+    if (!prompt.trim() || isSubmitting) return
+    if (!isAuthenticated) {
+      sessionStorage.setItem('velocity_pending_prompt', prompt.trim())
+      onAuthRequired?.()
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const projectName = prompt.split('.')[0].substring(0, 50) +
+        (prompt.length > 50 ? '...' : '')
+      const { project, error } = await projectService.createProject({
+        name: projectName,
+        description: prompt,
+        initialPrompt: prompt,
+        template: 'react-native'
+      })
+      if (error) {
+        console.error('Error creating project:', error)
         return
       }
-      
-      setIsSubmitting(true)
-      
-      try {
-        // Generate a name from the prompt (first 50 chars or first sentence)
-        const projectName = prompt.split('.')[0].substring(0, 50) + 
-          (prompt.length > 50 ? '...' : '')
-        
-        // Create the project
-        const { project, error } = await projectService.createProject({
-          name: projectName,
-          description: prompt,
-          initialPrompt: prompt,
-          template: 'react-native'
+      if (project) {
+        addProject({
+          id: project.id,
+          name: project.name || 'Untitled Project',
+          description: project.description || '',
+          createdAt: new Date(project.created_at || Date.now()),
+          updatedAt: new Date(project.updated_at || Date.now()),
+          template: project.template_type || 'react-native',
+          status: project.status || 'ready'
         })
-        
-        if (error) {
-          console.error('Error creating project:', error)
-          // TODO: Show error notification
-          return
-        }
-        
-        if (project) {
-          // Add the project to the app store
-          addProject({
-            id: project.id,
-            name: project.name || 'Untitled Project',
-            description: project.description || '',
-            createdAt: new Date(project.created_at || Date.now()),
-            updatedAt: new Date(project.updated_at || Date.now()),
-            template: project.template_type || 'react-native',
-            status: project.status || 'ready'
-          })
-          
-          // Navigate to the project design page
-          navigate(`/project/${project.id}`)
-        }
-      } catch (error) {
-        console.error('Unexpected error:', error)
-        // TODO: Show error notification
-      } finally {
-        setIsSubmitting(false)
+        navigate(`/project/${project.id}`)
       }
+    } catch (error) {
+      console.error('Unexpected error:', error)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -310,6 +349,7 @@ function App() {
   return (
     <Router>
       <ProjectProvider> {/* Lifted to app level */}
+        <PendingPromptHandler />
         <div>
           <Routes>
             {/* Auth callback route */}
