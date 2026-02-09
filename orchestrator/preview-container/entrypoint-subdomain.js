@@ -60,8 +60,10 @@ app.get('/health', (req, res) => {
 
 /**
  * Session validation middleware
+ * If the request is for a different session, use fly-replay to redirect
+ * to the correct Fly.io machine instead of returning a 404.
  */
-app.use((req, res, next) => {
+app.use(async (req, res, next) => {
   // Skip validation for health checks
   if (req.path === '/health') {
     return next();
@@ -71,14 +73,37 @@ app.use((req, res, next) => {
   if (USE_SUBDOMAIN) {
     const requestHost = req.get('host');
     const requestPath = req.path;
-    
+
     // For subdomain mode, check if host contains session ID OR path contains session ID (for transition period)
     const isValidSubdomain = requestHost && requestHost.includes(SESSION_ID);
     const isValidPath = requestPath && requestPath.includes(SESSION_ID);
-    
+
     if (!isValidSubdomain && !isValidPath) {
+      // Extract the session ID from the subdomain (e.g., "abc123.preview.velocity-dev.com" -> "abc123")
+      const requestedSessionId = requestHost ? requestHost.split('.')[0] : null;
+
+      if (requestedSessionId && supabase) {
+        try {
+          // Look up the correct container for this session
+          const { data: session, error } = await supabase
+            .from('preview_sessions')
+            .select('container_id')
+            .eq('id', requestedSessionId)
+            .eq('status', 'active')
+            .single();
+
+          if (!error && session && session.container_id) {
+            console.log(`🔀 Replaying request to correct machine: ${session.container_id} (session: ${requestedSessionId})`);
+            res.setHeader('fly-replay', `instance=${session.container_id}`);
+            return res.status(307).send();
+          }
+        } catch (err) {
+          console.error('❌ Failed to look up session for replay:', err.message);
+        }
+      }
+
       console.warn(`Invalid session request: host="${requestHost}", path="${requestPath}", expected session="${SESSION_ID}"`);
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: 'Invalid session',
         expected: SESSION_ID,
         received: {
@@ -87,7 +112,7 @@ app.use((req, res, next) => {
         }
       });
     }
-    
+
     // Log access type for debugging
     if (isValidSubdomain) {
       console.log(`✅ Subdomain access: ${requestHost}`);
@@ -95,7 +120,7 @@ app.use((req, res, next) => {
       console.log(`🔄 Path-based access (transition): ${requestPath}`);
     }
   }
-  
+
   next();
 });
 
