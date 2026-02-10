@@ -506,14 +506,20 @@ function ProjectEditorCore({
                     initialValue={files[activeFile].content}
                     language={files[activeFile].type}
                     onChange={(newContent) => {
-                      updateFileContent(activeFile, newContent);
-                      securityMonitoring.onFileOpen(activeFile, newContent);
+                      // Read activeFile from store at call time to avoid stale closure
+                      const currentFile = useUnifiedEditorStore.getState().activeFile;
+                      if (!currentFile) return;
+                      updateFileContent(currentFile, newContent);
+                      securityMonitoring.onFileOpen(currentFile, newContent);
                     }}
-                    onSave={(content) => {
-                      saveFile(activeFile).then(() => {
-                        securityMonitoring.onFileSave(activeFile, content);
-                        previewRealtime.broadcastFileUpdate(activeFile, content);
-                      });
+                    onSave={async (content) => {
+                      // Read activeFile from store at call time to avoid stale closure
+                      // in Monaco's Ctrl+S handler (registered once at mount, never updated)
+                      const currentFile = useUnifiedEditorStore.getState().activeFile;
+                      if (!currentFile) return;
+                      await saveFile(currentFile);
+                      securityMonitoring.onFileSave(currentFile, content);
+                      previewRealtime.broadcastFileUpdate(currentFile, content);
                     }}
                   />
                 )}

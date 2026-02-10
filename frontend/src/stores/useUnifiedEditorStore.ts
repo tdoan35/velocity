@@ -162,11 +162,12 @@ export const useUnifiedEditorStore = create<UnifiedEditorState>()(
 
           if (projectError) throw projectError;
 
-          // Fetch project files
+          // Fetch current version of project files only
           const { data: files, error: filesError } = await supabase
             .from('project_files')
             .select('*')
-            .eq('project_id', projectId);
+            .eq('project_id', projectId)
+            .eq('is_current_version', true);
 
           if (filesError) throw filesError;
 
