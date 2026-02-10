@@ -401,6 +401,21 @@ Deno.serve(async (req) => {
 
     const stream = new ReadableStream({
       async start(controller) {
+        // Heartbeat: keep SSE connection alive and let the client detect stalls
+        const heartbeatInterval = setInterval(() => {
+          if (!streamClosed) {
+            try {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                type: 'heartbeat',
+                ts: Date.now(),
+              })}\n\n`))
+            } catch {
+              // Controller already closed — clear interval
+              clearInterval(heartbeatInterval)
+            }
+          }
+        }, 15_000)
+
         try {
           let lastEmittedFileOpIndex = 0
 
@@ -439,6 +454,9 @@ Deno.serve(async (req) => {
               }
             }
           }
+
+          // Stop heartbeat before closing
+          clearInterval(heartbeatInterval)
 
           // Send completion event and close stream IMMEDIATELY so the frontend
           // transitions out of "AI is thinking..." without waiting for DB saves.
@@ -508,9 +526,27 @@ Deno.serve(async (req) => {
             }
           })()
         } catch (error) {
+          clearInterval(heartbeatInterval)
           console.error('Streaming error:', error)
           if (!streamClosed) {
-            controller.error(error)
+            // Send a structured error SSE event so the transport's normal
+            // `done` path fires and emits AI SDK lifecycle events, preventing
+            // the UI from getting stuck on "AI is thinking...".
+            try {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                type: 'error',
+                error: {
+                  message: error instanceof Error ? error.message : 'Stream error',
+                  code: 'STREAM_ERROR',
+                },
+                partialObject: fullResponse,
+              })}\n\n`))
+              controller.close()
+              streamClosed = true
+            } catch {
+              // Enqueue failed (controller already errored/closed) — fall back
+              try { controller.error(error) } catch { /* already closed */ }
+            }
           }
         }
       }
