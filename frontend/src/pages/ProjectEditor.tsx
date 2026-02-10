@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { Loader2, Settings, Eye, Code, MessageSquare, FileText as LogsIcon, Terminal, Play, Square } from 'lucide-react';
 import { usePreviewSession } from '../hooks/usePreviewSession';
 import type { PreviewStatus } from '../hooks/usePreviewSession';
+import { usePreviewRealtime } from '../hooks/usePreviewRealtime';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../components/ui/resizable';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -69,6 +70,12 @@ function ProjectEditorCore({
   const [activeView, setActiveView] = useState<'preview' | 'code'>('preview');
   const [isAIChatPanelVisible, setIsAIChatPanelVisible] = useState(true);
   
+  // Realtime file sync to preview container
+  const previewRealtime = usePreviewRealtime({
+    projectId: projectId || null,
+    onError: (error) => console.error('[ProjectEditor] Realtime error:', error),
+  });
+
   // Preview session management at project level
   const [selectedDevice, setSelectedDevice] = useState<'mobile' | 'tablet' | 'desktop'>('mobile');
   const [autoStartAttempted, setAutoStartAttempted] = useState(false);
@@ -505,6 +512,7 @@ function ProjectEditorCore({
                     onSave={(content) => {
                       saveFile(activeFile).then(() => {
                         securityMonitoring.onFileSave(activeFile, content);
+                        previewRealtime.broadcastFileUpdate(activeFile, content);
                       });
                     }}
                   />

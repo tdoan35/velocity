@@ -444,17 +444,43 @@ async function connectToRealtime() {
         },
       },
     })
+      // Listen for broadcast events from frontend
       .on('broadcast', { event: 'file:update' }, async (payload) => {
-        console.log('📝 Received file update:', payload.payload);
+        console.log('📝 [broadcast] Received file update:', payload.payload?.filePath);
         await handleFileUpdate(payload.payload);
       })
       .on('broadcast', { event: 'file:delete' }, async (payload) => {
-        console.log('🗑️ Received file delete:', payload.payload);
+        console.log('🗑️ [broadcast] Received file delete:', payload.payload?.filePath);
         await handleFileDelete(payload.payload);
       })
       .on('broadcast', { event: 'file:bulk-update' }, async (payload) => {
-        console.log('📦 Received bulk file update:', payload.payload);
+        console.log('📦 [broadcast] Received bulk file update');
         await handleBulkFileUpdate(payload.payload);
+      })
+      // Listen for direct DB changes on project_files table (most reliable)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'project_files',
+        filter: `project_id=eq.${PROJECT_ID}`,
+      }, async (payload) => {
+        const row = payload.new;
+        if (row && row.is_current_version && row.content != null) {
+          console.log(`📝 [postgres_changes INSERT] ${row.file_path} (v${row.version})`);
+          await handleFileUpdate({ filePath: row.file_path, content: row.content });
+        }
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'project_files',
+        filter: `project_id=eq.${PROJECT_ID}`,
+      }, async (payload) => {
+        const row = payload.new;
+        if (row && row.is_current_version && row.content != null) {
+          console.log(`📝 [postgres_changes UPDATE] ${row.file_path} (v${row.version})`);
+          await handleFileUpdate({ filePath: row.file_path, content: row.content });
+        }
       })
       .subscribe((status, error) => {
         console.log(`⚡ Realtime connection status: ${status}`);

@@ -2,7 +2,6 @@ import { useEffect, useRef, useCallback } from 'react';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
-import { isFeatureEnabled, FSYNC_FLAGS } from '../utils/featureFlags';
 
 export interface FileUpdateEvent {
   event: 'file:update';
@@ -136,14 +135,6 @@ export function usePreviewRealtime({
   }, [connect, onError]);
 
   const broadcastFileUpdate = useCallback(async (filePath: string, content: string) => {
-    // Check if client broadcasts are enabled
-    const clientBroadcastEnabled = await isFeatureEnabled(FSYNC_FLAGS.KEEP_CLIENT_BROADCAST);
-    
-    if (!clientBroadcastEnabled) {
-      console.log(`[usePreviewRealtime] Client broadcasts disabled by feature flag, skipping broadcast for ${filePath}`);
-      return;
-    }
-
     if (!channelRef.current || connectionStatusRef.current !== 'connected') {
       console.warn(`[usePreviewRealtime] Cannot broadcast file update: channel not connected (status: ${connectionStatusRef.current})`);
       return;
