@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { MessageSquarePlus, History, Bot, Settings, Send, Users, Sparkles, Code2, Plus, ArrowDown, Edit, Check, Hammer } from 'lucide-react'
+import { MessageSquarePlus, History, Bot, Settings, Send, Users, Sparkles, Code2, Plus, ArrowDown, Edit, Check, Hammer, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { EnhancedTextarea } from '@/components/ui/enhanced-textarea'
@@ -653,15 +653,21 @@ export function EnhancedChatInterface({
           showCommands={false}
         />
         {isLoading && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={stop}
-            className="absolute right-2 top-2"
-          >
-            Stop
-          </Button>
+          <div className="mt-2 flex items-center gap-2">
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={stop}
+              className="h-7 gap-1.5 px-3 text-xs"
+            >
+              <Square className="h-3 w-3 fill-current" />
+              Stop
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              {status === 'submitted' ? 'Connecting...' : 'AI is responding...'}
+            </span>
+          </div>
         )}
         
         {error && (
