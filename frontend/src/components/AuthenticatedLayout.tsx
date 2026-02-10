@@ -168,37 +168,62 @@ export function AuthenticatedLayout() {
 
   const confirmDelete = async () => {
     if (!selectedProject || isUpdating) return;
-    
+
     setIsUpdating(true);
     try {
       // Delete from backend
       const { error } = await projectService.deleteProject(selectedProject.id);
-      
+
       if (error) {
         console.error('Error deleting project:', error);
         return;
       }
-      
+
+      const shouldNavigate = currentProject?.id === selectedProject.id;
+
       // Remove from store
       deleteProject(selectedProject.id);
-      
-      // If we're currently viewing this project, navigate away
-      if (currentProject?.id === selectedProject.id) {
-        navigate('/');
-      }
-      
+
+      // Close dialog and reset all state BEFORE navigating.
+      // Radix Dialog applies pointer-events: none to <body> while open;
+      // navigating before the dialog closes disrupts its cleanup and
+      // leaves the page uninteractable.
       setDeleteDialogOpen(false);
       setSelectedProject(null);
-      
-      // Reset sidebar state after deletion
       setDropdownOpen(false);
       setTempPinned(false);
       setHoveredProjectId(null);
-      
+
       // If sidebar should be closed (not permanently pinned), close it
       if (!pinned) {
         setOpen(false);
       }
+
+      // Radix Dialog + DropdownMenu both use DismissableLayer which sets
+      // body pointer-events:none via inline style and react-remove-scroll
+      // adds block-interactivity-* classes. When both close in the same
+      // React batch, stale refs in the shared layersWithOutsidePointerEvents
+      // Set corrupt the ref-counting, so cleanup restores the wrong value.
+      //
+      // The Dialog's Presence keeps DismissableLayer alive for the ~200ms
+      // exit animation, so a setTimeout(0) fires too early — Radix's
+      // cleanup runs AFTER and re-sets pointer-events. We clear it both
+      // immediately and after the exit animation to get the final word.
+      const cleanupBodyLocks = () => {
+        document.body.style.removeProperty('pointer-events');
+        document.body.classList.forEach(cls => {
+          if (cls.startsWith('block-interactivity-')) {
+            document.body.classList.remove(cls);
+          }
+        });
+      };
+      cleanupBodyLocks();
+      setTimeout(() => {
+        cleanupBodyLocks();
+        if (shouldNavigate) {
+          navigate('/');
+        }
+      }, 300);
     } catch (error) {
       console.error('Unexpected error deleting project:', error);
     } finally {
@@ -409,20 +434,14 @@ export function AuthenticatedLayout() {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="w-40">
                                 <DropdownMenuItem
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    handleRenameProject(project);
-                                  }}
+                                  onSelect={() => handleRenameProject(project)}
                                   className="cursor-pointer"
                                 >
                                   <Edit className="mr-2 h-3 w-3" />
                                   Rename
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    handleDeleteProject(project);
-                                  }}
+                                  onSelect={() => handleDeleteProject(project)}
                                   className="cursor-pointer text-red-600 focus:text-red-600 dark:text-red-400 dark:focus:text-red-400"
                                 >
                                   <Trash2 className="mr-2 h-3 w-3" />
