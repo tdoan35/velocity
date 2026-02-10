@@ -336,7 +336,7 @@ export function EnhancedChatInterface({
               'rounded-lg p-2 max-w-full',
               isAssistant ? 'bg-transparent' : 'bg-muted'
             )}>
-              {isAssistant && message.content.includes('```') ? (
+              {isAssistant ? (
                 <MarkdownMessage
                   content={message.content}
                   onApplyCode={onApplyCode}
