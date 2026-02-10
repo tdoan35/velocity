@@ -151,6 +151,7 @@ export function useVelocityChat({
       onStructuredData: handleStructuredData,
       onFileOperation: (...args) => latestRef.current.onFileOperation?.(...args),
       onBuildStatus: (...args) => latestRef.current.onBuildStatus?.(...args),
+      isBuilderAgent: currentAgent === 'builder',
     })
   }, [chatId, projectId, currentAgent, designPhase, sectionId, handleStructuredData])
 
@@ -191,6 +192,25 @@ export function useVelocityChat({
       latestRef.current.onStreamStart?.()
     }
   }, [status])
+
+  // Stuck-state watchdog: last-resort safety net if all transport-level timeouts fail.
+  // Detects when the AI SDK stays in 'submitted' or 'streaming' for too long.
+  useEffect(() => {
+    if (status !== 'submitted' && status !== 'streaming') return
+
+    const timeout = status === 'submitted' ? 30_000 : 120_000
+    const timer = setTimeout(() => {
+      console.warn(`[useVelocityChat] Watchdog: stuck in "${status}" for ${timeout / 1000}s — forcing stop`)
+      try { sdkStop() } catch { /* ignore */ }
+      toast({
+        title: 'Connection issue',
+        description: 'The AI response timed out. Please try again.',
+        variant: 'destructive',
+      })
+    }, timeout)
+
+    return () => clearTimeout(timer)
+  }, [status, sdkStop, toast])
 
   // Load conversation messages from DB
   const loadConversationMessages = useCallback(async (convId: string) => {
