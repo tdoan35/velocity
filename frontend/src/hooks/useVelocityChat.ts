@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useChat } from '@ai-sdk/react'
 import type { UIMessage } from 'ai'
-import type { AgentType, AIMessage, ChatStatus } from '../types/ai'
+import type { AgentType, AIMessage, ChatStatus, FileOperation } from '../types/ai'
 import type { DesignPhaseType } from '../types/design-phases'
 import { conversationService, type ProjectContext } from '../services/conversationService'
 import { supabase, supabaseUrl } from '../lib/supabase'
@@ -28,6 +28,8 @@ interface UseVelocityChatOptions {
   onStreamEnd?: (usage: any) => void
   onConversationCreated?: (conversationId: string) => void
   onTitleGenerated?: (title: string) => void
+  onFileOperation?: (op: FileOperation) => void
+  onBuildStatus?: (status: { step: string; filesCompleted: number; filesTotal: number }) => void
 }
 
 /** Convert DB messages to AI SDK UIMessage format */
@@ -60,6 +62,8 @@ export function useVelocityChat({
   onStreamEnd,
   onConversationCreated,
   onTitleGenerated,
+  onFileOperation,
+  onBuildStatus,
 }: UseVelocityChatOptions = {}) {
   const [conversationId, setConversationId] = useState<string | undefined>(initialConversationId)
   const [input, setInput] = useState('')
@@ -72,11 +76,13 @@ export function useVelocityChat({
   const latestRef = useRef({
     onStreamStart, onStreamEnd, onPhaseComplete,
     onConversationCreated, onTitleGenerated,
+    onFileOperation, onBuildStatus,
     designPhase, phaseContext, sectionId, projectContext,
   })
   latestRef.current = {
     onStreamStart, onStreamEnd, onPhaseComplete,
     onConversationCreated, onTitleGenerated,
+    onFileOperation, onBuildStatus,
     designPhase, phaseContext, sectionId, projectContext,
   }
 
@@ -106,9 +112,11 @@ export function useVelocityChat({
   }, [])
 
   // Build transport - recreated when key options change
+  // conversationId is passed as a getter so that when sendMessage resolves a
+  // temp-xxx ID to a real one (synchronously updating the ref), the transport
+  // picks up the real ID even before the React re-render.
   const transport = useMemo(() => {
-    const convId = conversationId
-    if (!convId) return undefined
+    if (!conversationId) return undefined
 
     return new VelocityChatTransport({
       supabaseUrl,
@@ -117,17 +125,19 @@ export function useVelocityChat({
         if (!session) throw new Error('Not authenticated')
         return session.access_token
       },
-      conversationId: convId,
+      conversationId: () => actualConversationIdRef.current || conversationId,
       projectId,
       agentType: currentAgent,
       designPhase: latestRef.current.designPhase,
       sectionId: latestRef.current.sectionId,
-      context: {
+      context: () => ({
         projectId,
         ...(latestRef.current.phaseContext || {}),
         projectContext: latestRef.current.projectContext || undefined,
-      },
+      }),
       onStructuredData: handleStructuredData,
+      onFileOperation: (...args) => latestRef.current.onFileOperation?.(...args),
+      onBuildStatus: (...args) => latestRef.current.onBuildStatus?.(...args),
     })
   }, [conversationId, projectId, currentAgent, designPhase, sectionId, handleStructuredData])
 
@@ -317,6 +327,11 @@ export function useVelocityChat({
         }
 
         actualConversationId = conversation.id
+        // Update the ref synchronously so the transport getter picks up the
+        // real ID immediately — setConversationId schedules a React state
+        // update that won't take effect until the next render, but
+        // chat.sendMessage() below runs before that render.
+        actualConversationIdRef.current = conversation.id
         setConversationId(conversation.id)
         latestRef.current.onConversationCreated?.(conversation.id)
       } catch (err) {

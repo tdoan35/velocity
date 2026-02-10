@@ -1,6 +1,6 @@
 // AI SDK Types and Interfaces
 
-export type AgentType = 'project_manager' | 'design_assistant' | 'engineering_assistant' | 'config_helper';
+export type AgentType = 'project_manager' | 'design_assistant' | 'engineering_assistant' | 'config_helper' | 'builder';
 
 export type ChatStatus = 'ready' | 'submitted' | 'streaming' | 'error';
 
@@ -60,3 +60,35 @@ export interface ChatResponse {
     processingTime: number;
   };
 }
+
+// Builder Agent Types
+
+export type BuilderStatus = 'idle' | 'preparing' | 'generating' | 'complete' | 'error';
+
+export type BuilderModel = 'claude-sonnet-4-5-20250929' | 'claude-opus-4-6';
+
+export interface FileOperation {
+  operation: 'create' | 'update' | 'delete';
+  filePath: string;
+  content?: string;
+  reason?: string;
+}
+
+export interface BuildProgress {
+  status: BuilderStatus;
+  currentStep?: string;
+  currentFile?: string;
+  filesCompleted: number;
+  filesTotal: number;
+  stepsCompleted: number;
+  stepsTotal: number;
+  errors: string[];
+}
+
+export type BuildStep =
+  | 'scaffold'
+  | 'types'
+  | 'components'
+  | 'pages'
+  | 'routing'
+  | 'data';

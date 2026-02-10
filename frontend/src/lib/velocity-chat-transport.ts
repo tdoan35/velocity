@@ -1,5 +1,5 @@
 import type { ChatTransport, UIMessage, UIMessageChunk, ChatRequestOptions } from 'ai'
-import type { AgentType } from '../types/ai'
+import type { AgentType, FileOperation } from '../types/ai'
 import type { DesignPhaseType } from '../types/design-phases'
 
 export interface SuggestedResponse {
@@ -35,13 +35,15 @@ export class RateLimitError extends Error {
 export interface VelocityChatTransportOptions {
   supabaseUrl: string
   getAccessToken: () => Promise<string>
-  conversationId: string
+  conversationId: string | (() => string)
   projectId?: string
   agentType?: AgentType
   designPhase?: DesignPhaseType
   sectionId?: string
-  context?: Record<string, any>
+  context?: Record<string, any> | (() => Record<string, any>)
   onStructuredData?: (data: StructuredEventData) => void
+  onFileOperation?: (op: FileOperation) => void
+  onBuildStatus?: (status: { step: string; filesCompleted: number; filesTotal: number }) => void
 }
 
 export class VelocityChatTransport implements ChatTransport<UIMessage> {
@@ -60,9 +62,17 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
   } & ChatRequestOptions): Promise<ReadableStream<UIMessageChunk>> {
     const { messages, abortSignal } = opts
     const {
-      supabaseUrl, getAccessToken, conversationId, projectId,
-      agentType, designPhase, sectionId, context, onStructuredData,
+      supabaseUrl, getAccessToken, conversationId: conversationIdOrGetter, projectId,
+      agentType, designPhase, sectionId, context: contextOrGetter, onStructuredData,
     } = this.options
+
+    // Resolve conversationId — supports both static strings and getter functions
+    const conversationId = typeof conversationIdOrGetter === 'function'
+      ? conversationIdOrGetter()
+      : conversationIdOrGetter
+
+    // Resolve context — supports both static objects and getter functions
+    const context = typeof contextOrGetter === 'function' ? contextOrGetter() : contextOrGetter
 
     // Get the last user message content from parts
     const lastUserMessage = [...messages].reverse().find(m => m.role === 'user')
@@ -85,7 +95,7 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
         context: context || {},
         designPhase: designPhase || undefined,
         sectionId: sectionId || undefined,
-        agentType: designPhase ? undefined : agentType,
+        agentType: designPhase && agentType !== 'builder' ? undefined : agentType,
         action: 'continue',
         projectId: projectId || undefined,
       }),
@@ -114,12 +124,15 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
     const decoder = new TextDecoder()
     let sseBuffer = ''
     const messageId = `assistant-${Date.now()}`
+    const partId = `${messageId}-text`
     let started = false
     // Track accumulated text for computing incremental deltas
     // (backend sends full message text each partial, but AI SDK expects deltas)
     let lastEmittedText = ''
 
     const emitStructured = onStructuredData
+    const emitFileOp = this.options.onFileOperation
+    const emitBuildStatus = this.options.onBuildStatus
 
     function processLines(lines: string[], controller: ReadableStreamDefaultController<UIMessageChunk>) {
       for (const line of lines) {
@@ -131,12 +144,26 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
         try {
           const data = JSON.parse(dataStr)
 
+          if (data.type === 'file_operation') {
+            emitFileOp?.({
+              operation: data.operation,
+              filePath: data.filePath,
+              content: data.content,
+              reason: data.reason,
+            })
+            continue
+          }
+          if (data.type === 'build_status') {
+            emitBuildStatus?.(data)
+            continue
+          }
+
           if (data.type === 'partial' && data.object) {
             const partial = data.object
 
             if (!started) {
               started = true
-              controller.enqueue({ type: 'text-start', id: messageId, role: 'assistant' } as UIMessageChunk)
+              controller.enqueue({ type: 'text-start', id: partId } as UIMessageChunk)
             }
 
             // Compute incremental delta from full message text
@@ -144,7 +171,7 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
               const currentText: string = partial.message
               if (currentText.length > lastEmittedText.length && currentText.startsWith(lastEmittedText)) {
                 const delta = currentText.slice(lastEmittedText.length)
-                controller.enqueue({ type: 'text-delta', delta } as UIMessageChunk)
+                controller.enqueue({ type: 'text-delta', id: partId, delta } as UIMessageChunk)
                 lastEmittedText = currentText
               } else if (currentText !== lastEmittedText) {
                 // Text changed in a non-append way (rare with streamObject).
@@ -175,7 +202,7 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
             })
 
             if (started) {
-              controller.enqueue({ type: 'text-end' } as UIMessageChunk)
+              controller.enqueue({ type: 'text-end', id: partId } as UIMessageChunk)
             }
           }
         } catch {
@@ -195,8 +222,8 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
               processLines(sseBuffer.split('\n'), controller)
             }
             if (!started) {
-              controller.enqueue({ type: 'text-start', id: messageId, role: 'assistant' } as UIMessageChunk)
-              controller.enqueue({ type: 'text-end' } as UIMessageChunk)
+              controller.enqueue({ type: 'text-start', id: partId } as UIMessageChunk)
+              controller.enqueue({ type: 'text-end', id: partId } as UIMessageChunk)
             }
             controller.close()
             return

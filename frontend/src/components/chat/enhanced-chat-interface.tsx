@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { MessageSquarePlus, History, Bot, Settings, Send, Users, Sparkles, Code2, Plus, ArrowDown, Edit, Check } from 'lucide-react'
+import { MessageSquarePlus, History, Bot, Settings, Send, Users, Sparkles, Code2, Plus, ArrowDown, Edit, Check, Hammer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { EnhancedTextarea } from '@/components/ui/enhanced-textarea'
@@ -7,7 +7,7 @@ import { MarkdownMessage } from './markdown-message'
 import { TypingIndicator } from './typing-indicator'
 import { SuggestedResponses } from './suggested-responses'
 import { useVelocityChat, type SuggestedResponse } from '@/hooks/useVelocityChat'
-import type { AgentType } from '@/types/ai'
+import type { AgentType, BuildProgress } from '@/types/ai'
 import type { DesignPhaseType } from '@/types/design-phases'
 import { cn } from '@/lib/utils'
 import type { ProjectContext } from '@/services/conversationService'
@@ -26,8 +26,9 @@ interface EnhancedChatInterfaceProps {
   conversationId?: string
   className?: string
   onApplyCode?: (code: string) => void
-  activeAgent?: 'project_manager' | 'design_assistant' | 'engineering_assistant' | 'config_helper'
-  onAgentChange?: (agent: 'project_manager' | 'design_assistant' | 'engineering_assistant' | 'config_helper') => void
+  activeAgent?: AgentType
+  onAgentChange?: (agent: AgentType) => void
+  buildProgress?: BuildProgress
   conversationTitle?: string
   onNewConversation?: () => void
   onToggleHistory?: () => void
@@ -59,6 +60,7 @@ const agentConfig: Record<AgentType, { label: string; icon: any; color: string }
   design_assistant: { label: 'UI/UX Designer', icon: '🎨', color: 'bg-purple-500' },
   engineering_assistant: { label: 'Engineering Assistant', icon: '💻', color: 'bg-green-500' },
   config_helper: { label: 'Config Helper', icon: '⚙️', color: 'bg-orange-500' },
+  builder: { label: 'Builder Agent', icon: '🔨', color: 'bg-rose-500' },
 }
 
 export function EnhancedChatInterface({
@@ -82,6 +84,7 @@ export function EnhancedChatInterface({
   onPhaseComplete,
   phaseContext,
   sectionId,
+  buildProgress,
 }: EnhancedChatInterfaceProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const viewportRef = useRef<HTMLDivElement | null>(null)
@@ -389,6 +392,8 @@ export function EnhancedChatInterface({
         return { icon: Code2, color: 'purple', bgColor: 'bg-purple-500/10', textColor: 'text-purple-500', label: 'Engineering Assistant' }
       case 'config_helper':
         return { icon: Settings, color: 'orange', bgColor: 'bg-orange-500/10', textColor: 'text-orange-500', label: 'Config Helper' }
+      case 'builder':
+        return { icon: Hammer, color: 'rose', bgColor: 'bg-rose-500/10', textColor: 'text-rose-500', label: 'Builder Agent' }
       default:
         return { icon: MessageSquarePlus, color: 'gray', bgColor: 'bg-gray-500/10', textColor: 'text-gray-500', label: 'AI Assistant' }
     }
@@ -497,6 +502,33 @@ export function EnhancedChatInterface({
         </div>
       </div>
       
+      {/* Build Progress Bar */}
+      {buildProgress && (buildProgress.status === 'generating' || buildProgress.status === 'preparing') && (
+        <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700/50 bg-rose-50 dark:bg-rose-950/20">
+          <div className="flex items-center gap-2 mb-1">
+            <Hammer className="w-3.5 h-3.5 text-rose-500 animate-pulse" />
+            <span className="text-xs font-medium text-rose-700 dark:text-rose-300">
+              {buildProgress.currentStep || 'Preparing build...'}
+            </span>
+          </div>
+          <div className="w-full bg-rose-200 dark:bg-rose-900/30 rounded-full h-1.5">
+            <div
+              className="bg-rose-500 h-1.5 rounded-full transition-all duration-500"
+              style={{ width: `${buildProgress.stepsTotal > 0 ? (buildProgress.stepsCompleted / buildProgress.stepsTotal) * 100 : 0}%` }}
+            />
+          </div>
+          <div className="flex justify-between mt-1">
+            <span className="text-[10px] text-muted-foreground">
+              Step {buildProgress.stepsCompleted}/{buildProgress.stepsTotal}
+            </span>
+            <span className="text-[10px] text-muted-foreground">
+              {buildProgress.filesCompleted} files generated
+              {buildProgress.currentFile ? ` — ${buildProgress.currentFile}` : ''}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Messages */}
       <ScrollArea
         ref={scrollRef}
