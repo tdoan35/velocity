@@ -97,9 +97,9 @@ export const conversationService = {
         .eq('project_id', projectId)
         .order('created_at', { ascending: false })
         .limit(1)
-        .single()
+        .maybeSingle()
 
-      if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+      if (error) {
         console.error('Error fetching conversation:', error)
         return { conversation: null, error: error as Error }
       }

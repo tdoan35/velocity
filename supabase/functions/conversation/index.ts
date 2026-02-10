@@ -36,7 +36,25 @@ const assistantResponseSchema = z.object({
   }).optional().describe('Additional metadata about the response'),
 })
 
+const builderResponseSchema = z.object({
+  message: z.string().describe('Status/progress message shown in chat'),
+  conversationTitle: z.string().max(50).optional(),
+  suggestedResponses: z.array(suggestedResponseSchema).max(3).optional(),
+  fileOperations: z.array(z.object({
+    operation: z.enum(['create', 'update', 'delete']),
+    filePath: z.string().describe('Relative path, e.g. src/App.tsx'),
+    content: z.string().optional().describe('Full file content'),
+    reason: z.string().optional().describe('What this file does'),
+  })).describe('Files to create or modify'),
+  metadata: z.object({
+    confidence: z.number().min(0).max(1).optional(),
+    sources: z.array(z.string()).optional(),
+    relatedTopics: z.array(z.string()).optional(),
+  }).optional(),
+})
+
 type AssistantResponse = z.infer<typeof assistantResponseSchema>
+type BuilderResponse = z.infer<typeof builderResponseSchema>
 type SuggestedResponse = z.infer<typeof suggestedResponseSchema>
 
 // ============================================================================
@@ -173,7 +191,7 @@ interface ConversationRequest {
     productOverview?: any
   }
   action?: 'continue' | 'refine' | 'explain' | 'debug'
-  agentType?: 'project_manager' | 'design_assistant' | 'engineering_assistant' | 'config_helper'
+  agentType?: 'project_manager' | 'design_assistant' | 'engineering_assistant' | 'config_helper' | 'builder'
   projectId?: string
   designPhase?: 'product_vision' | 'product_roadmap' | 'data_model' | 'design_tokens' | 'design_shell' | 'shape_section' | 'sample_data'
   sectionId?: string
@@ -223,9 +241,10 @@ Deno.serve(async (req) => {
     const body: ConversationRequest = await req.json()
     const { conversationId, message, context, action = 'continue', agentType = 'project_manager', projectId } = body
 
-    // Rate limiting - use design-phase bucket for all project-related requests
-    // (designPhase may be undefined for initial/transitional messages within a project)
-    const rateLimitResource = (body.designPhase || body.projectId) ? 'design-phase' : 'ai-generation'
+    // Rate limiting - select bucket based on request type
+    const rateLimitResource = body.agentType === 'builder'
+      ? 'builder-generation'
+      : (body.designPhase || body.projectId) ? 'design-phase' : 'ai-generation'
     const rateLimitCheck = await rateLimiter.check(authResult.userId, rateLimitResource)
     if (!rateLimitCheck.allowed) {
       return new Response(JSON.stringify({
@@ -345,41 +364,78 @@ Deno.serve(async (req) => {
       apiKey: ANTHROPIC_API_KEY,
     })
 
-    // Select schema and prompt based on designPhase
-    const responseSchema = body.designPhase
-      ? getDesignPhaseSchema(body.designPhase)
-      : assistantResponseSchema
+    // Select schema and prompt based on agent type / design phase
+    const responseSchema = body.agentType === 'builder'
+      ? builderResponseSchema
+      : body.designPhase
+        ? getDesignPhaseSchema(body.designPhase)
+        : assistantResponseSchema
 
-    const systemPrompt = body.designPhase
-      ? buildDesignPhasePrompt(body.designPhase, conversation.context, shouldGenerateTitle)
-      : buildSystemPrompt(action, conversation.context, agentType, shouldGenerateTitle)
+    const systemPrompt = body.agentType === 'builder'
+      ? buildBuilderPrompt(conversation.context, shouldGenerateTitle)
+      : body.designPhase
+        ? buildDesignPhasePrompt(body.designPhase, conversation.context, shouldGenerateTitle)
+        : buildSystemPrompt(action, conversation.context, agentType, shouldGenerateTitle)
+
+    // Model selection — builder uses configurable model, others use Haiku
+    const modelId = body.agentType === 'builder'
+      ? (context?.model || 'claude-sonnet-4-5-20250929')
+      : 'claude-haiku-4-5-20251001'
 
     // Use Vercel AI SDK's streamObject for structured responses
     const { partialObjectStream } = await streamObject({
-      model: anthropic('claude-haiku-4-5-20251001'),
+      model: anthropic(modelId),
       schema: responseSchema,
       system: systemPrompt,
       messages: claudeMessages,
-      temperature: 0.7,
-      maxTokens: 4096,
+      temperature: body.agentType === 'builder' ? 0.5 : 0.7,
+      maxTokens: body.agentType === 'builder' ? 16384 : 4096,
     })
 
     // Handle streaming response
     const encoder = new TextEncoder()
-    let fullResponse: Partial<AssistantResponse> = {}
-    
+    let fullResponse: Partial<AssistantResponse> | Partial<BuilderResponse> = {}
+    const isBuilder = body.agentType === 'builder'
+
     const stream = new ReadableStream({
       async start(controller) {
         try {
+          let lastEmittedFileOpIndex = 0
+
           for await (const partialObject of partialObjectStream) {
             fullResponse = partialObject
-            
-            // Send partial update to client
+
+            // Send partial update to client (chat message text only)
+            const partialForClient = isBuilder
+              ? { message: partialObject.message, suggestedResponses: partialObject.suggestedResponses }
+              : partialObject
+
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({
               type: 'partial',
-              object: partialObject,
+              object: partialForClient,
               conversationId: conversation.id
             })}\n\n`))
+
+            // For builder: emit completed file operations as separate SSE events
+            if (isBuilder && (partialObject as Partial<BuilderResponse>).fileOperations) {
+              const ops = (partialObject as Partial<BuilderResponse>).fileOperations!
+              while (lastEmittedFileOpIndex < ops.length) {
+                const op = ops[lastEmittedFileOpIndex]
+                if (op.filePath && op.content) {
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                    type: 'file_operation',
+                    operation: op.operation,
+                    filePath: op.filePath,
+                    content: op.content,
+                    reason: op.reason,
+                    conversationId: conversation.id
+                  })}\n\n`))
+                  lastEmittedFileOpIndex++
+                } else {
+                  break // Wait for content to complete
+                }
+              }
+            }
           }
           
           // Save the complete message with structured data
@@ -1194,6 +1250,106 @@ IMPORTANT: You MUST generate a conversationTitle in your response.
   }
 
   prompt += '\n\nAlways be helpful, concise, and focused on the current design phase. Keep the conversation moving forward.'
+
+  return prompt
+}
+
+function buildBuilderPrompt(context: any, shouldGenerateTitle: boolean): string {
+  const designSpec = context?.designSpec
+  const existingFiles = context?.existingFiles
+  const buildStep = context?.buildStep
+
+  // Detect platform from spec
+  const specJson = JSON.stringify(designSpec || {})
+  const isReactNative = /react.?native|expo|bottom.?tabs|mobile.?nav|ios|android/i.test(specJson)
+  const platform = isReactNative ? 'React Native (Expo)' : 'React (Vite + Tailwind CSS)'
+
+  let prompt = `You are a senior full-stack developer building a complete ${platform} application.
+Your job is to generate production-ready code files based on a detailed design specification.
+
+## CRITICAL RULES
+1. Every file you create MUST be returned in the \`fileOperations\` array with operation "create" or "update"
+2. File paths should be relative (e.g. "src/App.tsx", "src/components/Button.tsx")
+3. Provide COMPLETE file contents — never use placeholders like "// ... rest of code"
+4. Use TypeScript throughout
+5. Follow modern React patterns (functional components, hooks)
+${isReactNative ? '6. Use Expo SDK and React Navigation' : '6. Use React Router and Tailwind CSS for styling'}
+7. Generate clean, well-structured code with proper imports
+8. Include proper TypeScript types for all props and state
+
+## Design Specification
+\`\`\`json
+${JSON.stringify(designSpec, null, 2)}
+\`\`\`
+`
+
+  if (existingFiles && Array.isArray(existingFiles) && existingFiles.length > 0) {
+    prompt += `\n## Existing Codebase Files
+The following files already exist in the project. Reference them for imports and consistency:
+${existingFiles.map((f: string) => `- ${f}`).join('\n')}
+`
+  }
+
+  if (buildStep) {
+    const stepInstructions: Record<string, string> = {
+      scaffold: `## Current Step: SCAFFOLD
+Generate only project configuration and setup files:
+- package.json with all required dependencies
+${isReactNative ? '- app.json (Expo config)' : '- vite.config.ts'}
+- tsconfig.json
+${isReactNative ? '' : '- tailwind.config.js\n- postcss.config.js'}
+- src/main.tsx (entry point — minimal, just mounts App)
+Do NOT generate components or pages yet.`,
+
+      types: `## Current Step: TYPES
+Generate TypeScript type definitions based on the data model in the design spec:
+- src/types/index.ts — all entity types/interfaces
+- src/types/api.ts — API response types if applicable
+Use the data model entities and their fields to create proper TypeScript interfaces.`,
+
+      components: `## Current Step: COMPONENTS
+Generate reusable UI components based on the design system in the spec:
+- Create components in src/components/
+- Match the color palette, typography, and design tokens
+- Include common components: Button, Card, Input, Layout, Header, Navigation
+- Each component should be in its own file
+- Use the design system colors and fonts from the spec`,
+
+      pages: `## Current Step: PAGES
+Generate page/screen components based on the sections in the spec:
+- Create page components in src/pages/
+- Each roadmap section should have a corresponding page
+- Pages should use the reusable components created earlier
+- Include proper layout and navigation structure
+- Add realistic placeholder content based on sample data`,
+
+      routing: `## Current Step: ROUTING
+Generate the application routing and main App component:
+- src/App.tsx — main app with routing setup
+${isReactNative ? '- Navigation container with screens' : '- React Router with routes for all pages'}
+- Wire up the shell/navigation spec from the design
+- Ensure all pages are accessible via navigation`,
+
+      data: `## Current Step: DATA
+Generate sample data and mock services:
+- src/data/sampleData.ts — sample data from the spec
+- src/services/ — mock API service functions
+- Use the types defined earlier
+- Make data realistic and consistent with the spec`,
+    }
+
+    prompt += '\n' + (stepInstructions[buildStep] || '')
+  }
+
+  if (shouldGenerateTitle) {
+    prompt += `\n\n## Conversation Title
+Generate a conversationTitle like "Building: [AppName]" based on the spec.`
+  }
+
+  prompt += `\n\n## Response Format
+- Put a brief status message in \`message\` (e.g. "Created 5 configuration files for the project scaffold")
+- Put ALL generated files in the \`fileOperations\` array
+- Each file needs: operation ("create"), filePath, content, and reason`
 
   return prompt
 }

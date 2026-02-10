@@ -81,6 +81,12 @@ class RateLimiter {
         basic: { maxRequests: 50, windowMs: 3600000 },
         pro: { maxRequests: 200, windowMs: 3600000 },
         enterprise: { maxRequests: 1000, windowMs: 3600000 }
+      },
+      'builder-generation': {
+        free: { maxRequests: 5, windowMs: 3600000 },
+        basic: { maxRequests: 20, windowMs: 3600000 },
+        pro: { maxRequests: 100, windowMs: 3600000 },
+        enterprise: { maxRequests: 500, windowMs: 3600000 }
       }
     }
 

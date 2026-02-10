@@ -3,7 +3,9 @@ import { useParams, Navigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useUnifiedEditorStore } from '../stores/useUnifiedEditorStore';
 import { toast } from 'sonner';
-import { Loader2, Settings, Eye, Code, MessageSquare, FileText as LogsIcon, Terminal, Play, Square } from 'lucide-react';
+import { Loader2, Settings, Eye, Code, MessageSquare, FileText as LogsIcon, Terminal, Play, Square, Hammer } from 'lucide-react';
+import { useBuilderChat, type DesignSpec } from '../hooks/useBuilderChat';
+import type { BuilderModel, BuildProgress } from '../types/ai';
 import { usePreviewSession } from '../hooks/usePreviewSession';
 import type { PreviewStatus } from '../hooks/usePreviewSession';
 import { usePreviewRealtime } from '../hooks/usePreviewRealtime';
@@ -69,12 +71,76 @@ function ProjectEditorCore({
   const [isInitialized, setIsInitialized] = useState(false);
   const [activeView, setActiveView] = useState<'preview' | 'code'>('preview');
   const [isAIChatPanelVisible, setIsAIChatPanelVisible] = useState(true);
+
+  // Auto-build state
+  const [isAutoBuild, setIsAutoBuild] = useState(false);
+  const [designSpec, setDesignSpec] = useState<DesignSpec | null>(null);
+  const [builderModel, setBuilderModel] = useState<BuilderModel>('claude-sonnet-4-5-20250929');
+  const autoBuildStartedRef = useRef(false);
   
   // Realtime file sync to preview container
   const previewRealtime = usePreviewRealtime({
     projectId: projectId || null,
     onError: (error) => console.error('[ProjectEditor] Realtime error:', error),
   });
+
+  // Builder chat hook (always created, only used when in auto-build mode)
+  const builderChat = useBuilderChat({
+    projectId: projectId || '',
+    model: builderModel,
+    projectContext: projectData ? {
+      id: projectId || '',
+      name: projectData.name || 'Untitled Project',
+      description: projectData.description,
+      template: 'react-native',
+    } : undefined,
+    onConversationCreated: (id) => {
+      console.log('[ProjectEditor] Builder conversation created:', id);
+    },
+    onTitleGenerated: (title) => {
+      console.log('[ProjectEditor] Builder title:', title);
+    },
+    onBuildComplete: () => {
+      console.log('[ProjectEditor] Build complete, switching to preview');
+      setActiveView('preview');
+      toast.success('App generated successfully!');
+    },
+  });
+
+  // Detect auto-build mode on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('autobuild') === 'true' && projectId) {
+      const specJson = sessionStorage.getItem(`velocity_build_spec_${projectId}`);
+      if (specJson) {
+        try {
+          setDesignSpec(JSON.parse(specJson));
+          setIsAutoBuild(true);
+          sessionStorage.removeItem(`velocity_build_spec_${projectId}`);
+        } catch (e) {
+          console.error('[ProjectEditor] Failed to parse design spec:', e);
+        }
+        // Clean up URL
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    }
+  }, [projectId]);
+
+  // Start auto-build after initialization
+  useEffect(() => {
+    if (isAutoBuild && designSpec && isInitialized && !autoBuildStartedRef.current && builderChat.conversationId) {
+      autoBuildStartedRef.current = true;
+      console.log('[ProjectEditor] Starting auto-build...');
+      builderChat.startBuild(designSpec);
+    }
+  }, [isAutoBuild, designSpec, isInitialized, builderChat.conversationId]);
+
+  // Flush file broadcasts to preview when builder creates files
+  useEffect(() => {
+    if (builderChat.buildProgress.filesCompleted > 0) {
+      builderChat.flushBroadcasts(previewRealtime.broadcastFileUpdate);
+    }
+  }, [builderChat.buildProgress.filesCompleted]);
 
   // Preview session management at project level
   const [selectedDevice, setSelectedDevice] = useState<'mobile' | 'tablet' | 'desktop'>('mobile');
@@ -347,15 +413,15 @@ function ProjectEditorCore({
                 <Card className="h-full flex flex-col bg-transparent border-gray-300 dark:border-gray-700/50">
                   <EnhancedChatInterface
                   projectId={currentProjectId}
-                  conversationId={undefined}
+                  conversationId={isAutoBuild ? builderChat.conversationId : undefined}
                   onApplyCode={(code) => {
                     console.log('Applying code:', code);
                     toast.success('Code applied successfully!');
                   }}
                   className="flex-1"
-                  activeAgent="project_manager"
+                  activeAgent={isAutoBuild ? 'builder' : 'project_manager'}
                   onAgentChange={() => {}}
-                  conversationTitle="Project Chat"
+                  conversationTitle={isAutoBuild ? 'Builder Agent' : 'Project Chat'}
                   onNewConversation={() => {}}
                   onToggleHistory={() => {}}
                   isHistoryOpen={false}
@@ -369,6 +435,7 @@ function ProjectEditorCore({
                   onConversationCreated={() => {}}
                   onTitleGenerated={() => {}}
                   onConversationTitleUpdated={() => {}}
+                  buildProgress={isAutoBuild ? builderChat.buildProgress : undefined}
                   />
                 </Card>
               </div>
@@ -420,6 +487,22 @@ function ProjectEditorCore({
             <div className="flex items-center space-x-2 pl-1">
               {renderStatusDot(previewSession.status)}
             </div>
+
+            {/* Build Progress Indicator */}
+            {isAutoBuild && builderChat.buildProgress.status === 'generating' && (
+              <div className="flex items-center space-x-2 pl-2 text-xs text-muted-foreground">
+                <Hammer className="h-3 w-3 animate-pulse text-rose-500" />
+                <span className="hidden sm:inline">
+                  Building... ({builderChat.buildProgress.stepsCompleted}/{builderChat.buildProgress.stepsTotal} steps, {builderChat.buildProgress.filesCompleted} files)
+                </span>
+              </div>
+            )}
+            {isAutoBuild && builderChat.buildProgress.status === 'complete' && (
+              <div className="flex items-center space-x-2 pl-2 text-xs text-green-600">
+                <Hammer className="h-3 w-3" />
+                <span className="hidden sm:inline">Build complete</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -461,6 +544,13 @@ function ProjectEditorCore({
               }}>
                 <Terminal className="h-4 w-4 mr-2" />
                 Terminal
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => setBuilderModel(builderModel === 'claude-sonnet-4-5-20250929' ? 'claude-opus-4-6' : 'claude-sonnet-4-5-20250929')}
+              >
+                <Hammer className="h-4 w-4 mr-2" />
+                Model: {builderModel === 'claude-sonnet-4-5-20250929' ? 'Sonnet' : 'Opus'}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem>

@@ -72,7 +72,6 @@ import {
 } from '@/components/ui/popover'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Label } from '@/components/ui/label'
 import {
   Dialog,
@@ -1508,25 +1507,32 @@ function ProjectDesignContent() {
               </div>
 
               {/* Primary CTA */}
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div>
-                      <Button
-                        className="w-full bg-rose-600 hover:bg-rose-700 text-white"
-                        size="lg"
-                        disabled
-                      >
-                        <Sparkles className="w-4 h-4 mr-2" />
-                        Generate &amp; Open Editor
-                      </Button>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Code generation coming soon</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <Button
+                className="w-full bg-rose-600 hover:bg-rose-700 text-white"
+                size="lg"
+                disabled={!allReady}
+                onClick={() => {
+                  const spec = {
+                    product_overview: currentDesignPhase?.product_overview ?? null,
+                    product_roadmap: currentDesignPhase?.product_roadmap ?? null,
+                    data_model: currentDesignPhase?.data_model ?? null,
+                    design_system: currentDesignPhase?.design_system ?? null,
+                    shell_spec: currentDesignPhase?.shell_spec ?? null,
+                    sections: sections.map(s => ({
+                      title: s.title,
+                      description: s.description,
+                      spec: s.spec ?? null,
+                      sample_data: s.sample_data ?? null,
+                      types_definition: s.types_definition ?? null,
+                    })),
+                  }
+                  sessionStorage.setItem(`velocity_build_spec_${projectId}`, JSON.stringify(spec))
+                  navigate(`/project/${projectId}/editor?autobuild=true`)
+                }}
+              >
+                <Sparkles className="w-4 h-4 mr-2" />
+                Generate &amp; Open Editor
+              </Button>
             </div>
           </div>
         )
