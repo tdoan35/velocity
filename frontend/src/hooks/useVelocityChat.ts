@@ -72,6 +72,16 @@ export function useVelocityChat({
   const [suggestedResponses, setSuggestedResponses] = useState<SuggestedResponse[]>([])
   const { toast } = useToast()
 
+  // Stable chat ID for useChat — stays constant during temp→real transitions
+  // so the AI SDK doesn't discard the in-flight streaming response.
+  // Changes only for genuine conversation switches (when the parent passes
+  // a truly different initialConversationId).
+  const [chatId, setChatId] = useState(initialConversationId || 'pending')
+
+  // Flag: when sendMessage resolves a temp ID to a real one, this prevents
+  // the reset effect from clearing messages and switching the chat instance.
+  const pendingTransitionRef = useRef(false)
+
   // Use refs for props that change every render to keep callbacks stable
   const latestRef = useRef({
     onStreamStart, onStreamEnd, onPhaseComplete,
@@ -143,7 +153,7 @@ export function useVelocityChat({
 
   // useChat from AI SDK
   const chat = useChat({
-    id: conversationId || 'pending',
+    id: chatId,
     transport: transport || undefined,
     onError: (error) => {
       const isRateLimit = error instanceof RateLimitError
@@ -213,6 +223,18 @@ export function useVelocityChat({
 
   // Reset conversation when initialConversationId changes
   useEffect(() => {
+    // During a temp→real transition (triggered by sendMessage creating a real
+    // conversation), the parent updates the prop.  We must NOT clear messages
+    // or switch the useChat instance — the stream is still in progress.
+    if (pendingTransitionRef.current) {
+      pendingTransitionRef.current = false
+      // Just sync the conversation ID state; everything else stays as-is.
+      setConversationId(initialConversationId)
+      return
+    }
+
+    // Genuine conversation switch — full reset.
+    setChatId(initialConversationId || 'pending')
     setConversationId(initialConversationId)
     setUIMessages([])
 
@@ -332,6 +354,9 @@ export function useVelocityChat({
         // update that won't take effect until the next render, but
         // chat.sendMessage() below runs before that render.
         actualConversationIdRef.current = conversation.id
+        // Signal the reset effect to skip clearing messages when the parent
+        // prop changes from temp→real (the stream is about to start).
+        pendingTransitionRef.current = true
         setConversationId(conversation.id)
         latestRef.current.onConversationCreated?.(conversation.id)
       } catch (err) {
