@@ -505,6 +505,7 @@ function ProjectEditorCore({
                     filePath={activeFile}
                     initialValue={files[activeFile].content}
                     language={files[activeFile].type}
+                    isDirty={files[activeFile].isDirty}
                     onChange={(newContent) => {
                       // Read activeFile from store at call time to avoid stale closure
                       const currentFile = useUnifiedEditorStore.getState().activeFile;

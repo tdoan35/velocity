@@ -6,12 +6,14 @@ import { useTheme } from '@/components/theme-provider'
 // Note: This component now relies on props from the unified store rather than importing it directly
 import { configureMonaco, MONACO_OPTIONS } from './monaco-config'
 import { cn } from '@/lib/utils'
+import { Save } from 'lucide-react'
 
 interface CodeEditorProps {
   fileId: string
   filePath: string
   initialValue?: string
   language?: string
+  isDirty?: boolean
   onSave?: (value: string) => void
   onChange?: (value: string) => void
   className?: string
@@ -23,6 +25,7 @@ export function CodeEditor({
   filePath,
   initialValue = '',
   language = 'typescript',
+  isDirty = false,
   onSave,
   onChange,
   className,
@@ -41,7 +44,35 @@ export function CodeEditor({
     'idle' | 'saving' | 'saved' | 'error'
   >('idle')
   const [lastSaveError, setLastSaveError] = useState<string | null>(null)
-  
+  const onSaveRef = useRef(onSave)
+  onSaveRef.current = onSave
+
+  const handleManualSave = useCallback(async () => {
+    const editor = editorRef.current
+    const model = editor?.getModel()
+    if (!model || !onSaveRef.current) return
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+      saveTimeoutRef.current = null
+    }
+
+    const value = model.getValue()
+    setSaveIndicator('saving')
+    setLastSaveError(null)
+
+    try {
+      await onSaveRef.current(value)
+      setSaveIndicator('saved')
+      setTimeout(() => setSaveIndicator('idle'), 2000)
+    } catch (error) {
+      setSaveIndicator('error')
+      const errorMessage = error instanceof Error ? error.message : 'Save failed'
+      setLastSaveError(errorMessage)
+      console.error('Manual save failed:', error)
+    }
+  }, [])
+
   // Tab content updates are now handled by the parent component via onChange prop
   
   // Model management functions
@@ -158,30 +189,8 @@ export function CodeEditor({
     currentFileIdRef.current = fileId
     
     // Enhanced manual save command with immediate execution
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, async () => {
-      const model = editor.getModel()
-      if (!model || !onSave) return
-
-      // Cancel debounced save
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current)
-        saveTimeoutRef.current = null
-      }
-
-      const value = model.getValue()
-      setSaveIndicator('saving')
-      setLastSaveError(null)
-
-      try {
-        await onSave(value)
-        setSaveIndicator('saved')
-        setTimeout(() => setSaveIndicator('idle'), 2000)
-      } catch (error) {
-        setSaveIndicator('error')
-        const errorMessage = error instanceof Error ? error.message : 'Save failed'
-        setLastSaveError(errorMessage)
-        console.error('Manual save failed:', error)
-      }
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+      handleManualSave()
     })
     
     // Format document shortcut
@@ -208,7 +217,7 @@ export function CodeEditor({
     editor.addCommand(monaco.KeyCode.F2, () => {
       editor.trigger('', 'editor.action.rename', {})
     })
-  }, [fileId, filePath, initialValue, language, getOrCreateModel, onSave])
+  }, [fileId, filePath, initialValue, language, getOrCreateModel, handleManualSave])
 
   // Update editor theme when app theme changes
   useEffect(() => {
@@ -292,23 +301,35 @@ export function CodeEditor({
   
   return (
     <div className={cn('relative h-full w-full', className)}>
-      {/* Save Status Indicator */}
-      {saveIndicator !== 'idle' && (
-        <div
-          className={cn(
-            'absolute top-2 right-2 z-10 px-2 py-1 rounded text-xs font-medium shadow-md',
-            {
-              'bg-blue-500 text-white': saveIndicator === 'saving',
-              'bg-green-500 text-white': saveIndicator === 'saved',
-              'bg-red-500 text-white': saveIndicator === 'error',
-            }
-          )}
-        >
-          {saveIndicator === 'saving' && '💾 Saving...'}
-          {saveIndicator === 'saved' && '✅ Saved'}
-          {saveIndicator === 'error' && '❌ Save Failed'}
-        </div>
-      )}
+      {/* Save Button & Status Indicator */}
+      <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5">
+        {isDirty && saveIndicator !== 'saving' && (
+          <button
+            onClick={handleManualSave}
+            className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium shadow-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            title="Save (Ctrl+S)"
+          >
+            <Save className="h-3 w-3" />
+            Save
+          </button>
+        )}
+        {saveIndicator !== 'idle' && (
+          <div
+            className={cn(
+              'px-2 py-1 rounded text-xs font-medium shadow-md',
+              {
+                'bg-blue-500 text-white': saveIndicator === 'saving',
+                'bg-green-500 text-white': saveIndicator === 'saved',
+                'bg-red-500 text-white': saveIndicator === 'error',
+              }
+            )}
+          >
+            {saveIndicator === 'saving' && 'Saving...'}
+            {saveIndicator === 'saved' && 'Saved'}
+            {saveIndicator === 'error' && 'Save Failed'}
+          </div>
+        )}
+      </div>
       
       {/* Error Details Tooltip */}
       {saveIndicator === 'error' && lastSaveError && (
