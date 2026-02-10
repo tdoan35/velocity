@@ -13,6 +13,7 @@ const { spawn } = require('child_process');
 const fs = require('fs-extra');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
+const WebSocket = require('ws');
 const axios = require('axios');
 const JSZip = require('jszip');
 
@@ -230,8 +231,16 @@ async function initSupabase() {
     supabaseKey = SUPABASE_SERVICE_ROLE_KEY;
   }
 
-  supabase = createClient(SUPABASE_URL, supabaseKey);
-  console.log('✅ Supabase connected');
+  supabase = createClient(SUPABASE_URL, supabaseKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+    realtime: {
+      transport: WebSocket,
+    },
+  });
+  console.log('✅ Supabase client initialized (WebSocket transport: ws)');
 }
 
 /**
@@ -430,6 +439,20 @@ async function syncFromDatabase() {
 async function connectToRealtime() {
   try {
     const channelName = `realtime:project:${PROJECT_ID}`;
+    console.log(`⚡ [connectToRealtime] Attempting to connect to channel: ${channelName}`);
+    console.log(`⚡ [connectToRealtime] SUPABASE_URL: ${SUPABASE_URL ? SUPABASE_URL.substring(0, 30) + '...' : 'NOT SET'}`);
+    console.log(`⚡ [connectToRealtime] Service role key: ${SUPABASE_SERVICE_ROLE_KEY ? 'SET (' + SUPABASE_SERVICE_ROLE_KEY.length + ' chars)' : 'NOT SET'}`);
+
+    // Clean up existing channel before creating new one
+    if (realtimeChannel) {
+      try {
+        await supabase.removeChannel(realtimeChannel);
+        console.log('🧹 Cleaned up previous realtime channel');
+      } catch (cleanupError) {
+        console.warn('⚠️ Error cleaning up previous channel:', cleanupError.message);
+      }
+      realtimeChannel = null;
+    }
 
     // Clear any existing reconnect timer
     if (reconnectTimer) {
