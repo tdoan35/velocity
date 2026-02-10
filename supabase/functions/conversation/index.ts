@@ -397,6 +397,8 @@ Deno.serve(async (req) => {
     let fullResponse: Partial<AssistantResponse> | Partial<BuilderResponse> = {}
     const isBuilder = body.agentType === 'builder'
 
+    let streamClosed = false
+
     const stream = new ReadableStream({
       async start(controller) {
         try {
@@ -437,53 +439,9 @@ Deno.serve(async (req) => {
               }
             }
           }
-          
-          // Save the complete message with structured data
-          await saveConversationMessage(
-            conversation.id,
-            'assistant',
-            fullResponse.message || '',
-            { 
-              action, 
-              agentType,
-              suggestedResponses: fullResponse.suggestedResponses,
-              metadata: fullResponse.metadata
-            }
-          )
-          
-          // Save design phase output if present (server-side safety net)
-          if (body.designPhase && fullResponse.phaseOutput && fullResponse.phaseComplete && body.projectId) {
-            const sectionPhases: DesignPhaseType[] = ['shape_section', 'sample_data']
-            if (sectionPhases.includes(body.designPhase) && body.sectionId) {
-              await saveDesignSectionOutput(
-                body.projectId,
-                authResult.userId,
-                body.sectionId,
-                body.designPhase as 'shape_section' | 'sample_data',
-                fullResponse.phaseOutput
-              )
-            } else if (!sectionPhases.includes(body.designPhase)) {
-              await saveDesignPhaseOutput(
-                body.projectId,
-                authResult.userId,
-                body.designPhase,
-                fullResponse.phaseOutput
-              )
-            }
-          }
 
-          // Update conversation title if provided (for new conversations or conversations with placeholder titles)
-          if (fullResponse.conversationTitle && shouldGenerateTitle) {
-            console.log('Updating conversation title:', {
-              conversationId: conversation.id,
-              newTitle: fullResponse.conversationTitle,
-              shouldGenerateTitle,
-              previousTitle: conversation.title
-            })
-            await updateConversationTitle(conversation.id, fullResponse.conversationTitle)
-          }
-          
-          // Send completion event
+          // Send completion event and close stream IMMEDIATELY so the frontend
+          // transitions out of "AI is thinking..." without waiting for DB saves.
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({
             type: 'done',
             done: true,
@@ -492,11 +450,63 @@ Deno.serve(async (req) => {
               model: 'claude-3-5-sonnet-20241022'
             }
           })}\n\n`))
-          
           controller.close()
+          streamClosed = true
+
+          // DB operations run after stream is closed.
+          // Deno keeps the isolate alive until all promises settle.
+          try {
+            await saveConversationMessage(
+              conversation.id,
+              'assistant',
+              fullResponse.message || '',
+              {
+                action,
+                agentType,
+                suggestedResponses: fullResponse.suggestedResponses,
+                metadata: fullResponse.metadata
+              }
+            )
+
+            // Save design phase output if present (server-side safety net)
+            if (body.designPhase && fullResponse.phaseOutput && fullResponse.phaseComplete && body.projectId) {
+              const sectionPhases: DesignPhaseType[] = ['shape_section', 'sample_data']
+              if (sectionPhases.includes(body.designPhase) && body.sectionId) {
+                await saveDesignSectionOutput(
+                  body.projectId,
+                  authResult.userId,
+                  body.sectionId,
+                  body.designPhase as 'shape_section' | 'sample_data',
+                  fullResponse.phaseOutput
+                )
+              } else if (!sectionPhases.includes(body.designPhase)) {
+                await saveDesignPhaseOutput(
+                  body.projectId,
+                  authResult.userId,
+                  body.designPhase,
+                  fullResponse.phaseOutput
+                )
+              }
+            }
+
+            // Update conversation title if provided
+            if (fullResponse.conversationTitle && shouldGenerateTitle) {
+              console.log('Updating conversation title:', {
+                conversationId: conversation.id,
+                newTitle: fullResponse.conversationTitle,
+                shouldGenerateTitle,
+                previousTitle: conversation.title
+              })
+              await updateConversationTitle(conversation.id, fullResponse.conversationTitle)
+            }
+          } catch (dbError) {
+            console.error('Background DB save error:', dbError)
+          }
         } catch (error) {
           console.error('Streaming error:', error)
-          controller.error(error)
+          if (!streamClosed) {
+            controller.error(error)
+          }
         }
       }
     })

@@ -126,6 +126,7 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
     const messageId = `assistant-${Date.now()}`
     const partId = `${messageId}-text`
     let started = false
+    let textEndEmitted = false
     // Track accumulated text for computing incremental deltas
     // (backend sends full message text each partial, but AI SDK expects deltas)
     let lastEmittedText = ''
@@ -203,6 +204,7 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
 
             if (started) {
               controller.enqueue({ type: 'text-end', id: partId } as UIMessageChunk)
+              textEndEmitted = true
             }
           }
         } catch {
@@ -221,7 +223,12 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
             if (sseBuffer.trim()) {
               processLines(sseBuffer.split('\n'), controller)
             }
-            if (!started) {
+            // Safety net: ensure text-end is always emitted so the UI
+            // transitions out of "AI is thinking..." even if the done SSE
+            // event was missed (malformed JSON, network glitch, etc.)
+            if (started && !textEndEmitted) {
+              controller.enqueue({ type: 'text-end', id: partId } as UIMessageChunk)
+            } else if (!started) {
               controller.enqueue({ type: 'text-start', id: partId } as UIMessageChunk)
               controller.enqueue({ type: 'text-end', id: partId } as UIMessageChunk)
             }

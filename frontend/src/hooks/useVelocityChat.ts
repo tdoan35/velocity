@@ -125,8 +125,11 @@ export function useVelocityChat({
   // conversationId is passed as a getter so that when sendMessage resolves a
   // temp-xxx ID to a real one (synchronously updating the ref), the transport
   // picks up the real ID even before the React re-render.
+  // Use chatId (not conversationId) as a dependency so the transport stays
+  // stable during temp-to-real ID transitions — chatId doesn't change until
+  // a genuinely different conversation is selected.
   const transport = useMemo(() => {
-    if (!conversationId) return undefined
+    if (chatId === 'pending') return undefined
 
     return new VelocityChatTransport({
       supabaseUrl,
@@ -135,7 +138,7 @@ export function useVelocityChat({
         if (!session) throw new Error('Not authenticated')
         return session.access_token
       },
-      conversationId: () => actualConversationIdRef.current || conversationId,
+      conversationId: () => actualConversationIdRef.current || conversationId || chatId,
       projectId,
       agentType: currentAgent,
       designPhase: latestRef.current.designPhase,
@@ -149,7 +152,7 @@ export function useVelocityChat({
       onFileOperation: (...args) => latestRef.current.onFileOperation?.(...args),
       onBuildStatus: (...args) => latestRef.current.onBuildStatus?.(...args),
     })
-  }, [conversationId, projectId, currentAgent, designPhase, sectionId, handleStructuredData])
+  }, [chatId, projectId, currentAgent, designPhase, sectionId, handleStructuredData])
 
   // useChat from AI SDK
   const chat = useChat({
