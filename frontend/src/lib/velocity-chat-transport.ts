@@ -164,6 +164,9 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
 
             if (!started) {
               started = true
+              // Emit the full AI SDK lifecycle preamble (matches TextStreamChatTransport)
+              controller.enqueue({ type: 'start', messageId } as UIMessageChunk)
+              controller.enqueue({ type: 'start-step' } as UIMessageChunk)
               controller.enqueue({ type: 'text-start', id: partId } as UIMessageChunk)
             }
 
@@ -204,6 +207,8 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
 
             if (started) {
               controller.enqueue({ type: 'text-end', id: partId } as UIMessageChunk)
+              controller.enqueue({ type: 'finish-step' } as UIMessageChunk)
+              controller.enqueue({ type: 'finish' } as UIMessageChunk)
               textEndEmitted = true
             }
           }
@@ -223,14 +228,20 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
             if (sseBuffer.trim()) {
               processLines(sseBuffer.split('\n'), controller)
             }
-            // Safety net: ensure text-end is always emitted so the UI
+            // Safety net: ensure the full lifecycle is emitted so the UI
             // transitions out of "AI is thinking..." even if the done SSE
             // event was missed (malformed JSON, network glitch, etc.)
             if (started && !textEndEmitted) {
               controller.enqueue({ type: 'text-end', id: partId } as UIMessageChunk)
+              controller.enqueue({ type: 'finish-step' } as UIMessageChunk)
+              controller.enqueue({ type: 'finish' } as UIMessageChunk)
             } else if (!started) {
+              controller.enqueue({ type: 'start', messageId } as UIMessageChunk)
+              controller.enqueue({ type: 'start-step' } as UIMessageChunk)
               controller.enqueue({ type: 'text-start', id: partId } as UIMessageChunk)
               controller.enqueue({ type: 'text-end', id: partId } as UIMessageChunk)
+              controller.enqueue({ type: 'finish-step' } as UIMessageChunk)
+              controller.enqueue({ type: 'finish' } as UIMessageChunk)
             }
             controller.close()
             return

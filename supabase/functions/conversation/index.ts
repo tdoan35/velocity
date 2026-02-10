@@ -453,55 +453,60 @@ Deno.serve(async (req) => {
           controller.close()
           streamClosed = true
 
-          // DB operations run after stream is closed.
-          // Deno keeps the isolate alive until all promises settle.
-          try {
-            await saveConversationMessage(
-              conversation.id,
-              'assistant',
-              fullResponse.message || '',
-              {
-                action,
-                agentType,
-                suggestedResponses: fullResponse.suggestedResponses,
-                metadata: fullResponse.metadata
-              }
-            )
+          // DB operations run as fire-and-forget AFTER the stream is closed.
+          // IMPORTANT: These must NOT be awaited — awaiting would block the
+          // start() promise from resolving, which prevents the HTTP response
+          // from closing (Deno waits for start() to settle before finalizing
+          // the response). The Deno isolate stays alive for pending promises.
+          ;(async () => {
+            try {
+              await saveConversationMessage(
+                conversation.id,
+                'assistant',
+                fullResponse.message || '',
+                {
+                  action,
+                  agentType,
+                  suggestedResponses: fullResponse.suggestedResponses,
+                  metadata: fullResponse.metadata
+                }
+              )
 
-            // Save design phase output if present (server-side safety net)
-            if (body.designPhase && fullResponse.phaseOutput && fullResponse.phaseComplete && body.projectId) {
-              const sectionPhases: DesignPhaseType[] = ['shape_section', 'sample_data']
-              if (sectionPhases.includes(body.designPhase) && body.sectionId) {
-                await saveDesignSectionOutput(
-                  body.projectId,
-                  authResult.userId,
-                  body.sectionId,
-                  body.designPhase as 'shape_section' | 'sample_data',
-                  fullResponse.phaseOutput
-                )
-              } else if (!sectionPhases.includes(body.designPhase)) {
-                await saveDesignPhaseOutput(
-                  body.projectId,
-                  authResult.userId,
-                  body.designPhase,
-                  fullResponse.phaseOutput
-                )
+              // Save design phase output if present (server-side safety net)
+              if (body.designPhase && fullResponse.phaseOutput && fullResponse.phaseComplete && body.projectId) {
+                const sectionPhases: DesignPhaseType[] = ['shape_section', 'sample_data']
+                if (sectionPhases.includes(body.designPhase) && body.sectionId) {
+                  await saveDesignSectionOutput(
+                    body.projectId,
+                    authResult.userId,
+                    body.sectionId,
+                    body.designPhase as 'shape_section' | 'sample_data',
+                    fullResponse.phaseOutput
+                  )
+                } else if (!sectionPhases.includes(body.designPhase)) {
+                  await saveDesignPhaseOutput(
+                    body.projectId,
+                    authResult.userId,
+                    body.designPhase,
+                    fullResponse.phaseOutput
+                  )
+                }
               }
-            }
 
-            // Update conversation title if provided
-            if (fullResponse.conversationTitle && shouldGenerateTitle) {
-              console.log('Updating conversation title:', {
-                conversationId: conversation.id,
-                newTitle: fullResponse.conversationTitle,
-                shouldGenerateTitle,
-                previousTitle: conversation.title
-              })
-              await updateConversationTitle(conversation.id, fullResponse.conversationTitle)
+              // Update conversation title if provided
+              if (fullResponse.conversationTitle && shouldGenerateTitle) {
+                console.log('Updating conversation title:', {
+                  conversationId: conversation.id,
+                  newTitle: fullResponse.conversationTitle,
+                  shouldGenerateTitle,
+                  previousTitle: conversation.title
+                })
+                await updateConversationTitle(conversation.id, fullResponse.conversationTitle)
+              }
+            } catch (dbError) {
+              console.error('Background DB save error:', dbError)
             }
-          } catch (dbError) {
-            console.error('Background DB save error:', dbError)
-          }
+          })()
         } catch (error) {
           console.error('Streaming error:', error)
           if (!streamClosed) {
