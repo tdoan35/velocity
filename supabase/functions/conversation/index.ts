@@ -143,6 +143,47 @@ const sampleDataOutputSchema = z.object({
 
 type DesignPhaseType = 'product_vision' | 'product_roadmap' | 'data_model' | 'design_tokens' | 'design_shell' | 'shape_section' | 'sample_data'
 
+function isValidPhaseOutput(phase: DesignPhaseType, output: any): boolean {
+  if (!output || typeof output !== 'object') {
+    console.warn(`[conversation] Phase output validation failed for ${phase}: output is empty or not an object`)
+    return false
+  }
+
+  let valid = true
+  switch (phase) {
+    case 'product_vision':
+      valid = !!output.name && output.problems?.length >= 1 && output.features?.length >= 3
+      break
+    case 'product_roadmap':
+      valid = output.sections?.length >= 2
+        && output.sections.every((s: any) => s.id && s.title && s.description)
+      break
+    case 'data_model':
+      valid = output.entities?.length >= 1
+        && output.entities.every((e: any) => e.name && Array.isArray(e.fields))
+      break
+    case 'design_tokens':
+      valid = !!output.colors && !!output.typography
+      break
+    case 'design_shell':
+      valid = !!output.overview && output.navigationItems?.length >= 1
+      break
+    case 'shape_section':
+      valid = !!output.overview && output.keyFeatures?.length >= 1
+      break
+    case 'sample_data':
+      valid = !!output.sampleData && !!output.typesDefinition
+      break
+  }
+
+  if (!valid) {
+    console.warn(`[conversation] Phase output validation failed for ${phase}: data quality too low`, {
+      keys: Object.keys(output),
+    })
+  }
+  return valid
+}
+
 function getDesignPhaseSchema(phase: DesignPhaseType) {
   const phaseOutputSchemas: Record<DesignPhaseType, z.ZodTypeAny> = {
     product_vision: productOverviewOutputSchema,
@@ -170,12 +211,15 @@ function getDesignPhaseSchema(phase: DesignPhaseType) {
       sources: z.array(z.string()).optional(),
       relatedTopics: z.array(z.string()).optional(),
     }).optional().describe('Additional metadata about the response'),
+    readyToSave: z.boolean()
+      .default(false)
+      .describe('Set to true ONLY when you have presented a complete summary to the user and are asking for their approval. Keep false during questions and clarifications.'),
+    phaseComplete: z.boolean()
+      .default(false)
+      .describe('Set to true when the user approves and you populate phaseOutput. Set to false otherwise.'),
     phaseOutput: phaseOutputSchema
       .optional()
-      .describe('Structured phase output data. ONLY populate this when the user explicitly approves your summary.'),
-    phaseComplete: z.boolean()
-      .optional()
-      .describe('Set to true ONLY when phaseOutput is populated and the user has approved'),
+      .describe('Structured phase output data. Populate this when the user approves your summary and set phaseComplete to true.'),
   })
 }
 
@@ -371,11 +415,28 @@ Deno.serve(async (req) => {
         ? getDesignPhaseSchema(body.designPhase)
         : assistantResponseSchema
 
-    const systemPrompt = body.agentType === 'builder'
+    let systemPrompt = body.agentType === 'builder'
       ? buildBuilderPrompt(conversation.context, shouldGenerateTitle)
       : body.designPhase
         ? buildDesignPhasePrompt(body.designPhase, conversation.context, shouldGenerateTitle)
         : buildSystemPrompt(action, conversation.context, agentType, shouldGenerateTitle)
+
+    // When the user's message looks like approval in a design phase,
+    // inject a strong instruction to populate phaseOutput — but only if the
+    // AI has previously presented a summary (readyToSave === true).
+    const hasPresentedSummary = conversation.messages
+      .filter(m => m.role === 'assistant')
+      .some(m => m.metadata?.readyToSave === true)
+
+    if (body.designPhase && detectApproval(message) && hasPresentedSummary) {
+      console.log('[conversation] Approval detected with prior readyToSave — injecting save instruction')
+      systemPrompt += `\n\n## SAVE INSTRUCTION (HIGHEST PRIORITY)
+The user's latest message is an APPROVAL. You MUST:
+1. Set phaseComplete to true
+2. Populate phaseOutput with ALL the structured data discussed in the conversation
+3. In your message, confirm that you've saved their work
+Do NOT ask for further confirmation. The user has already approved. Save NOW.`
+    }
 
     // Model selection — builder uses configurable model, others use Haiku
     // const modelId = body.agentType === 'builder'
@@ -419,9 +480,45 @@ Deno.serve(async (req) => {
 
         try {
           let lastEmittedFileOpIndex = 0
+          let lastPartialTime = Date.now()
+          let partialCount = 0
+          const PARTIAL_INACTIVITY_TIMEOUT = 15_000 // 15s without a new partial → assume AI is done
 
-          for await (const partialObject of partialObjectStream) {
+          console.log('[conversation] Starting partialObjectStream loop')
+
+          // Wrap the async iterator so we can race each iteration against a timeout.
+          // If Deno's partialObjectStream hangs after the model finishes
+          // (iterator never signals done), this timeout breaks us out.
+          let streamExhausted = false
+          const iterator = partialObjectStream[Symbol.asyncIterator]()
+
+          while (!streamExhausted) {
+            const timeoutPromise = new Promise<{ done: true; value: undefined }>((resolve) => {
+              setTimeout(() => resolve({ done: true, value: undefined }), PARTIAL_INACTIVITY_TIMEOUT)
+            })
+
+            const result = await Promise.race([
+              iterator.next(),
+              timeoutPromise,
+            ])
+
+            if (result.done) {
+              if (partialCount > 0) {
+                const elapsed = Date.now() - lastPartialTime
+                if (elapsed >= PARTIAL_INACTIVITY_TIMEOUT) {
+                  console.warn(`[conversation] partialObjectStream timed out after ${elapsed}ms of inactivity (${partialCount} partials received) — forcing done`)
+                } else {
+                  console.log(`[conversation] partialObjectStream ended naturally after ${partialCount} partials`)
+                }
+              }
+              streamExhausted = true
+              break
+            }
+
+            const partialObject = result.value
             fullResponse = partialObject
+            lastPartialTime = Date.now()
+            partialCount++
 
             // Send partial update to client (chat message text only)
             const partialForClient = isBuilder
@@ -459,18 +556,17 @@ Deno.serve(async (req) => {
           // Stop heartbeat before closing
           clearInterval(heartbeatInterval)
 
-          // Send completion event and close stream IMMEDIATELY so the frontend
-          // transitions out of "AI is thinking..." without waiting for DB saves.
-          // Strip phaseOutput and fileOperations from the done event — these can
-          // be very large and may be lost/truncated when Deno flushes the stream
-          // at close time. The client tracks these from partial events instead.
-          const { phaseOutput: _po, fileOperations: _fo, ...lightFinalObject } = fullResponse as any
+          // Send completion event — strip fileOperations (large payload) but keep
+          // phaseOutput and phaseComplete so the frontend can reliably detect
+          // phase completion even if earlier partials were lost.
+          const { fileOperations: _fo, ...finalObject } = fullResponse as any
+          console.log('[conversation] Sending done event')
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({
             type: 'done',
             done: true,
-            finalObject: lightFinalObject,
+            finalObject,
             usage: {
-              model: 'claude-3-5-sonnet-20241022'
+              model: modelId
             }
           })}\n\n`))
           controller.close()
@@ -491,12 +587,24 @@ Deno.serve(async (req) => {
                   action,
                   agentType,
                   suggestedResponses: fullResponse.suggestedResponses,
-                  metadata: fullResponse.metadata
+                  metadata: fullResponse.metadata,
+                  readyToSave: (fullResponse as any).readyToSave || false,
                 }
               )
 
+              // Design phase save diagnostics
+              if (body.designPhase) {
+                console.log('[conversation] Design phase save check:', {
+                  designPhase: body.designPhase,
+                  hasPhaseOutput: !!(fullResponse as any).phaseOutput,
+                  phaseComplete: (fullResponse as any).phaseComplete,
+                  projectId: body.projectId,
+                  sectionId: body.sectionId,
+                })
+              }
+
               // Save design phase output if present (server-side safety net)
-              if (body.designPhase && fullResponse.phaseOutput && fullResponse.phaseComplete && body.projectId) {
+              if (body.designPhase && (fullResponse as any).phaseOutput && (fullResponse as any).phaseComplete && body.projectId && isValidPhaseOutput(body.designPhase, (fullResponse as any).phaseOutput)) {
                 const sectionPhases: DesignPhaseType[] = ['shape_section', 'sample_data']
                 if (sectionPhases.includes(body.designPhase) && body.sectionId) {
                   await saveDesignSectionOutput(
@@ -504,14 +612,14 @@ Deno.serve(async (req) => {
                     authResult.userId,
                     body.sectionId,
                     body.designPhase as 'shape_section' | 'sample_data',
-                    fullResponse.phaseOutput
+                    (fullResponse as any).phaseOutput
                   )
                 } else if (!sectionPhases.includes(body.designPhase)) {
                   await saveDesignPhaseOutput(
                     body.projectId,
                     authResult.userId,
                     body.designPhase,
-                    fullResponse.phaseOutput
+                    (fullResponse as any).phaseOutput
                   )
                 }
               }
@@ -829,11 +937,26 @@ Once you have enough information, present a formatted summary:
 
 Then ask: "Does this look good? I can adjust anything before we lock it in."
 
-### Step 4: Save on Approval
-ONLY when the user explicitly approves (says something like "looks good", "yes", "approved", "let's go", "perfect", "save it"), populate the \`phaseOutput\` field with the structured data and set \`phaseComplete\` to true.
+### Presenting Your Summary
+When you present a complete, formatted summary to the user:
+- Set \`readyToSave\` to **true**
+- Ask the user to review and confirm
+
+### Step 4: Save on Approval — THIS IS CRITICAL
+When the user approves (e.g., "looks good", "save it", "perfect"):
+1. Set \`phaseComplete\` to **true**
+2. Populate \`phaseOutput\` with the COMPLETE structured data (name, description, problems array, features array)
+3. Confirm in your message that the product vision has been saved
+
+During questions and clarifications (before presenting the summary):
+- Keep \`readyToSave\` = **false**
+- Keep \`phaseComplete\` = **false**
+- Do NOT populate \`phaseOutput\`
+
+If the user says ANYTHING positive/affirmative after you present a summary, treat it as approval and save immediately. Do NOT ask for additional confirmation.
 
 ## CRITICAL RULES
-- Do NOT populate phaseOutput until the user explicitly approves
+- When the user approves → ALWAYS set phaseComplete=true AND populate phaseOutput
 - Keep features to 3-8 items (focus on MVP)
 - Keep problems to 1-5 items
 - Be concise - this is a mobile app, not an enterprise platform
@@ -892,11 +1015,26 @@ If the user wants changes, adjust the sections and present again. Common adjustm
 - Reordering based on priority
 - Adding or removing sections
 
-### Step 3: Save on Approval
-ONLY when the user explicitly approves, populate \`phaseOutput\` with the structured section data and set \`phaseComplete\` to true.
+### Presenting Your Summary
+When you present a complete, formatted summary to the user:
+- Set \`readyToSave\` to **true**
+- Ask the user to review and confirm
+
+### Step 3: Save on Approval — THIS IS CRITICAL
+When the user approves (e.g., "looks good", "save it", "perfect"):
+1. Set \`phaseComplete\` to **true**
+2. Populate \`phaseOutput\` with the COMPLETE structured data
+3. Confirm in your message that the data has been saved
+
+During questions and clarifications (before presenting the summary):
+- Keep \`readyToSave\` = **false**
+- Keep \`phaseComplete\` = **false**
+- Do NOT populate \`phaseOutput\`
+
+Do NOT ask for additional confirmation after the user approves. Save immediately.
 
 ## CRITICAL RULES
-- Do NOT populate phaseOutput until the user explicitly approves
+- When the user approves → ALWAYS set phaseComplete=true AND populate phaseOutput
 - Keep to 3-5 sections for MVP (max 8)
 - Section IDs must be kebab-case (e.g., "user-auth", "social-feed")
 - Order reflects development priority (1 = build first)
@@ -970,11 +1108,26 @@ Adjust based on feedback. Common changes:
 - Adding/removing fields
 - Changing relationship types
 
-### Step 3: Save on Approval
-ONLY when the user explicitly approves, populate \`phaseOutput\` with the structured data and set \`phaseComplete\` to true.
+### Presenting Your Summary
+When you present a complete, formatted summary to the user:
+- Set \`readyToSave\` to **true**
+- Ask the user to review and confirm
+
+### Step 3: Save on Approval — THIS IS CRITICAL
+When the user approves (e.g., "looks good", "save it", "perfect"):
+1. Set \`phaseComplete\` to **true**
+2. Populate \`phaseOutput\` with the COMPLETE structured data
+3. Confirm in your message that the data has been saved
+
+During questions and clarifications (before presenting the summary):
+- Keep \`readyToSave\` = **false**
+- Keep \`phaseComplete\` = **false**
+- Do NOT populate \`phaseOutput\`
+
+Do NOT ask for additional confirmation after the user approves. Save immediately.
 
 ## CRITICAL RULES
-- Do NOT populate phaseOutput until the user explicitly approves
+- When the user approves → ALWAYS set phaseComplete=true AND populate phaseOutput
 - Keep entities conceptual — no SQL, no migrations, no detailed schemas
 - 3-8 entities for MVP
 - Focus on the most important fields, not every possible field
@@ -1033,11 +1186,26 @@ Adjust based on feedback:
 - Try different font pairings
 - Adjust weights or add sizes
 
-### Step 4: Save on Approval
-ONLY when the user explicitly approves, populate \`phaseOutput\` with the structured data and set \`phaseComplete\` to true.
+### Presenting Your Summary
+When you present a complete, formatted summary to the user:
+- Set \`readyToSave\` to **true**
+- Ask the user to review and confirm
+
+### Step 4: Save on Approval — THIS IS CRITICAL
+When the user approves (e.g., "looks good", "save it", "perfect"):
+1. Set \`phaseComplete\` to **true**
+2. Populate \`phaseOutput\` with the COMPLETE structured data
+3. Confirm in your message that the data has been saved
+
+During questions and clarifications (before presenting the summary):
+- Keep \`readyToSave\` = **false**
+- Keep \`phaseComplete\` = **false**
+- Do NOT populate \`phaseOutput\`
+
+Do NOT ask for additional confirmation after the user approves. Save immediately.
 
 ## CRITICAL RULES
-- Do NOT populate phaseOutput until the user explicitly approves
+- When the user approves → ALWAYS set phaseComplete=true AND populate phaseOutput
 - Use valid hex color values (e.g., "#3b82f6")
 - Use Google Fonts families only
 - Include reasonable font weights (400-700 range)
@@ -1118,11 +1286,26 @@ Adjust based on feedback:
 - Add/remove navigation items
 - Change icons or labels
 
-### Step 4: Save on Approval
-ONLY when the user explicitly approves, populate \`phaseOutput\` with the structured data and set \`phaseComplete\` to true.
+### Presenting Your Summary
+When you present a complete, formatted summary to the user:
+- Set \`readyToSave\` to **true**
+- Ask the user to review and confirm
+
+### Step 4: Save on Approval — THIS IS CRITICAL
+When the user approves (e.g., "looks good", "save it", "perfect"):
+1. Set \`phaseComplete\` to **true**
+2. Populate \`phaseOutput\` with the COMPLETE structured data
+3. Confirm in your message that the data has been saved
+
+During questions and clarifications (before presenting the summary):
+- Keep \`readyToSave\` = **false**
+- Keep \`phaseComplete\` = **false**
+- Do NOT populate \`phaseOutput\`
+
+Do NOT ask for additional confirmation after the user approves. Save immediately.
 
 ## CRITICAL RULES
-- Do NOT populate phaseOutput until the user explicitly approves
+- When the user approves → ALWAYS set phaseComplete=true AND populate phaseOutput
 - Every roadmap section should have a corresponding navigation item
 - Use valid Lucide icon names (Home, User, Settings, Bell, Search, Heart, etc.)
 - Routes should be kebab-case (e.g., "/user-profile")
@@ -1198,11 +1381,26 @@ Based on answers, create a detailed spec:
 
 Ask: "Does this spec capture everything? I can add or modify any part."
 
-### Step 3: Save on Approval
-ONLY when the user explicitly approves, populate \`phaseOutput\` with the structured data and set \`phaseComplete\` to true.
+### Presenting Your Summary
+When you present a complete, formatted summary to the user:
+- Set \`readyToSave\` to **true**
+- Ask the user to review and confirm
+
+### Step 3: Save on Approval — THIS IS CRITICAL
+When the user approves (e.g., "looks good", "save it", "perfect"):
+1. Set \`phaseComplete\` to **true**
+2. Populate \`phaseOutput\` with the COMPLETE structured data
+3. Confirm in your message that the data has been saved
+
+During questions and clarifications (before presenting the summary):
+- Keep \`readyToSave\` = **false**
+- Keep \`phaseComplete\` = **false**
+- Do NOT populate \`phaseOutput\`
+
+Do NOT ask for additional confirmation after the user approves. Save immediately.
 
 ## CRITICAL RULES
-- Do NOT populate phaseOutput until the user explicitly approves
+- When the user approves → ALWAYS set phaseComplete=true AND populate phaseOutput
 - Keep features to 3-8 items
 - Requirements should be specific and actionable
 - Acceptance criteria should be testable
@@ -1279,11 +1477,26 @@ interface User {
 
 Ask: "Does this sample data look good? I can add more records, adjust fields, or modify the types."
 
-### Step 3: Save on Approval
-ONLY when the user explicitly approves, populate \`phaseOutput\` with the structured data and set \`phaseComplete\` to true.
+### Presenting Your Summary
+When you present a complete, formatted summary to the user:
+- Set \`readyToSave\` to **true**
+- Ask the user to review and confirm
+
+### Step 3: Save on Approval — THIS IS CRITICAL
+When the user approves (e.g., "looks good", "save it", "perfect"):
+1. Set \`phaseComplete\` to **true**
+2. Populate \`phaseOutput\` with the COMPLETE structured data
+3. Confirm in your message that the data has been saved
+
+During questions and clarifications (before presenting the summary):
+- Keep \`readyToSave\` = **false**
+- Keep \`phaseComplete\` = **false**
+- Do NOT populate \`phaseOutput\`
+
+Do NOT ask for additional confirmation after the user approves. Save immediately.
 
 ## CRITICAL RULES
-- Do NOT populate phaseOutput until the user explicitly approves
+- When the user approves → ALWAYS set phaseComplete=true AND populate phaseOutput
 - Include a \`_meta\` field in sampleData with section info and record counts
 - Generate 3-5 records per entity
 - Use realistic names, emails, dates, etc.
@@ -1735,7 +1948,25 @@ function detectPRDIntent(message: string): boolean {
     'feature list', 'requirements document', 'product spec', 'app specification',
     'describe my app', 'plan my app', 'design my app'
   ]
-  
+
   const lowerMessage = message.toLowerCase()
   return prdKeywords.some(keyword => lowerMessage.includes(keyword))
+}
+
+function detectApproval(message: string): boolean {
+  const lowerMessage = message.toLowerCase().trim()
+  const approvalPhrases = [
+    'looks good', 'looks great', 'looks perfect', 'looks right',
+    'save it', 'save this', 'save that',
+    'lock it in', 'lock it', 'lock this in',
+    'approved', 'approve', 'approve it',
+    'let\'s go', 'lets go', 'let\'s do it', 'lets do it',
+    'perfect', 'good to go', 'go ahead',
+    'that works', 'that\'s good', 'that\'s great', 'that\'s perfect',
+    'ship it', 'sounds good', 'sounds great', 'sounds perfect',
+    'i like it', 'love it', 'i love it',
+    'confirm', 'confirmed', 'do it',
+    'lgtm', 'all good', 'no changes',
+  ]
+  return approvalPhrases.some(phrase => lowerMessage.includes(phrase))
 }
