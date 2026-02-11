@@ -123,7 +123,13 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
 
     const accessToken = await getAccessToken()
 
-    const response = await fetch(`${supabaseUrl}/functions/v1/conversation`, {
+    // Use dedicated backend URL when available, fall back to Supabase edge function
+    const backendUrl = import.meta.env.VITE_BACKEND_URL
+    const conversationEndpoint = backendUrl
+      ? `${backendUrl}/v1/conversation`
+      : `${supabaseUrl}/functions/v1/conversation`
+
+    const response = await fetch(conversationEndpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
