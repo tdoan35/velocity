@@ -17,6 +17,7 @@ import {
   createConversation,
   prepareClaudeMessages,
   detectPRDIntent,
+  detectApproval,
   buildDesignPhasePrompt,
   buildBuilderPrompt,
   buildSystemPrompt,
@@ -25,6 +26,47 @@ import {
   saveDesignSectionOutput,
   updateConversationTitle,
 } from '../services/conversation.js'
+
+function isValidPhaseOutput(phase: DesignPhaseType, output: any): boolean {
+  if (!output || typeof output !== 'object') {
+    console.warn(`[conversation] Phase output validation failed for ${phase}: output is empty or not an object`)
+    return false
+  }
+
+  let valid = true
+  switch (phase) {
+    case 'product_vision':
+      valid = !!output.name && output.problems?.length >= 1 && output.features?.length >= 3
+      break
+    case 'product_roadmap':
+      valid = output.sections?.length >= 2
+        && output.sections.every((s: any) => s.id && s.title && s.description)
+      break
+    case 'data_model':
+      valid = output.entities?.length >= 1
+        && output.entities.every((e: any) => e.name && Array.isArray(e.fields))
+      break
+    case 'design_tokens':
+      valid = !!output.colors && !!output.typography
+      break
+    case 'design_shell':
+      valid = !!output.overview && output.navigationItems?.length >= 1
+      break
+    case 'shape_section':
+      valid = !!output.overview && output.keyFeatures?.length >= 1
+      break
+    case 'sample_data':
+      valid = !!output.sampleData && !!output.typesDefinition
+      break
+  }
+
+  if (!valid) {
+    console.warn(`[conversation] Phase output validation failed for ${phase}: data quality too low`, {
+      keys: Object.keys(output),
+    })
+  }
+  return valid
+}
 
 type Env = { Variables: { userId: string } }
 const app = new Hono<Env>()
@@ -146,11 +188,28 @@ app.post('/', authMiddleware, async (c) => {
       ? getDesignPhaseSchema(body.designPhase)
       : assistantResponseSchema
 
-  const systemPrompt = body.agentType === 'builder'
+  let systemPrompt = body.agentType === 'builder'
     ? buildBuilderPrompt(conversation.context, shouldGenerateTitle)
     : body.designPhase
       ? buildDesignPhasePrompt(body.designPhase, conversation.context, shouldGenerateTitle)
       : buildSystemPrompt(action, conversation.context, agentType, shouldGenerateTitle)
+
+  // When the user's message looks like approval in a design phase,
+  // inject a strong instruction to populate phaseOutput — but only if the
+  // AI has previously presented a summary (readyToSave === true).
+  const hasPresentedSummary = conversation.messages
+    .filter(m => m.role === 'assistant')
+    .some(m => m.metadata?.readyToSave === true)
+
+  if (body.designPhase && detectApproval(message) && hasPresentedSummary) {
+    console.log('[conversation] Approval detected with prior readyToSave — injecting save instruction')
+    systemPrompt += `\n\n## SAVE INSTRUCTION (HIGHEST PRIORITY)
+The user's latest message is an APPROVAL. You MUST:
+1. Set phaseComplete to true
+2. Populate phaseOutput with ALL the structured data discussed in the conversation
+3. In your message, confirm that you've saved their work
+Do NOT ask for further confirmation. The user has already approved. Save NOW.`
+  }
 
   const modelId = 'claude-haiku-4-5-20251001'
 
@@ -185,10 +244,47 @@ app.post('/', authMiddleware, async (c) => {
 
     try {
       let lastEmittedFileOpIndex = 0
+      let lastPartialTime = Date.now()
+      let partialCount = 0
+      const PARTIAL_INACTIVITY_TIMEOUT = 15_000 // 15s without a new partial → assume AI is done
 
-      for await (const partialObject of partialObjectStream) {
-        const partial = partialObject as Record<string, any>
+      console.log('[conversation] Starting partialObjectStream loop')
+
+      // Wrap the async iterator so we can race each iteration against a timeout.
+      // If the AI SDK's partialObjectStream hangs after the model finishes
+      // (iterator never signals done), this timeout breaks us out.
+      let streamExhausted = false
+      const iterator = partialObjectStream[Symbol.asyncIterator]()
+
+      while (!streamExhausted) {
+        const timeoutPromise = new Promise<{ done: true; value: undefined }>((resolve) => {
+          setTimeout(() => resolve({ done: true, value: undefined }), PARTIAL_INACTIVITY_TIMEOUT)
+        })
+
+        const result = await Promise.race([
+          iterator.next(),
+          timeoutPromise,
+        ])
+
+        if (result.done) {
+          // Either the stream naturally ended or our timeout fired.
+          // In both cases, we're done iterating.
+          if (partialCount > 0) {
+            const elapsed = Date.now() - lastPartialTime
+            if (elapsed >= PARTIAL_INACTIVITY_TIMEOUT) {
+              console.warn(`[conversation] partialObjectStream timed out after ${elapsed}ms of inactivity (${partialCount} partials received) — forcing done`)
+            } else {
+              console.log(`[conversation] partialObjectStream ended naturally after ${partialCount} partials`)
+            }
+          }
+          streamExhausted = true
+          break
+        }
+
+        const partial = result.value as Record<string, any>
         fullResponse = partial
+        lastPartialTime = Date.now()
+        partialCount++
 
         const partialForClient = isBuilder
           ? { message: partial.message, suggestedResponses: partial.suggestedResponses }
@@ -228,17 +324,31 @@ app.post('/', authMiddleware, async (c) => {
 
       clearInterval(heartbeatInterval)
 
-      // Send done event — strip phaseOutput and fileOperations (large payloads)
-      // to keep it small. The client tracks these from partial events.
-      const { phaseOutput: _po, fileOperations: _fo, ...lightFinalObject } = fullResponse as any
+      // Send done event — strip fileOperations (large payload) but keep
+      // phaseOutput and phaseComplete so the frontend can reliably detect
+      // phase completion even if earlier partials were lost.
+      const { fileOperations: _fo, ...finalObject } = fullResponse as any
+      console.log('[conversation] Sending done event')
       await stream.writeSSE({
         data: JSON.stringify({
           type: 'done',
           done: true,
-          finalObject: lightFinalObject,
+          finalObject,
           usage: { model: modelId },
         }),
       })
+
+      // Flush padding: @hono/node-server may buffer the last write before
+      // closing the HTTP response. Extra writes push the done event through
+      // the internal buffer so the client actually receives it.
+      // SSE comments (lines starting with `:`) are ignored by clients.
+      for (let i = 0; i < 5; i++) {
+        await stream.write(`: flush ${i}\n\n`)
+      }
+      // Small delay to let Node.js drain the write buffer to the TCP socket
+      await new Promise(resolve => setTimeout(resolve, 100))
+
+      console.log('[conversation] Done event sent successfully')
 
       // Fire-and-forget DB saves — run after done event is flushed to client
       ;(async () => {
@@ -252,10 +362,21 @@ app.post('/', authMiddleware, async (c) => {
               agentType,
               suggestedResponses: fullResponse.suggestedResponses,
               metadata: fullResponse.metadata,
+              readyToSave: (fullResponse as any).readyToSave || false,
             },
           )
 
-          if (body.designPhase && (fullResponse as any).phaseOutput && (fullResponse as any).phaseComplete && body.projectId) {
+          if (body.designPhase) {
+            console.log('[conversation] Design phase save check:', {
+              designPhase: body.designPhase,
+              hasPhaseOutput: !!(fullResponse as any).phaseOutput,
+              phaseComplete: (fullResponse as any).phaseComplete,
+              projectId: body.projectId,
+              sectionId: body.sectionId,
+            })
+          }
+
+          if (body.designPhase && (fullResponse as any).phaseOutput && (fullResponse as any).phaseComplete && body.projectId && isValidPhaseOutput(body.designPhase, (fullResponse as any).phaseOutput)) {
             const sectionPhases: DesignPhaseType[] = ['shape_section', 'sample_data']
             if (sectionPhases.includes(body.designPhase) && body.sectionId) {
               await saveDesignSectionOutput(

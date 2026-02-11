@@ -172,12 +172,15 @@ export function getDesignPhaseSchema(phase: DesignPhaseType) {
       sources: z.array(z.string()).optional(),
       relatedTopics: z.array(z.string()).optional(),
     }).optional().describe('Additional metadata about the response'),
+    readyToSave: z.boolean()
+      .default(false)
+      .describe('Set to true ONLY when you have presented a complete summary to the user and are asking for their approval. Keep false during questions and clarifications.'),
+    phaseComplete: z.boolean()
+      .default(false)
+      .describe('Set to true when the user approves and you populate phaseOutput. Set to false otherwise.'),
     phaseOutput: phaseOutputSchema
       .optional()
-      .describe('Structured phase output data. ONLY populate this when the user explicitly approves your summary.'),
-    phaseComplete: z.boolean()
-      .optional()
-      .describe('Set to true ONLY when phaseOutput is populated and the user has approved'),
+      .describe('Structured phase output data. Populate this when the user approves your summary and set phaseComplete to true.'),
   })
 }
 

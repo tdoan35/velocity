@@ -307,6 +307,24 @@ export function detectPRDIntent(message: string): boolean {
   return prdKeywords.some(keyword => lowerMessage.includes(keyword))
 }
 
+export function detectApproval(message: string): boolean {
+  const lowerMessage = message.toLowerCase().trim()
+  const approvalPhrases = [
+    'looks good', 'looks great', 'looks perfect', 'looks right',
+    'save it', 'save this', 'save that',
+    'lock it in', 'lock it', 'lock this in',
+    'approved', 'approve', 'approve it',
+    'let\'s go', 'lets go', 'let\'s do it', 'lets do it',
+    'perfect', 'good to go', 'go ahead',
+    'that works', 'that\'s good', 'that\'s great', 'that\'s perfect',
+    'ship it', 'sounds good', 'sounds great', 'sounds perfect',
+    'i like it', 'love it', 'i love it',
+    'confirm', 'confirmed', 'do it',
+    'lgtm', 'all good', 'no changes',
+  ]
+  return approvalPhrases.some(phrase => lowerMessage.includes(phrase))
+}
+
 // ============================================================================
 // System prompt builders
 // ============================================================================
@@ -371,11 +389,26 @@ Once you have enough information, present a formatted summary:
 
 Then ask: "Does this look good? I can adjust anything before we lock it in."
 
-### Step 4: Save on Approval
-ONLY when the user explicitly approves (says something like "looks good", "yes", "approved", "let's go", "perfect", "save it"), populate the \`phaseOutput\` field with the structured data and set \`phaseComplete\` to true.
+### Presenting Your Summary
+When you present a complete, formatted summary to the user:
+- Set \`readyToSave\` to **true**
+- Ask the user to review and confirm
+
+### Step 4: Save on Approval — THIS IS CRITICAL
+When the user approves (e.g., "looks good", "save it", "perfect"):
+1. Set \`phaseComplete\` to **true**
+2. Populate \`phaseOutput\` with the COMPLETE structured data (name, description, problems array, features array)
+3. Confirm in your message that the product vision has been saved
+
+During questions and clarifications (before presenting the summary):
+- Keep \`readyToSave\` = **false**
+- Keep \`phaseComplete\` = **false**
+- Do NOT populate \`phaseOutput\`
+
+If the user says ANYTHING positive/affirmative after you present a summary, treat it as approval and save immediately. Do NOT ask for additional confirmation.
 
 ## CRITICAL RULES
-- Do NOT populate phaseOutput until the user explicitly approves
+- When the user approves → ALWAYS set phaseComplete=true AND populate phaseOutput
 - Keep features to 3-8 items (focus on MVP)
 - Keep problems to 1-5 items
 - Be concise - this is a mobile app, not an enterprise platform
@@ -434,11 +467,26 @@ If the user wants changes, adjust the sections and present again. Common adjustm
 - Reordering based on priority
 - Adding or removing sections
 
-### Step 3: Save on Approval
-ONLY when the user explicitly approves, populate \`phaseOutput\` with the structured section data and set \`phaseComplete\` to true.
+### Presenting Your Summary
+When you present a complete, formatted summary to the user:
+- Set \`readyToSave\` to **true**
+- Ask the user to review and confirm
+
+### Step 3: Save on Approval — THIS IS CRITICAL
+When the user approves (e.g., "looks good", "save it", "perfect"):
+1. Set \`phaseComplete\` to **true**
+2. Populate \`phaseOutput\` with the COMPLETE structured data
+3. Confirm in your message that the data has been saved
+
+During questions and clarifications (before presenting the summary):
+- Keep \`readyToSave\` = **false**
+- Keep \`phaseComplete\` = **false**
+- Do NOT populate \`phaseOutput\`
+
+Do NOT ask for additional confirmation after the user approves. Save immediately.
 
 ## CRITICAL RULES
-- Do NOT populate phaseOutput until the user explicitly approves
+- When the user approves → ALWAYS set phaseComplete=true AND populate phaseOutput
 - Keep to 3-5 sections for MVP (max 8)
 - Section IDs must be kebab-case (e.g., "user-auth", "social-feed")
 - Order reflects development priority (1 = build first)
@@ -512,11 +560,26 @@ Adjust based on feedback. Common changes:
 - Adding/removing fields
 - Changing relationship types
 
-### Step 3: Save on Approval
-ONLY when the user explicitly approves, populate \`phaseOutput\` with the structured data and set \`phaseComplete\` to true.
+### Presenting Your Summary
+When you present a complete, formatted summary to the user:
+- Set \`readyToSave\` to **true**
+- Ask the user to review and confirm
+
+### Step 3: Save on Approval — THIS IS CRITICAL
+When the user approves (e.g., "looks good", "save it", "perfect"):
+1. Set \`phaseComplete\` to **true**
+2. Populate \`phaseOutput\` with the COMPLETE structured data
+3. Confirm in your message that the data has been saved
+
+During questions and clarifications (before presenting the summary):
+- Keep \`readyToSave\` = **false**
+- Keep \`phaseComplete\` = **false**
+- Do NOT populate \`phaseOutput\`
+
+Do NOT ask for additional confirmation after the user approves. Save immediately.
 
 ## CRITICAL RULES
-- Do NOT populate phaseOutput until the user explicitly approves
+- When the user approves → ALWAYS set phaseComplete=true AND populate phaseOutput
 - Keep entities conceptual — no SQL, no migrations, no detailed schemas
 - 3-8 entities for MVP
 - Focus on the most important fields, not every possible field
@@ -575,11 +638,26 @@ Adjust based on feedback:
 - Try different font pairings
 - Adjust weights or add sizes
 
-### Step 4: Save on Approval
-ONLY when the user explicitly approves, populate \`phaseOutput\` with the structured data and set \`phaseComplete\` to true.
+### Presenting Your Summary
+When you present a complete, formatted summary to the user:
+- Set \`readyToSave\` to **true**
+- Ask the user to review and confirm
+
+### Step 4: Save on Approval — THIS IS CRITICAL
+When the user approves (e.g., "looks good", "save it", "perfect"):
+1. Set \`phaseComplete\` to **true**
+2. Populate \`phaseOutput\` with the COMPLETE structured data
+3. Confirm in your message that the data has been saved
+
+During questions and clarifications (before presenting the summary):
+- Keep \`readyToSave\` = **false**
+- Keep \`phaseComplete\` = **false**
+- Do NOT populate \`phaseOutput\`
+
+Do NOT ask for additional confirmation after the user approves. Save immediately.
 
 ## CRITICAL RULES
-- Do NOT populate phaseOutput until the user explicitly approves
+- When the user approves → ALWAYS set phaseComplete=true AND populate phaseOutput
 - Use valid hex color values (e.g., "#3b82f6")
 - Use Google Fonts families only
 - Include reasonable font weights (400-700 range)
@@ -660,11 +738,26 @@ Adjust based on feedback:
 - Add/remove navigation items
 - Change icons or labels
 
-### Step 4: Save on Approval
-ONLY when the user explicitly approves, populate \`phaseOutput\` with the structured data and set \`phaseComplete\` to true.
+### Presenting Your Summary
+When you present a complete, formatted summary to the user:
+- Set \`readyToSave\` to **true**
+- Ask the user to review and confirm
+
+### Step 4: Save on Approval — THIS IS CRITICAL
+When the user approves (e.g., "looks good", "save it", "perfect"):
+1. Set \`phaseComplete\` to **true**
+2. Populate \`phaseOutput\` with the COMPLETE structured data
+3. Confirm in your message that the data has been saved
+
+During questions and clarifications (before presenting the summary):
+- Keep \`readyToSave\` = **false**
+- Keep \`phaseComplete\` = **false**
+- Do NOT populate \`phaseOutput\`
+
+Do NOT ask for additional confirmation after the user approves. Save immediately.
 
 ## CRITICAL RULES
-- Do NOT populate phaseOutput until the user explicitly approves
+- When the user approves → ALWAYS set phaseComplete=true AND populate phaseOutput
 - Every roadmap section should have a corresponding navigation item
 - Use valid Lucide icon names (Home, User, Settings, Bell, Search, Heart, etc.)
 - Routes should be kebab-case (e.g., "/user-profile")
@@ -740,11 +833,26 @@ Based on answers, create a detailed spec:
 
 Ask: "Does this spec capture everything? I can add or modify any part."
 
-### Step 3: Save on Approval
-ONLY when the user explicitly approves, populate \`phaseOutput\` with the structured data and set \`phaseComplete\` to true.
+### Presenting Your Summary
+When you present a complete, formatted summary to the user:
+- Set \`readyToSave\` to **true**
+- Ask the user to review and confirm
+
+### Step 3: Save on Approval — THIS IS CRITICAL
+When the user approves (e.g., "looks good", "save it", "perfect"):
+1. Set \`phaseComplete\` to **true**
+2. Populate \`phaseOutput\` with the COMPLETE structured data
+3. Confirm in your message that the data has been saved
+
+During questions and clarifications (before presenting the summary):
+- Keep \`readyToSave\` = **false**
+- Keep \`phaseComplete\` = **false**
+- Do NOT populate \`phaseOutput\`
+
+Do NOT ask for additional confirmation after the user approves. Save immediately.
 
 ## CRITICAL RULES
-- Do NOT populate phaseOutput until the user explicitly approves
+- When the user approves → ALWAYS set phaseComplete=true AND populate phaseOutput
 - Keep features to 3-8 items
 - Requirements should be specific and actionable
 - Acceptance criteria should be testable
@@ -821,11 +929,26 @@ interface User {
 
 Ask: "Does this sample data look good? I can add more records, adjust fields, or modify the types."
 
-### Step 3: Save on Approval
-ONLY when the user explicitly approves, populate \`phaseOutput\` with the structured data and set \`phaseComplete\` to true.
+### Presenting Your Summary
+When you present a complete, formatted summary to the user:
+- Set \`readyToSave\` to **true**
+- Ask the user to review and confirm
+
+### Step 3: Save on Approval — THIS IS CRITICAL
+When the user approves (e.g., "looks good", "save it", "perfect"):
+1. Set \`phaseComplete\` to **true**
+2. Populate \`phaseOutput\` with the COMPLETE structured data
+3. Confirm in your message that the data has been saved
+
+During questions and clarifications (before presenting the summary):
+- Keep \`readyToSave\` = **false**
+- Keep \`phaseComplete\` = **false**
+- Do NOT populate \`phaseOutput\`
+
+Do NOT ask for additional confirmation after the user approves. Save immediately.
 
 ## CRITICAL RULES
-- Do NOT populate phaseOutput until the user explicitly approves
+- When the user approves → ALWAYS set phaseComplete=true AND populate phaseOutput
 - Include a \`_meta\` field in sampleData with section info and record counts
 - Generate 3-5 records per entity
 - Use realistic names, emails, dates, etc.
