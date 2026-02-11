@@ -292,7 +292,11 @@ function ProjectDesignContent() {
       }
       case 'product_roadmap':
         await updateProductRoadmap(output as ProductRoadmap)
-        await createSectionsFromRoadmap(output as ProductRoadmap)
+        try {
+          await createSectionsFromRoadmap(output as ProductRoadmap)
+        } catch (err) {
+          console.warn('Failed to create sections from roadmap (may already exist):', err)
+        }
         await completePhase()
         if (projectId) await loadDesignPhase(projectId)
         setActivePhase('product')

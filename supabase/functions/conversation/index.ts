@@ -378,9 +378,10 @@ Deno.serve(async (req) => {
         : buildSystemPrompt(action, conversation.context, agentType, shouldGenerateTitle)
 
     // Model selection — builder uses configurable model, others use Haiku
-    const modelId = body.agentType === 'builder'
-      ? (context?.model || 'claude-sonnet-4-5-20250929')
-      : 'claude-haiku-4-5-20251001'
+    // const modelId = body.agentType === 'builder'
+    //   ? (context?.model || 'claude-sonnet-4-5-20250929')
+    //   : 'claude-haiku-4-5-20251001'
+    const modelId = 'claude-haiku-4-5-20251001' // use haiku for dev
 
     // Use Vercel AI SDK's streamObject for structured responses
     const { partialObjectStream } = await streamObject({
@@ -460,10 +461,14 @@ Deno.serve(async (req) => {
 
           // Send completion event and close stream IMMEDIATELY so the frontend
           // transitions out of "AI is thinking..." without waiting for DB saves.
+          // Strip phaseOutput and fileOperations from the done event — these can
+          // be very large and may be lost/truncated when Deno flushes the stream
+          // at close time. The client tracks these from partial events instead.
+          const { phaseOutput: _po, fileOperations: _fo, ...lightFinalObject } = fullResponse as any
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({
             type: 'done',
             done: true,
-            finalObject: fullResponse,
+            finalObject: lightFinalObject,
             usage: {
               model: 'claude-3-5-sonnet-20241022'
             }

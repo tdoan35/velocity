@@ -70,6 +70,8 @@ export function useVelocityChat({
   const [currentAgent, setCurrentAgent] = useState<AgentType>(initialAgent)
   const [isInitializing, setIsInitializing] = useState(false)
   const [suggestedResponses, setSuggestedResponses] = useState<SuggestedResponse[]>([])
+  // Nuclear fallback: if the AI SDK's status is stuck, this overrides isLoading
+  const [stuckOverride, setStuckOverride] = useState(false)
   const { toast } = useToast()
 
   // Stable chat ID for useChat — stays constant during temp→real transitions
@@ -108,10 +110,19 @@ export function useVelocityChat({
     if (data.conversationTitle) {
       latestRef.current.onTitleGenerated?.(data.conversationTitle)
     }
-    if (data.phaseOutput && data.phaseComplete && latestRef.current.designPhase) {
-      latestRef.current.onPhaseComplete?.(latestRef.current.designPhase, data.phaseOutput)
-    }
     if (data.usage) {
+      console.warn('[useVelocityChat] structured data with usage (done event):', {
+        hasPhaseOutput: !!data.phaseOutput,
+        phaseComplete: data.phaseComplete,
+        designPhase: latestRef.current.designPhase,
+        hasOnPhaseComplete: !!latestRef.current.onPhaseComplete,
+      })
+      // Fire phase completion ONLY on the done event (data.usage is exclusive to done)
+      // to prevent duplicate calls from streaming chunks
+      if (data.phaseOutput && data.phaseComplete && latestRef.current.designPhase) {
+        console.warn('[useVelocityChat] firing onPhaseComplete for', latestRef.current.designPhase)
+        latestRef.current.onPhaseComplete?.(latestRef.current.designPhase, data.phaseOutput)
+      }
       latestRef.current.onStreamEnd?.(data.usage)
       // Update conversation tokens
       const convId = actualConversationIdRef.current
@@ -175,6 +186,13 @@ export function useVelocityChat({
 
   const { messages: uiMessages, setMessages: setUIMessages, status, error, stop: sdkStop } = chat
 
+  // Refs for values used in watchdog — keeps the effect stable so the timer
+  // only resets when `status` changes, not on every render.
+  const sdkStopRef = useRef(sdkStop)
+  sdkStopRef.current = sdkStop
+  const toastRef = useRef(toast)
+  toastRef.current = toast
+
   // Convert UIMessages to AIMessage format for the component
   const messages: AIMessage[] = useMemo(() => {
     return uiMessages.map(m => ({
@@ -186,6 +204,11 @@ export function useVelocityChat({
     }))
   }, [uiMessages, currentAgent])
 
+  // Log status transitions for diagnostics (warn level so it shows in Playwright)
+  useEffect(() => {
+    console.warn(`[useVelocityChat] status → ${status}`)
+  }, [status])
+
   // Notify when streaming starts
   useEffect(() => {
     if (status === 'streaming') {
@@ -195,22 +218,30 @@ export function useVelocityChat({
 
   // Stuck-state watchdog: last-resort safety net if all transport-level timeouts fail.
   // Detects when the AI SDK stays in 'submitted' or 'streaming' for too long.
+  // Uses refs for sdkStop and toast so the timer only resets when status changes.
   useEffect(() => {
+    // Clear the stuck override whenever status changes (e.g., back to 'ready')
+    setStuckOverride(false)
+
     if (status !== 'submitted' && status !== 'streaming') return
 
     const timeout = status === 'submitted' ? 30_000 : 120_000
     const timer = setTimeout(() => {
-      console.warn(`[useVelocityChat] Watchdog: stuck in "${status}" for ${timeout / 1000}s — forcing stop`)
-      try { sdkStop() } catch { /* ignore */ }
-      toast({
+      console.warn(`[useVelocityChat] Watchdog fired: stuck in "${status}" for ${timeout / 1000}s — forcing stop`)
+      try { sdkStopRef.current() } catch { /* ignore */ }
+      toastRef.current({
         title: 'Connection issue',
         description: 'The AI response timed out. Please try again.',
         variant: 'destructive',
       })
+      // Nuclear fallback: if sdkStop() doesn't transition the AI SDK's
+      // internal status (e.g., the stream is stuck and abort doesn't
+      // propagate), force the UI out of the loading state.
+      setStuckOverride(true)
     }, timeout)
 
     return () => clearTimeout(timer)
-  }, [status, sdkStop, toast])
+  }, [status]) // Only depend on status — sdkStop and toast accessed via refs
 
   // Load conversation messages from DB
   const loadConversationMessages = useCallback(async (convId: string) => {
@@ -470,15 +501,16 @@ export function useVelocityChat({
     setInput(e.target.value)
   }, [])
 
-  // Derived state
-  const isLoading = status === 'submitted' || status === 'streaming'
+  // Derived state — stuckOverride forces isLoading to false when the watchdog
+  // determines the AI SDK's status is permanently stuck.
+  const isLoading = !stuckOverride && (status === 'submitted' || status === 'streaming')
 
   return {
     // State
     messages,
     input,
     isLoading,
-    status: status as ChatStatus,
+    status: (stuckOverride ? 'ready' : status) as ChatStatus,
     error: error || null,
     conversationId,
     currentAgent,

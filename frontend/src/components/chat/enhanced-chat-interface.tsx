@@ -324,14 +324,6 @@ export function EnhancedChatInterface({
             'flex-1 space-y-1 min-w-0',
             !isAssistant && 'flex flex-col items-end'
           )}>
-            {isAssistant && (
-              <div className="flex items-center gap-2 px-2 flex-wrap">
-                <span className="text-xs font-medium text-muted-foreground">
-                  {agent.label}
-                </span>
-              </div>
-            )}
-            
             <div className={cn(
               'rounded-lg p-2 max-w-full',
               isAssistant ? 'bg-transparent' : 'bg-muted'
