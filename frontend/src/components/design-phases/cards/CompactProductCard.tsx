@@ -43,10 +43,10 @@ export function CompactProductCard({ productOverview, completed, onClick }: Comp
         <p className="text-xs text-muted-foreground line-clamp-1">{productOverview.description}</p>
         <div className="flex gap-2 mt-2">
           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300">
-            {productOverview.features.length} features
+            {productOverview.features?.length ?? 0} features
           </span>
           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300">
-            {productOverview.problems.length} problems
+            {productOverview.problems?.length ?? 0} problems
           </span>
         </div>
       </CardContent>

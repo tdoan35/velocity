@@ -260,7 +260,14 @@ export function ShellEditor({
   disabled = false,
 }: ShellEditorProps) {
   // Local form state
-  const [localSpec, setLocalSpec] = useState<ShellSpec>(shellSpec || DEFAULT_SHELL_SPEC);
+  // Normalize incoming data — AI responses may omit arrays
+  const normalizeSpec = (data: ShellSpec | null): ShellSpec => ({
+    ...DEFAULT_SHELL_SPEC,
+    ...data,
+    navigationItems: data?.navigationItems ?? [],
+  });
+
+  const [localSpec, setLocalSpec] = useState<ShellSpec>(normalizeSpec(shellSpec));
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [touched, setTouched] = useState<Set<string>>(new Set());
   const [deleteConfirmIndex, setDeleteConfirmIndex] = useState<number | null>(null);
@@ -274,7 +281,7 @@ export function ShellEditor({
 
   // Initialize local state when shellSpec prop changes
   useEffect(() => {
-    setLocalSpec(shellSpec || DEFAULT_SHELL_SPEC);
+    setLocalSpec(normalizeSpec(shellSpec));
   }, [shellSpec]);
 
   // Validate spec

@@ -181,6 +181,7 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
     const state = {
       started: false, textEndEmitted: false, lastEmittedText: '', streamDone: false,
       lastPartialData: null as StructuredEventData | null,
+      lastRealDataTime: Date.now(), // Updated only by partial/done/error, NOT heartbeats
     }
 
     const emitStructured = onStructuredData
@@ -192,8 +193,21 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
       : MAX_STREAM_DURATION
     const streamStartTime = Date.now()
 
+    /** Safe enqueue — no-ops if the stream was already closed by watchdog or done handler. */
+    function safeEnqueue(controller: ReadableStreamDefaultController<UIMessageChunk>, chunk: UIMessageChunk) {
+      if (state.streamDone) return
+      try {
+        controller.enqueue(chunk)
+      } catch {
+        // Controller already closed (e.g., watchdog race) — ignore
+      }
+    }
+
     function processLines(lines: string[], controller: ReadableStreamDefaultController<UIMessageChunk>) {
       for (const line of lines) {
+        // Bail out early if stream was closed by watchdog between iterations
+        if (state.streamDone) return
+
         if (!line.trim() || !line.startsWith('data: ')) continue
 
         const dataStr = line.slice(6).trim()
@@ -208,7 +222,8 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
         }
 
         try {
-          // Heartbeat: no-op — just keeps the inactivity timer happy
+          // Heartbeat — no-op, just keeps the inactivity timer in pull() happy.
+          // The watchdog timer handles stale-stream detection independently.
           if (data.type === 'heartbeat') {
             console.debug('[VelocityTransport] SSE event: heartbeat')
             continue
@@ -217,7 +232,6 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
           // Structured error from backend
           if (data.type === 'error') {
             console.warn('[VelocityTransport] SSE event: error —', data.error?.message)
-            // Emit any partial structured data from the error event
             if (data.partialObject) {
               try {
                 emitStructured?.({
@@ -229,13 +243,11 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
                 console.error('[VelocityTransport] emitStructured error on error event:', e)
               }
             }
-            // Emit clean lifecycle end and close stream immediately so the
-            // AI SDK's consumeStream() completes → status transitions to 'ready'.
             emitCleanLifecycleEnd(controller, state.started, state.textEndEmitted, partId, messageId)
             state.textEndEmitted = true
-            try { controller.close() } catch { /* already closed */ }
             state.streamDone = true
-            return // Stop processing — stream is closed
+            try { controller.close() } catch { /* already closed */ }
+            return
           }
 
           if (data.type === 'file_operation') {
@@ -254,34 +266,28 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
 
           if (data.type === 'partial' && data.object) {
             console.debug('[VelocityTransport] SSE event: partial')
+            state.lastRealDataTime = Date.now()
             const partial = data.object
 
             if (!state.started) {
               state.started = true
               console.debug('[VelocityTransport] Emitting lifecycle: start')
-              // Emit the full AI SDK lifecycle preamble (matches TextStreamChatTransport)
-              controller.enqueue({ type: 'start', messageId } as UIMessageChunk)
-              controller.enqueue({ type: 'start-step' } as UIMessageChunk)
-              controller.enqueue({ type: 'text-start', id: partId } as UIMessageChunk)
+              safeEnqueue(controller, { type: 'start', messageId } as UIMessageChunk)
+              safeEnqueue(controller, { type: 'start-step' } as UIMessageChunk)
+              safeEnqueue(controller, { type: 'text-start', id: partId } as UIMessageChunk)
             }
 
-            // Compute incremental delta from full message text
             if (partial.message != null) {
               const currentText: string = partial.message
               if (currentText.length > state.lastEmittedText.length && currentText.startsWith(state.lastEmittedText)) {
                 const delta = currentText.slice(state.lastEmittedText.length)
-                controller.enqueue({ type: 'text-delta', id: partId, delta } as UIMessageChunk)
+                safeEnqueue(controller, { type: 'text-delta', id: partId, delta } as UIMessageChunk)
                 state.lastEmittedText = currentText
               } else if (currentText !== state.lastEmittedText) {
-                // Text changed in a non-append way (rare with streamObject).
-                // Emit the difference as best we can — send entire new text as delta
-                // after resetting. Since we can't "unsend", we just update tracking.
-                // The final message will be correct from the done event.
                 state.lastEmittedText = currentText
               }
             }
 
-            // Emit structured side-channel data — failures must NOT break the streaming loop
             try {
               emitStructured?.({
                 suggestedResponses: partial.suggestedResponses,
@@ -294,8 +300,6 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
               console.error('[VelocityTransport] emitStructured error on partial:', e)
             }
 
-            // Track latest partial structured data for fallback when done event
-            // is missing or has phaseOutput stripped for size
             state.lastPartialData = {
               suggestedResponses: partial.suggestedResponses,
               conversationTitle: partial.conversationTitle,
@@ -304,17 +308,20 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
               metadata: partial.metadata,
             }
           } else if (data.type === 'done' && data.done) {
-            console.warn('[VelocityTransport] SSE event: done — closing stream')
-            // Emit final structured data in its own try/catch — failures must NOT
-            // prevent the lifecycle events below from firing.
+            state.lastRealDataTime = Date.now()
+            const resolvedPhaseOutput = data.finalObject?.phaseOutput ?? state.lastPartialData?.phaseOutput
+            const resolvedPhaseComplete = data.finalObject?.phaseComplete ?? state.lastPartialData?.phaseComplete
+            console.warn('[VelocityTransport] SSE event: done — closing stream', {
+              hasPhaseOutput: !!resolvedPhaseOutput,
+              phaseComplete: resolvedPhaseComplete,
+              sourcePhaseOutput: data.finalObject?.phaseOutput ? 'finalObject' : state.lastPartialData?.phaseOutput ? 'lastPartial' : 'none',
+            })
             try {
               emitStructured?.({
                 suggestedResponses: data.finalObject?.suggestedResponses,
                 conversationTitle: data.finalObject?.conversationTitle,
-                // phaseOutput is stripped from done event to keep it small;
-                // fall back to the last partial's data
-                phaseOutput: data.finalObject?.phaseOutput ?? state.lastPartialData?.phaseOutput,
-                phaseComplete: data.finalObject?.phaseComplete ?? state.lastPartialData?.phaseComplete,
+                phaseOutput: resolvedPhaseOutput,
+                phaseComplete: resolvedPhaseComplete,
                 metadata: data.finalObject?.metadata,
                 usage: data.usage,
               })
@@ -322,23 +329,17 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
               console.error('[VelocityTransport] emitStructured error on done:', e)
             }
 
-            // ALWAYS emit lifecycle end for done events
             if (state.started && !state.textEndEmitted) {
               console.warn('[VelocityTransport] Emitting lifecycle: finish')
-              controller.enqueue({ type: 'text-end', id: partId } as UIMessageChunk)
-              controller.enqueue({ type: 'finish-step' } as UIMessageChunk)
-              controller.enqueue({ type: 'finish' } as UIMessageChunk)
+              safeEnqueue(controller, { type: 'text-end', id: partId } as UIMessageChunk)
+              safeEnqueue(controller, { type: 'finish-step' } as UIMessageChunk)
+              safeEnqueue(controller, { type: 'finish' } as UIMessageChunk)
               state.textEndEmitted = true
             }
 
-            // Close the stream IMMEDIATELY so the AI SDK's consumeStream()
-            // completes and status transitions to 'ready'. Without this,
-            // the next pull() would wait for the server to close the HTTP
-            // connection (or for the inactivity timeout), leaving the UI
-            // stuck in "AI is thinking..." for up to 30+ seconds.
-            try { controller.close() } catch { /* already closed */ }
             state.streamDone = true
-            return // Stop processing — stream is closed
+            try { controller.close() } catch { /* already closed */ }
+            return
           }
         } catch (e) {
           console.error('[VelocityTransport] Unexpected error processing SSE event:', e)
@@ -346,12 +347,57 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
       }
     }
 
+    // Watchdog timer — runs independently of pull() to detect stale streams.
+    // This handles the case where @hono/node-server doesn't flush the last
+    // SSE events (done event) before closing the HTTP response, leaving
+    // reader.read() blocked indefinitely inside pull(). The watchdog fires
+    // on the JS event loop regardless of the blocked read.
+    // Watchdog timeouts: shorter once partials are flowing (AI model is done
+    // but done event was lost), longer before first partial (model may be slow).
+    const STALE_AFTER_STARTED = 12_000 // 12s after last partial → AI is done
+    const STALE_BEFORE_STARTED = 30_000 // 30s before first partial → still waiting
+    let watchdogTimer: ReturnType<typeof setInterval> | undefined
+
     return new ReadableStream<UIMessageChunk>({
+      start(controller) {
+        watchdogTimer = setInterval(() => {
+          if (state.streamDone) {
+            clearInterval(watchdogTimer)
+            return
+          }
+          const staleTimeout = state.started ? STALE_AFTER_STARTED : STALE_BEFORE_STARTED
+          const elapsed = Date.now() - state.lastRealDataTime
+          if (elapsed > staleTimeout) {
+            console.warn(`[VelocityTransport] Watchdog: no real data for ${Math.round(elapsed / 1000)}s (started=${state.started}) — forcing stream end`)
+            clearInterval(watchdogTimer)
+
+            // Emit last partial data as done fallback
+            if (state.lastPartialData) {
+              try {
+                emitStructured?.({
+                  ...state.lastPartialData,
+                  usage: { model: 'unknown' },
+                })
+              } catch (e) {
+                console.error('[VelocityTransport] emitStructured error on watchdog fallback:', e)
+              }
+            }
+
+            emitCleanLifecycleEnd(controller, state.started, state.textEndEmitted, partId, messageId)
+            state.textEndEmitted = true
+            state.streamDone = true
+            try { controller.close() } catch { /* already closed */ }
+            reader.cancel().catch(() => {})
+          }
+        }, 3_000) // Check every 3 seconds
+      },
+
       async pull(controller) {
-        // If processLines already closed the stream (done/error event received),
+        // If the stream is done (from processLines, watchdog, or previous pull),
         // just clean up the reader and return — no more data to read.
         if (state.streamDone) {
-          reader.cancel()
+          clearInterval(watchdogTimer)
+          reader.cancel().catch(() => {})
           return
         }
 
@@ -359,7 +405,7 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
           // Check absolute stream duration timeout
           if (Date.now() - streamStartTime > maxDuration) {
             console.warn(`[VelocityTransport] Absolute stream timeout (${maxDuration}ms) exceeded — forcing lifecycle end`)
-            // Emit last partial data as fallback if done event was never received
+            clearInterval(watchdogTimer)
             if (!state.streamDone && state.lastPartialData) {
               console.warn('[VelocityTransport] Timeout without done event — using last partial data as fallback')
               try {
@@ -373,8 +419,9 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
             }
             emitCleanLifecycleEnd(controller, state.started, state.textEndEmitted, partId, messageId)
             state.textEndEmitted = true
+            state.streamDone = true
             controller.close()
-            reader.cancel()
+            reader.cancel().catch(() => {})
             return
           }
 
@@ -393,23 +440,14 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
 
           clearTimeout(inactivityTimer)
 
-          // If the timeout won the race, result.done is true and value is undefined
-          // (a real stream-end would have value as Uint8Array or undefined)
-          // Distinguish: real EOF has value === undefined AND done === true from reader
-          // Timeout also has done === true and value === undefined, but we can check
-          // if we got here via timeout by checking the elapsed time
           if (result.done && result.value === undefined) {
             console.warn('[VelocityTransport] Stream ended (EOF or inactivity timeout)')
-            // Could be real EOF or timeout — try to distinguish
-            // If there's still data in the buffer, it's likely a real EOF
-            // For safety, flush buffer either way
+            clearInterval(watchdogTimer)
+
             if (sseBuffer.trim()) {
               processLines(sseBuffer.split('\n'), controller)
             }
 
-            // If we never received a done event but have partial data,
-            // emit it with synthetic usage to trigger phase completion.
-            // This handles the case where the done event was lost/truncated.
             if (!state.streamDone && state.lastPartialData) {
               console.warn('[VelocityTransport] Stream ended without done event — using last partial data as fallback')
               try {
@@ -422,10 +460,21 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
               }
             }
 
-            emitCleanLifecycleEnd(controller, state.started, state.textEndEmitted, partId, messageId)
-            state.textEndEmitted = true
-            controller.close()
-            reader.cancel()
+            if (!state.streamDone) {
+              emitCleanLifecycleEnd(controller, state.started, state.textEndEmitted, partId, messageId)
+              state.textEndEmitted = true
+              state.streamDone = true
+              controller.close()
+            }
+            reader.cancel().catch(() => {})
+            return
+          }
+
+          // Watchdog may have closed the stream while reader.read() was blocked.
+          // Check before processing the chunk.
+          if (state.streamDone) {
+            clearInterval(watchdogTimer)
+            reader.cancel().catch(() => {})
             return
           }
 
@@ -437,22 +486,23 @@ export class VelocityChatTransport implements ChatTransport<UIMessage> {
 
           processLines(lines, controller)
 
-          // If processLines closed the stream (done/error event), cancel the
-          // HTTP reader — no point reading more from the server.
           if (state.streamDone) {
-            reader.cancel()
+            clearInterval(watchdogTimer)
+            reader.cancel().catch(() => {})
             return
           }
         } catch (err) {
+          clearInterval(watchdogTimer)
           console.error('[VelocityTransport] pull() error — emitting lifecycle end:', err)
-          // Emit lifecycle events before erroring so the UI can transition
           emitCleanLifecycleEnd(controller, state.started, state.textEndEmitted, partId, messageId)
           state.textEndEmitted = true
+          state.streamDone = true
           controller.error(err)
         }
       },
       cancel() {
-        reader.cancel()
+        clearInterval(watchdogTimer)
+        reader.cancel().catch(() => {})
       },
     })
   }

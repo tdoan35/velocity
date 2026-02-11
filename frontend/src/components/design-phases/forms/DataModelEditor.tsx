@@ -297,8 +297,16 @@ export function DataModelEditor({
   onChange,
   disabled = false,
 }: DataModelEditorProps) {
+  // Normalize incoming data — AI responses may omit arrays
+  const normalize = (data: DataModel | null): DataModel => ({
+    ...DEFAULT_DATA,
+    ...data,
+    entities: (data?.entities ?? []).map(e => ({ ...e, fields: e.fields ?? [] })),
+    relationships: data?.relationships ?? [],
+  });
+
   // Local state
-  const [localModel, setLocalModel] = useState<DataModel>(dataModel || DEFAULT_DATA);
+  const [localModel, setLocalModel] = useState<DataModel>(normalize(dataModel));
   const [editingEntity, setEditingEntity] = useState<DataModelEntity | null>(null);
   const [isEntityEditorOpen, setIsEntityEditorOpen] = useState(false);
   const [deleteConfirmEntity, setDeleteConfirmEntity] = useState<string | null>(null);
@@ -315,7 +323,7 @@ export function DataModelEditor({
   // Initialize local state when prop changes
   useEffect(() => {
     if (dataModel) {
-      setLocalModel(dataModel);
+      setLocalModel(normalize(dataModel));
     }
   }, [dataModel]);
 

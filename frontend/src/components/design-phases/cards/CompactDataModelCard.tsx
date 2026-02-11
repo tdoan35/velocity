@@ -27,7 +27,7 @@ export function CompactDataModelCard({ dataModel, completed, onClick }: CompactD
   }
 
   const maxVisible = 4
-  const entities = dataModel.entities
+  const entities = dataModel.entities ?? []
   const visibleEntities = entities.slice(0, maxVisible)
   const overflow = entities.length - maxVisible
 
@@ -60,7 +60,7 @@ export function CompactDataModelCard({ dataModel, completed, onClick }: CompactD
           )}
         </div>
         <p className="text-xs text-muted-foreground">
-          {entities.length} entities &middot; {dataModel.relationships.length} relationships
+          {entities.length} entities &middot; {dataModel.relationships?.length ?? 0} relationships
         </p>
       </CardContent>
     </Card>

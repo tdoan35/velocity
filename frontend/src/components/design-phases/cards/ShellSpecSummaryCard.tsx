@@ -33,7 +33,7 @@ export function ShellSpecSummaryCard({ shellSpec, onEdit }: ShellSpecSummaryCard
         </div>
 
         {/* Navigation Items */}
-        {shellSpec.navigationItems.length > 0 && (
+        {(shellSpec.navigationItems?.length ?? 0) > 0 && (
           <div>
             <span className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
               Navigation ({shellSpec.navigationItems.length})

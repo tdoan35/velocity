@@ -9,7 +9,7 @@ interface CompactSectionsCardProps {
 }
 
 export function CompactSectionsCard({ sections, completed, onClick }: CompactSectionsCardProps) {
-  if (sections.length === 0) {
+  if (!sections || sections.length === 0) {
     return (
       <Card
         className="border-l-4 border-dashed border-l-orange-500 cursor-pointer hover:shadow-md hover:border-orange-300 transition-all"

@@ -40,9 +40,17 @@ export function ProductVisionForm({
   onChange,
   disabled = false,
 }: ProductVisionFormProps) {
+  // Normalize incoming data — AI responses may omit arrays
+  const normalize = (data: ProductOverview | null): ProductOverview => ({
+    ...DEFAULT_DATA,
+    ...data,
+    problems: data?.problems ?? [],
+    features: data?.features ?? [],
+  });
+
   // Local form state
   const [formData, setFormData] = useState<ProductOverview>(
-    initialData || DEFAULT_DATA
+    normalize(initialData)
   );
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [touched, setTouched] = useState<Set<string>>(new Set());
@@ -53,7 +61,7 @@ export function ProductVisionForm({
   // Initialize form data when initialData changes
   useEffect(() => {
     if (initialData) {
-      setFormData(initialData);
+      setFormData(normalize(initialData));
     }
   }, [initialData]);
 
@@ -75,7 +83,7 @@ export function ProductVisionForm({
 
     // Problems validation
     const problemErrors: ValidationErrors['problems'] = {};
-    data.problems.forEach((item, index) => {
+    (data.problems ?? []).forEach((item, index) => {
       const itemErrors: { problem?: string; solution?: string } = {};
       if (!item.problem.trim()) {
         itemErrors.problem = 'Problem is required';
@@ -93,7 +101,7 @@ export function ProductVisionForm({
 
     // Features validation
     const featureErrors: ValidationErrors['features'] = {};
-    data.features.forEach((item, index) => {
+    (data.features ?? []).forEach((item, index) => {
       const itemErrors: { title?: string; description?: string } = {};
       if (!item.title.trim()) {
         itemErrors.title = 'Feature title is required';
@@ -164,7 +172,7 @@ export function ProductVisionForm({
   // Problem/Solution handlers
   const addProblem = () => {
     updateFormData({
-      problems: [...formData.problems, { problem: '', solution: '' }],
+      problems: [...(formData.problems ?? []), { problem: '', solution: '' }],
     });
   };
 
@@ -173,20 +181,20 @@ export function ProductVisionForm({
     field: keyof ProductProblem,
     value: string
   ) => {
-    const newProblems = [...formData.problems];
+    const newProblems = [...(formData.problems ?? [])];
     newProblems[index] = { ...newProblems[index], [field]: value };
     updateFormData({ problems: newProblems });
   };
 
   const removeProblem = (index: number) => {
-    const newProblems = formData.problems.filter((_, i) => i !== index);
+    const newProblems = (formData.problems ?? []).filter((_, i) => i !== index);
     updateFormData({ problems: newProblems });
   };
 
   // Feature handlers
   const addFeature = () => {
     updateFormData({
-      features: [...formData.features, { title: '', description: '' }],
+      features: [...(formData.features ?? []), { title: '', description: '' }],
     });
   };
 
@@ -195,13 +203,13 @@ export function ProductVisionForm({
     field: keyof ProductFeature,
     value: string
   ) => {
-    const newFeatures = [...formData.features];
+    const newFeatures = [...(formData.features ?? [])];
     newFeatures[index] = { ...newFeatures[index], [field]: value };
     updateFormData({ features: newFeatures });
   };
 
   const removeFeature = (index: number) => {
-    const newFeatures = formData.features.filter((_, i) => i !== index);
+    const newFeatures = (formData.features ?? []).filter((_, i) => i !== index);
     updateFormData({ features: newFeatures });
   };
 
@@ -322,7 +330,7 @@ export function ProductVisionForm({
           </button>
         </div>
 
-        {formData.problems.length === 0 ? (
+        {(formData.problems?.length ?? 0) === 0 ? (
           <div className="text-center py-8 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
             <p className="text-sm text-gray-500 dark:text-gray-400">
               No problems defined yet. Click "Add Problem" to get started.
@@ -450,7 +458,7 @@ export function ProductVisionForm({
           </button>
         </div>
 
-        {formData.features.length === 0 ? (
+        {(formData.features?.length ?? 0) === 0 ? (
           <div className="text-center py-8 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
             <p className="text-sm text-gray-500 dark:text-gray-400">
               No features defined yet. Click "Add Feature" to get started.

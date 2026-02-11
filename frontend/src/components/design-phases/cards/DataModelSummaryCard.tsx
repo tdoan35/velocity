@@ -26,23 +26,23 @@ export function DataModelSummaryCard({ dataModel, onEdit }: DataModelSummaryCard
       <CardContent className="space-y-3">
         <div>
           <span className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-            Entities ({dataModel.entities.length})
+            Entities ({dataModel.entities?.length ?? 0})
           </span>
           <div className="flex flex-wrap gap-2 mt-2">
-            {dataModel.entities.map((entity) => (
+            {(dataModel.entities ?? []).map((entity) => (
               <span
                 key={entity.name}
                 className="inline-flex items-center px-2.5 py-1 rounded-md bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-sm font-medium"
               >
                 {entity.name}
                 <span className="ml-1.5 text-blue-400 dark:text-blue-500 text-xs">
-                  {entity.fields.length}f
+                  {entity.fields?.length ?? 0}f
                 </span>
               </span>
             ))}
           </div>
         </div>
-        {dataModel.relationships.length > 0 && (
+        {(dataModel.relationships?.length ?? 0) > 0 && (
           <div>
             <span className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
               Relationships ({dataModel.relationships.length})

@@ -36,7 +36,7 @@ export function ProductOverviewCard({ overview, onEdit }: ProductOverviewCardPro
         )}
 
         {/* Problems & Solutions */}
-        {overview.problems.length > 0 && (
+        {overview.problems?.length > 0 && (
           <div>
             <button
               onClick={() => setProblemsOpen(!problemsOpen)}
@@ -87,7 +87,7 @@ export function ProductOverviewCard({ overview, onEdit }: ProductOverviewCardPro
         )}
 
         {/* Key Features */}
-        {overview.features.length > 0 && (
+        {overview.features?.length > 0 && (
           <div>
             <button
               onClick={() => setFeaturesOpen(!featuresOpen)}
